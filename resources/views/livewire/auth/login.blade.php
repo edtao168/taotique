@@ -1,59 +1,86 @@
 <x-layouts.auth>
     <div class="flex flex-col gap-6">
-        <x-auth-header :title="__('Log in to your account')" :description="__('Enter your email and password below to log in')" />
+        {{-- 標題與描述 --}}
+        <div class="text-center mb-4">
+            <div class="text-2xl font-bold text-zinc-900 dark:text-white">{{ __('進銷存系統 - 登入') }}</div>
+        </div>
 
-        <!-- Session Status -->
-        <x-auth-session-status class="text-center" :status="session('status')" />
+        {{-- 錯誤訊息顯示區 (針對 Fortify 驗證失敗) --}}
+        @if ($errors->any())
+            <div class="alert alert-error mb-4 shadow-sm text-sm py-2">
+                <ul class="list-disc list-inside">
+                    @foreach ($errors->all() as $error)
+                        <li>{{ $error }}</li>
+                    @endforeach
+                </ul>
+            </div>
+        @endif
 
-        <form method="POST" action="{{ route('login.store') }}" class="flex flex-col gap-6">
+        {{-- 
+            重點 1：使用傳統 POST 指向 Fortify 路由
+            移除 wire:submit.prevent，確保請求直接送往後端
+        --}}
+        <form action="{{ route('login') }}" method="POST" class="flex flex-col gap-6">
             @csrf
 
-            <!-- Email Address -->
-            <flux:input
+            {{-- 
+                重點 2：Mary UI 的 x-input
+                必須明確寫出 name="email"，這是 Fortify 抓取資料的唯一依據。
+                加上 wire:model.defer (或 v3 的預設) 是為了讓 Livewire 不干擾 POST 流程。
+            --}}
+            <x-input
+                label="{{ __('電子郵件') }}"
                 name="email"
-                :label="__('Email address')"
-                :value="old('email')"
                 type="email"
+                icon="o-envelope"
+                value="{{ old('email') }}"
+                placeholder="email@example.com"
                 required
                 autofocus
-                autocomplete="email"
-                placeholder="email@example.com"
             />
 
-            <!-- Password -->
-            <div class="relative">
-                <flux:input
-                    name="password"
-                    :label="__('Password')"
+            <div class="space-y-1">
+                <x-input
+                    label="{{ __('密碼') }}"
+                    name="password"					
                     type="password"
+                    icon="o-key"
+                    placeholder="{{ __('請輸入密碼') }}"
                     required
-                    autocomplete="current-password"
-                    :placeholder="__('Password')"
-                    viewable
                 />
-
-                @if (Route::has('password.request'))
-                    <flux:link class="absolute top-0 text-sm end-0" :href="route('password.request')" wire:navigate>
-                        {{ __('Forgot your password?') }}
-                    </flux:link>
-                @endif
+                
+                <div class="flex justify-end">
+                    <a href="{{ route('password.request') }}" class="text-xs text-zinc-500 hover:text-primary transition-colors">
+                        {{ __('忘記密碼？') }}
+                    </a>
+                </div>
             </div>
 
-            <!-- Remember Me -->
-            <flux:checkbox name="remember" :label="__('Remember me')" :checked="old('remember')" />
+            <x-checkbox 
+                label="{{ __('記住我') }}" 
+                name="remember"
+                class="checkbox-primary"
+            />
 
-            <div class="flex items-center justify-end">
-                <flux:button variant="primary" type="submit" class="w-full" data-test="login-button">
-                    {{ __('Log in') }}
-                </flux:button>
+            <div class="mt-2">
+                {{-- 
+                    重點 3：不要在按鈕使用 spinner="login"
+                    因為我們現在是走傳統 POST 頁面跳轉，不是執行 Livewire 方法。
+                --}}
+                <x-button 
+                    label="{{ __('登入系統') }}" 
+                    type="submit" 
+                    icon="o-arrow-right-on-rectangle" 
+                    class="btn-primary w-full" 
+                />
             </div>
         </form>
 
-        @if (Route::has('register'))
-            <div class="space-x-1 text-sm text-center rtl:space-x-reverse text-zinc-600 dark:text-zinc-400">
-                <span>{{ __('Don\'t have an account?') }}</span>
-                <flux:link :href="route('register')" wire:navigate>{{ __('Sign up') }}</flux:link>
-            </div>
-        @endif
+        <div class="text-center text-sm text-zinc-600 dark:text-zinc-400 mt-4">
+            <span>{{ __('還沒有帳號嗎？') }}</span>
+            <a href="{{ route('register') }}" class="font-semibold text-primary hover:underline">
+                {{ __('立即註冊') }}
+            </a>
+        </div>
     </div>
 </x-layouts.auth>

@@ -2,8 +2,11 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Models\Shop;
+use App\Models\Warehouse;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Str;
@@ -61,4 +64,62 @@ class User extends Authenticatable
             ->map(fn ($word) => Str::substr($word, 0, 1))
             ->implode('');
     }
+	
+	public function partner()
+	{
+		return $this->hasOne(Partner::class);
+	}
+	
+	// 對應 config/acl.php
+    public function canViewCost(): bool
+    {
+        if (!$this->is_active) return false;
+
+        $permissions = config("acl.roles.{$this->role}", []);
+        return in_array('view_cost', $permissions);
+    }
+
+    // 厚 Model 擴充：獲取使用者當前所屬的「業務範圍」
+    public function getWorkContext()
+    {
+        return [
+            'shop' => $this->shop_id,
+            'warehouse' => $this->warehouse_id
+        ];
+    }
+	
+	/**
+     * 核心權限判斷
+     */
+    public function hasAbility(string $ability): bool
+    {
+        if (!$this->is_active) return false;
+
+        $permissions = config("acl.roles.{$this->role}", []);
+        return in_array($ability, $permissions);
+    }
+
+    /**
+     * 封裝常用的敏感判斷：成本查看
+     */
+    public function canAccessFinancialData(): bool
+    {
+        return $this->hasAbility('view_cost');
+    }
+	
+	/**
+	 * 帳號所屬的營業點
+	 */
+	public function shop(): BelongsTo
+	{
+		return $this->belongsTo(Shop::class);
+	}
+
+	/**
+	 * 帳號預設的出貨倉庫
+	 */
+	public function warehouse(): BelongsTo
+	{
+		return $this->belongsTo(Warehouse::class);
+	}
 }

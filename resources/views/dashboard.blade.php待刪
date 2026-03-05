@@ -1,0 +1,14 @@
+<x-layouts.app>
+    <x-slot name="header">
+        <h2 class="font-semibold text-xl text-gray-800 leading-tight">
+            {{ __('系統儀表板') }}
+        </h2>
+    </x-slot>
+
+    <div class="py-12">
+        <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
+            {{-- 呼叫 Livewire 組件來顯示數據圖表與表格 --}}
+            <livewire:dashboard.overview />
+        </div>
+    </div>
+</x-layouts.app>

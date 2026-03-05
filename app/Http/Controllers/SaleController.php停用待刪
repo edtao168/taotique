@@ -1,0 +1,53 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Sale;
+use App\Models\Inventory;
+use Illuminate\Http\Request;
+use Carbon\Carbon;
+
+class SaleController extends Controller
+{
+    /**
+     * 處理非 Livewire 環境下的概覽頁面 (例如 /sales/overview)
+     */
+    public function overview()
+    {
+        // 1. 今日營業額 (商品原價合計)
+        $todaySales = Sale::whereDate('created_at', Carbon::today())->sum('subtotal');
+
+        // 2. 累積淨進帳 (已扣除平台費與運費)
+        $totalNetProfit = Sale::sum('final_net_amount');
+
+        // 3. 累積平台手續費成本
+        $totalPlatformFees = Sale::sum('platform_fee');
+
+        // 4. 庫存預警 (假設數量小於 5)
+        $lowStockCount = Inventory::where('quantity', '<', 5)->count();
+
+        // 5. 最近銷售紀錄 (關聯客戶資料)
+        $recentSales = Sale::with('customer')->latest()->take(10)->get();
+
+        // 注意：這裡回傳的是 sales/overview.blade.php (非 Livewire 版本)
+        // 確保你的資料夾中有 resources/views/sales/overview.blade.php
+        return view('sales.overview', compact(
+            'todaySales',
+            'totalNetProfit',
+            'totalPlatformFees',
+            'lowStockCount',
+            'recentSales'
+        ));
+    }
+
+    /**
+     * 銷售紀錄清單
+     */
+    public function index()
+    {
+        $sales = Sale::with('customer')->latest()->paginate(15);
+        return view('sales.index', compact('sales'));
+    }
+
+    // 之後可在此擴充 create, store 等方法用於處理人工輸入
+}

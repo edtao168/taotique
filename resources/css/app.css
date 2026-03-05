@@ -1,66 +1,27 @@
-@import 'tailwindcss';
-@import '../../vendor/livewire/flux/dist/flux.css';
+/* 1. 引入 Tailwind CSS v4 */
+@import "tailwindcss";
 
-@source '../views';
-@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
-@source '../../vendor/livewire/flux-pro/stubs/**/*.blade.php';
-@source '../../vendor/livewire/flux/stubs/**/*.blade.php';
+/* 2. 必須引入 DaisyUI (這是 Mary UI 的基礎) */
+/* 註：如果 npm 安裝了 daisyui，v4 建議直接 import 它的 CSS 或使用兼容插件 */
+@plugin "daisyui"; 
+@plugin "@tailwindcss/typography";
 
-@custom-variant dark (&:where(.dark, .dark *));
+/* 3. 設定掃描路徑 (務必包含 Mary UI 的 vendor 路徑) */
+@source "../../resources/**/*.blade.php";
+@source "../../app/Livewire/**/*.php";
+@source "../../vendor/robsontenorio/mary/src/View/Components/**/*.php"; 
+@source "../../vendor/livewire/flux/stubs/**/*.blade.php";
+
+/* 4. Flux UI 樣式 (如果你同時有在使用 Flux) */
+@import "../../vendor/livewire/flux/dist/flux.css";
 
 @theme {
-    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
-
-    --color-zinc-50: #fafafa;
-    --color-zinc-100: #f5f5f5;
-    --color-zinc-200: #e5e5e5;
-    --color-zinc-300: #d4d4d4;
-    --color-zinc-400: #a3a3a3;
-    --color-zinc-500: #737373;
-    --color-zinc-600: #525252;
-    --color-zinc-700: #404040;
-    --color-zinc-800: #262626;
-    --color-zinc-900: #171717;
-    --color-zinc-950: #0a0a0a;
-
-    --color-accent: var(--color-neutral-800);
-    --color-accent-content: var(--color-neutral-800);
-    --color-accent-foreground: var(--color-white);
+    --color-brand: #3b82f6;
 }
 
-@layer theme {
-    .dark {
-        --color-accent: var(--color-white);
-        --color-accent-content: var(--color-white);
-        --color-accent-foreground: var(--color-neutral-800);
-    }
-}
-
+/* 5. 修正圖標過大的強制補丁 (如果編譯後依然過大) */
 @layer base {
-
-    *,
-    ::after,
-    ::before,
-    ::backdrop,
-    ::file-selector-button {
-        border-color: var(--color-gray-200, currentColor);
+    svg {
+        @apply w-5 h-5 inline-block; /* 強制限制 Mary UI 圖標預設大小 */
     }
 }
-
-[data-flux-field]:not(ui-radio, ui-checkbox) {
-    @apply grid gap-2;
-}
-
-[data-flux-label] {
-    @apply  !mb-0 !leading-tight;
-}
-
-input:focus[data-flux-control],
-textarea:focus[data-flux-control],
-select:focus[data-flux-control] {
-    @apply outline-hidden ring-2 ring-accent ring-offset-2 ring-offset-accent-foreground;
-}
-
-/* \[:where(&)\]:size-4 {
-    @apply size-4;
-} */
