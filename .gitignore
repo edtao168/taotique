@@ -21,3 +21,33 @@ yarn-error.log
 /.nova
 /.vscode
 /.zed
+# 临时文件和备份文件
+*.sql
+*.sqlite
+*.log
+*.bak
+*.swp
+*~
+New *.txt
+*待刪*
+*複製*
+停止待用*
+待刪*
+
+# Session 文件（除了 .gitignore 本身）
+storage/framework/sessions/*
+!storage/framework/sessions/.gitignore
+
+# 测试文件
+test.blade.php
+
+# 数据库导出
+taotique_schema.sql
+settings.sql
+
+# 构建配置
+tailwind.config.js
+vite.config.js  # 如果你不想跟踪构建配置
+
+# 语言文件（如果不属于项目核心）
+resources/lang/*
