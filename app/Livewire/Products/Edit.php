@@ -15,8 +15,10 @@ class Edit extends Component
     use Toast, WithFileUploads, HasProductMedia;
 
     public Product $product;
-    public $name;
+    public $is_unique;
+	public $name;
     public $price;
+	public $cost;
     public $unit;
     public $min_stock;
     public $remark;
@@ -45,8 +47,10 @@ class Edit extends Component
     
     public function mount()
     {
-        $this->name = $this->product->name;
+        $this->is_unique = $this->product->is_unique;
+		$this->name = $this->product->name;
         $this->price = $this->product->price;
+		$this->cost = $this->product->cost;
         $this->unit = $this->product->unit;
         $this->min_stock = $this->product->min_stock;
         $this->remark = $this->product->remark;
@@ -56,7 +60,8 @@ class Edit extends Component
     protected function rules()
     {
         return [
-            'name' => 'required|min:2',
+            'is_unique' => 'boolean',
+			'name' => 'required|min:2',
             'price' => 'required|numeric|min:0',
             'unit' => 'required',
             'min_stock' => 'required|integer|min:0',
@@ -74,21 +79,40 @@ class Edit extends Component
 
     public function save()
     {
-        $this->validate([
+        // 整合驗證規則
+        $rules = [
             'name' => 'required|min:2',
-            'price' => 'required|numeric',
+            'price' => 'required|numeric|min:0',
+            'unit' => 'required',
+            'min_stock' => 'required|integer|min:0',
             'new_photos.*' => 'nullable|image|max:2048', 
             'video' => 'nullable|mimetypes:video/mp4,video/quicktime|max:20480',
-        ]);
+        ];
 
-        $this->product->update([
-            'name' => $this->name,
+        // 只有 Owner 需要驗證成本
+        if (auth()->user()->role === 'owner') {
+            $rules['cost'] = 'required|numeric|min:0';
+        }
+
+        $this->validate($rules);
+
+        // 準備資料陣列
+        $updateData = [
+            'is_unique' => $this->is_unique,
+			'name' => $this->name,
             'price' => $this->price,
             'unit' => $this->unit,
             'min_stock' => $this->min_stock,
             'remark' => $this->remark,
             'is_active' => $this->is_active,
-        ]);
+        ];
+
+        // 嚴格權限檢查：非 Owner 不會更新到 cost 欄位
+        if (auth()->user()->role === 'owner') {
+            $updateData['cost'] = $this->cost;
+        }
+
+        $this->product->update($updateData);
 
         $this->uploadMedia($this->product, $this->new_photos, $this->video);
         

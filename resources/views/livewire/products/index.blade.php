@@ -25,7 +25,21 @@
 					</div>
 				@endif
 			@endscope
-            @scope('cell_name', $product)
+            @scope('cell_sku', $product)
+				<div class="flex items-center gap-2">
+					{{-- 使用大型、深色背景的 Badge，字體加粗且間距加寬 --}}
+					<x-badge 
+						:value="$product->sku" 
+						class="badge-neutral font-mono text-sm font-bold px-4 py-3 tracking-tighter" 
+					/>
+					
+					{{-- 如果商品已下架，僅顯示一個簡單的顏色點提示，不干擾視覺 --}}
+					@if(!$product->is_active)
+						<div class="w-2 h-2 rounded-full bg-error" title="已停售"></div>
+					@endif
+				</div>
+			@endscope
+			@scope('cell_name', $product)
                 <div class="flex flex-col">
                     <span class="{{ $product->is_active ? 'font-medium' : 'text-gray-400 line-through' }}">
                         {{ $product->name }}
@@ -35,7 +49,11 @@
                     @endif
                 </div>
             @endscope
-
+			@if(auth()->user()->role === 'owner')
+				@scope('cell_cost', $product)
+					$ {{ number_format($product->cost, 2) }}
+				@endscope
+			@endif
             {{-- 零售價樣式 --}}
             @scope('cell_price', $product)
                 <span class="font-bold text-blue-700 text-sm">NT$ {{ number_format($product->price, 0) }}</span>

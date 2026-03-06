@@ -15,14 +15,33 @@
                     <x-input label="商品 SKU" value="{{ $product->sku }}" icon="o-finger-print" readonly class="bg-base-200 font-mono" />
                     <x-input label="商品名稱" wire:model="name" icon="o-pencil" />
 
-                    <div class="grid grid-cols-2 gap-4 mt-4">
-                        <x-input label="零售價" wire:model="price" prefix="$" type="number" />
+                    {{-- 根據權限決定顯示內容 --}}
+                    <div class="grid {{ auth()->user()->role === 'owner' ? 'grid-cols-2' : 'grid-cols-1' }} gap-4 mt-4">
+                        {{-- 只有 Owner 看得見並能輸入進貨成本 --}}
+                        @if(auth()->user()->role === 'owner')
+                            <x-input 
+                                label="平均成本" 
+                                wire:model="cost" 
+                                prefix="$" 
+                                type="number" 
+                                step="0.01" 
+                                class="text-error font-bold" 
+                                hint="僅店主可見"
+                            />
+                        @endif
+						<x-input label="零售價" wire:model="price" prefix="$" type="number" />
+                    </div>
+					
+					<div class="grid grid-cols-2 gap-4 items-center mt-4">
                         <x-input label="單位" wire:model="unit" />
+						<x-input label="警戒庫存" wire:model="min_stock" type="number" />                        
                     </div>
 
-                    <div class="grid grid-cols-2 gap-4 items-center mt-4">
-                        <x-input label="警戒庫存" wire:model="min_stock" type="number" />
+                    <div class="grid grid-cols-2 gap-4 items-center mt-4">                        
                         <div class="pt-6">
+                            <x-checkbox label="孤品" wire:model="is_unique" tight />
+                        </div>
+						<div class="pt-6">
                             <x-checkbox label="啟用銷售" wire:model="is_active" tight />
                         </div>
                     </div>

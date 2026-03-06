@@ -16,27 +16,39 @@ class Index extends Component
     public ?Product $selectedProduct = null;
 
     public function render()
-    {
-        return view('livewire.products.index', [
-            'products' => Product::query()
-                ->inCurrentShop()
-				->with(['images'])
-                ->with(['inventories'])
-                ->when($this->search, function ($q) {
-                    $q->where('name', 'like', "%{$this->search}%")
-                      ->orWhere('sku', 'like', "%{$this->search}%");
-                })
-                ->orderBy('sku')
-                ->paginate(9),
-            'headers' => [
-                ['key' => 'sku', 'label' => 'SKU', 'class' => 'w-32'],
-				['key' => 'image', 'label' => '預覽', 'class' => 'w-20', 'sortable' => false],
-                ['key' => 'name', 'label' => '品名'],
-                ['key' => 'price', 'label' => '零售價', 'class' => 'text-right'],
-                ['key' => 'total_stock', 'label' => '庫存', 'class' => 'text-center'],
-            ]    
-        ]);
-    }
+	{
+		// 1. 先處理查詢與分頁 (將結果存入變數，不要在這裡直接 return)
+		$products = Product::query()
+			->with('images')
+			->when($this->search, function($q) {
+				$q->where('name', 'like', "%{$this->search}%")
+				  ->orWhere('sku', 'like', "%{$this->search}%");
+			})
+			->paginate(9);
+
+		// 2. 定義表頭
+		$headers = [
+			['key' => 'id', 'label' => '#', 'class' => 'w-1'],
+			['key' => 'image', 'label' => '圖片', 'class' => 'w-16', 'sortable' => false],
+			['key' => 'sku', 'label' => '商品SKU'],
+			['key' => 'name', 'label' => '商品名稱'],
+		];
+
+		// 2. 插入成本：如果身分是 Owner，先將成本加入陣列
+		if (auth()->user()->role === 'owner') {
+			$headers[] = ['key' => 'cost', 'label' => '平均成本', 'class' => 'text-error font-bold'];
+		}
+
+		// 3. 接著加入售價與庫存
+		$headers[] = ['key' => 'price', 'label' => '售價'];
+		$headers[] = ['key' => 'total_stock', 'label' => '當前庫存', 'class' => 'w-24'];
+
+		// 4. 最後才執行 return view
+		return view('livewire.products.index', [
+			'products' => $products,
+			'headers' => $headers,
+		]);
+	}
 	
 	/**
      * 開啟快速查詢抽屜

@@ -12,8 +12,10 @@
         <x-table :rows="$users" :headers="$headers">
             @scope('cell_name', $user)
                 <div class="flex items-center gap-3">
-                    <x-avatar :placeholder="substr($user->name, 0, 1)" class="!w-10" />
-                    <div>
+                    <x-avatar 
+						:placeholder="mb_substr($user->name, 0, 1)" 
+						class="!w-10 bg-primary text-primary-content" 
+					/>
                         <div class="font-bold">{{ $user->name }}</div>
                         <div class="text-xs opacity-50">{{ $user->email }}</div>
                     </div>

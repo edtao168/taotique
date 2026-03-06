@@ -11,7 +11,9 @@ class Product extends Model
     protected $fillable = [
 		'name',
 		'sku',
+		'is_unique',
 		'price',
+		'cost',
 		'min_stock',
 		'unit',
 		'category_code',
@@ -24,6 +26,7 @@ class Product extends Model
     protected $casts = [
         'price' => 'decimal:2',
         'cost' => 'decimal:4',
+		'is_unique' => 'boolean',
         'is_active' => 'boolean',
     ];
 	
