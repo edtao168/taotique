@@ -1,0 +1,49 @@
+λ composer dump-autoload                                                                  
+Generating optimized autoload files                                                       
+Class App\Traits\HasProductSearch located in ./app/Trait/HasProductSearch.php does not com
+ply with psr-4 autoloading standard (rule: App\ => ./app). Skipping.                      
+> Illuminate\Foundation\ComposerScripts::postAutoloadDump                                 
+> @php artisan package:discover --ansi                                                    
+                                                                                          
+   Symfony\Component\ErrorHandler\Error\FatalError                                        
+                                                                                          
+  Trait "App\Traits\HasProductSearch" not found                                           
+                                                                                          
+  at app\Livewire\Sales\QuickSale.php:13                                                  
+      9▕ use App\Traits\HasProductSearch;                                                 
+     10▕ use Mary\Traits\Toast;                                                           
+     11▕ use Illuminate\Support\Facades\DB;                                               
+     12▕                                                                                  
+  ➜  13▕ class QuickSale extends Component                                                
+     14▕ {                                                                                
+     15▕     use HasProductSearch, Toast;                                                 
+     16▕                                                                                  
+     17▕     // 關鍵：宣告 Sale 物件，解決 PropertyNotFoundException                                
+                                                                                          
+                                                                                          
+   Whoops\Exception\ErrorException                                                        
+                                                                                          
+  Trait "App\Traits\HasProductSearch" not found                                           
+                                                                                          
+  at app\Livewire\Sales\QuickSale.php:13                                                  
+      9▕ use App\Traits\HasProductSearch;                                                 
+     10▕ use Mary\Traits\Toast;                                                           
+     11▕ use Illuminate\Support\Facades\DB;                                               
+     12▕                                                                                  
+  ➜  13▕ class QuickSale extends Component                                                
+     14▕ {                                                                                
+     15▕     use HasProductSearch, Toast;                                                 
+     16▕                                                                                  
+     17▕     // 關鍵：宣告 Sale 物件，解決 PropertyNotFoundException                                
+                                                                                          
+  1   vendor\filp\whoops\src\Whoops\Run.php:520                                           
+      Whoops\Run::handleError("Trait "App\Traits\HasProductSearch" not found", "C:\laragon
+\www\taotique\app\Livewire\Sales\QuickSale.php")                                          
+                                                                                          
+  2   [internal]:0                                                                        
+      Whoops\Run::handleShutdown()                                                        
+                                                                                          
+Script @php artisan package:discover --ansi handling the post-autoload-dump event returned
+ with error code 255                                                                      
+                                                                                          
+C:\laragon\www\taotique(main)                                                             

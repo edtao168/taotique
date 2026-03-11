@@ -25,8 +25,8 @@ class FortifyServiceProvider extends ServiceProvider
      * Bootstrap any application services.
      */
     public function boot(): void
-    {
-        $this->configureActions();
+    {        
+		$this->configureActions();
         $this->configureViews();
         $this->configureRateLimiting();
     }

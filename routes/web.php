@@ -1,32 +1,93 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-use Laravel\Fortify\Features;
-use Livewire\Volt\Volt;
 
-Route::get('/', function () {
-    return view('welcome');
-})->name('home');
+// 1. Dashboard
+use App\Livewire\Dashboard\Overview;
 
-Route::view('dashboard', 'dashboard')
-    ->middleware(['auth', 'verified'])
-    ->name('dashboard');
+// 2. 商品管理
+use App\Livewire\Products\Index as ProductIndex;
+use App\Livewire\Products\Create as ProductCreate;
+use App\Livewire\Products\Show as ProductShow;
+use App\Livewire\Products\Edit as ProductEdit;
+
+// 3. 銷售模組
+use App\Livewire\Customers\Index as CustomerIndex;
+use App\Livewire\Sales\Overview as SalesOverview;
+use App\Livewire\Sales\SalesIndex;
+use App\Livewire\Sales\QuickSale;
+use App\Livewire\Sales\ShowSale;
+use App\Livewire\Sales\EditSale;
+
+// 4. 庫存與調撥 (Inventories)
+use App\Livewire\Inventories\Index as InventoryIndex;
+use App\Livewire\Inventories\Transfers;
+use App\Livewire\Inventories\Stocktakes;
+use App\Livewire\Inventories\Movements;
+
+// 5. 採購進貨 (Purchases)
+use App\Livewire\Suppliers\Index as SupplierIndex;
+use App\Livewire\Purchases\Index as PurchaseIndex;
+use App\Livewire\Purchases\Create as PurchaseCreate;
+
+// 6. 系統設定 (Settings)
+use App\Livewire\Settings\Warehouses\Index as WarehouseIndex;
+use App\Livewire\Settings\Shops\Index as ShopIndex;
+use App\Livewire\Settings\Partners\Index as PartnerIndex;
+use App\Livewire\Settings\Users\UserManagement;
+use App\Livewire\Settings\Categories\Index as CategoryIndex;
+use App\Livewire\Settings\Materials\Index as MaterialIndex;
+use App\Livewire\Settings\SystemSettings;
 
 Route::middleware(['auth'])->group(function () {
-    Route::redirect('settings', 'settings/profile');
+    
+    // --- Dashboard ---
+    Route::get('/', Overview::class)->name('home');
+    Route::get('/dashboard', Overview::class)->name('dashboard');
 
-    Volt::route('settings/profile', 'settings.profile')->name('profile.edit');
-    Volt::route('settings/password', 'settings.password')->name('user-password.edit');
-    Volt::route('settings/appearance', 'settings.appearance')->name('appearance.edit');
+    // --- 商品管理 (Products) ---
+    Route::prefix('products')->name('products.')->group(function () {
+        Route::get('/', ProductIndex::class)->name('index');    
+        Route::get('/create', ProductCreate::class)->name('create');
+        Route::get('/{product}', ProductShow::class)->name('show');
+        Route::get('/{product}/edit', ProductEdit::class)->name('edit');
+    });
 
-    Volt::route('settings/two-factor', 'settings.two-factor')
-        ->middleware(
-            when(
-                Features::canManageTwoFactorAuthentication()
-                    && Features::optionEnabled(Features::twoFactorAuthentication(), 'confirmPassword'),
-                ['password.confirm'],
-                [],
-            ),
-        )
-        ->name('two-factor.show');
+    // --- 銷售模組 (Sales) ---
+    Route::prefix('sales')->name('sales.')->group(function () {        
+		Route::get('/overview', SalesOverview::class)->name('overview');
+        Route::get('/customers', CustomerIndex::class)->name('customers.index');
+		Route::get('/', SalesIndex::class)->name('index');
+        Route::get('/create', QuickSale::class)->name('create');		
+        Route::get('/{sale}', ShowSale::class)->name('show');
+		Route::get('/{sale}/edit', QuickSale::class)->name('edit');
+    });
+
+    // --- 庫存與調撥系統 (Inventories) ---
+    Route::prefix('inventories')->name('inventories.')->group(function () {       
+        Route::get('/', InventoryIndex::class)->name('index');
+		Route::get('/transfers', Transfers::class)->name('transfers');
+        Route::get('/stocktakes', Stocktakes::class)->name('stocktakes');
+        Route::get('/movements', Movements::class)->name('movements');
+    });
+
+    // --- 採購進貨系統 (Purchases) ---
+    Route::prefix('purchases')->name('purchases.')->group(function () {
+		
+		Route::get('/suppliers', SupplierIndex::class)->name('suppliers.index');
+		Route::get('/', PurchaseIndex::class)->name('index');
+		Route::get('/create', PurchaseCreate::class)->name('create');
+    });
+
+    // --- 系統設定 (Settings) ---
+    Route::prefix('settings')->group(function () {
+        Route::get('/categories', CategoryIndex::class)->name('categories.index');
+		Route::get('/materials', MaterialIndex::class)->name('materials.index');
+		Route::get('/warehouses', WarehouseIndex::class)->name('warehouses.index');
+		Route::get('/shops', ShopIndex::class)->name('shops.index');        
+        Route::get('/partners', PartnerIndex::class)->name('partners.index');
+        Route::get('/users', UserManagement::class)->name('users.index');
+        // 直接將 Route 指向 Livewire Component，完全跳過 Controller
+		Route::get('/', SystemSettings::class)->name('settings.system')->middleware(['auth']);
+    });	
 });
