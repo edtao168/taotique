@@ -50,4 +50,5 @@ tailwind.config.js
 vite.config.js  # 如果你不想跟踪构建配置
 
 # 语言文件（如果不属于项目核心）
-resources/lang/*
+resources/lang/*"*.key" 
+"*.pub" 
