@@ -24,6 +24,8 @@ use App\Livewire\Inventories\Index as InventoryIndex;
 use App\Livewire\Inventories\Transfers;
 use App\Livewire\Inventories\Stocktakes;
 use App\Livewire\Inventories\Movements;
+use App\Livewire\Conversions\Index as ConversionIndex;
+use App\Livewire\Conversions\Create as ConversionCreate;
 
 // 5. 採購進貨 (Purchases)
 use App\Livewire\Suppliers\Index as SupplierIndex;
@@ -67,6 +69,9 @@ Route::middleware(['auth'])->group(function () {
     Route::prefix('inventories')->name('inventories.')->group(function () {       
         Route::get('/', InventoryIndex::class)->name('index');
 		Route::get('/transfers', Transfers::class)->name('transfers');
+		// --- 拆裝組合作業 ---
+        Route::get('/conversions', ConversionIndex::class)->name('conversions.index');
+        Route::get('/conversions/create', ConversionCreate::class)->name('conversions.create');
         Route::get('/stocktakes', Stocktakes::class)->name('stocktakes');
         Route::get('/movements', Movements::class)->name('movements');
     });

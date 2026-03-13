@@ -1,7 +1,7 @@
 <div class="p-6">
     <x-header title="修改商品資料" subtitle="正在編輯：{{ $product->sku }}" separator>
         <x-slot:actions>
-            <x-button label="返回列表" icon="o-arrow-left" link="{{ route('products.index') }}" />
+            <x-button label="返回列表" icon="o-arrow-left" :link="route('products.index')" />
         </x-slot:actions>
     </x-header>
 
@@ -49,7 +49,7 @@
                     <x-textarea label="備註說明" wire:model="remark" rows="3" class="mt-4" />
 
                     <x-slot:actions>
-                        <x-button label="取消" link="{{ route('products.index') }}" />
+                        <x-button label="取消" :link="route('products.index')" />
                         <x-button label="儲存變更" class="btn-primary" type="submit" spinner="save" icon="o-check" />
                     </x-slot:actions>
                 </x-form>

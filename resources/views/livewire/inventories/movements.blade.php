@@ -3,6 +3,9 @@
         <x-slot:middle class="!justify-end">
             <x-input placeholder="搜尋 SKU..." wire:model.live.debounce="search" icon="o-magnifying-glass" clearable />
         </x-slot:middle>
+		<x-slot:actions>
+			<x-button label="回首頁" icon="o-home" :link="route('dashboard')" />
+		</x-slot:actions>
     </x-header>
 
     <div class="mb-4 flex gap-4">

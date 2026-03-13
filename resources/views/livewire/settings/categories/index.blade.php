@@ -2,7 +2,8 @@
     <x-header title="產品類別設定" subtitle="管理 SKU 編碼的第一碼定義：大類" separator>
         <x-slot:actions>
             <x-input wire:model.live="search" placeholder="搜尋..." icon="o-magnifying-glass" />
-            <x-button label="新增類別" wire:click="$set('myModal', true)" icon="o-plus" class="btn-primary" />
+            <x-button label="回首頁" icon="o-home" :link="route('dashboard')" />
+			<x-button label="新增類別" wire:click="$set('myModal', true)" icon="o-plus" class="btn-primary" />
         </x-slot:actions>
     </x-header>
 

@@ -58,7 +58,7 @@
             <x-textarea label="備註" wire:model="remark" rows="2" />
 
             <x-slot:actions>
-                <x-button label="取消" link="/products" />
+                <x-button label="取消" :link="route('products.index')" />
                 <x-button label="完成建檔" class="btn-primary" type="submit" spinner="save" />
             </x-slot:actions>
         </x-form>

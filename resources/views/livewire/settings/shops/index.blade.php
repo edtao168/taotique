@@ -4,7 +4,8 @@
             <x-input placeholder="搜尋..." wire:model.live.debounce="search" icon="o-magnifying-glass" />
         </x-slot:middle>
         <x-slot:actions>
-            <x-button label="新增營業點" wire:click="create" icon="o-plus" class="btn-primary" />
+            <x-button label="回首頁" icon="o-home" :link="route('dashboard')" />
+			<x-button label="新增營業點" wire:click="create" icon="o-plus" class="btn-primary" />
         </x-slot:actions>
     </x-header>
 

@@ -13,8 +13,21 @@ class Inventory extends Model
      * 這代表不限制寫入欄位，讓 Sale Model 可以自由更新 quantity 與 status
      */
     protected $guarded = [];
+	
+	/**
+     * 轉型標註
+     */    
+	
+	protected function casts(): array
+	{
+		return [
+			'quantity' => 'decimal:4',
+			'cost' => 'decimal:4',
+		];
+	}
+	
 
-    /**
+	/**
      * 庫存屬於某個產品
      */
     public function product(): BelongsTo

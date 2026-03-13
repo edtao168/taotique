@@ -2,7 +2,8 @@
     <x-header title="客戶管理" subtitle="管理您的零售客戶與消費記錄" separator progress-indicator>
         <x-slot:actions>
             <x-input placeholder="搜尋姓名、電話..." wire:model.live.debounce="search" icon="o-magnifying-glass" clearable />
-            <x-button label="新增客戶" wire:click="showCreate" icon="o-plus" class="btn-primary" />
+            <x-button label="回首頁" icon="o-home" :link="route('dashboard')" />
+			<x-button label="新增客戶" wire:click="showCreate" icon="o-plus" class="btn-primary" />
         </x-slot:actions>
     </x-header>
 

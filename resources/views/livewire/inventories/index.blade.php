@@ -4,6 +4,7 @@
             <x-input placeholder="搜尋 SKU 或名稱..." wire:model.live.debounce="search" icon="o-magnifying-glass" clearable />
         </x-slot:middle>
         <x-slot:actions>
+			<x-button label="回首頁" icon="o-home" :link="route('dashboard')" />
             <x-button label="倉庫調撥" icon="o-arrows-right-left" link="/inventories/transfers" />
             <x-button label="盤點作業" icon="o-check-badge" link="/inventories/stocktakes" class="btn-primary" />
         </x-slot:actions>

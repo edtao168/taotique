@@ -8,7 +8,7 @@
                 clearable 
                 class="max-w-xs" 
             />
-            
+            <x-button label="回首頁" icon="o-home" :link="route('dashboard')" />
             <x-button 
                 label="歡迎新夥伴" 
                 wire:click="$set('partnerModal', true)" 

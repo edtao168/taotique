@@ -2,6 +2,7 @@
 <div>
     <x-header title="員工權限管理" subtitle="控管帳號、角色、據點、權限" separator>
 		<x-slot:actions>
+			<x-button label="回首頁" icon="o-home" :link="route('dashboard')" />
 			{{-- 只有 Owner 能看到新增按鈕 --}}
 			@if(auth()->user()->role === 'owner')
 				<x-button label="建立新帳號" wire:click="create" icon="o-plus" class="btn-primary" />

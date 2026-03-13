@@ -50,7 +50,7 @@
 					<x-menu-item title="採購進貨紀錄" icon="o-clipboard-document-list" :link="route('purchases.index')" />
 					<x-menu-item title="供應商管理" icon="o-user-group" :link="route('purchases.suppliers.index')" />
 					{{-- 業務報表嵌入 --}}
-					<x-menu-item title="採購統計報表" icon="o-chart-bar" link="/reports/purchases" class="text-sm opacity-80" />
+					<x-menu-item title="採購統計報表" icon="o-chart-bar" link="#" class="text-sm opacity-80" />
 				</x-menu-sub>
 
 				{{-- 2. 銷貨管理系統 --}}
@@ -59,13 +59,15 @@
 					<x-menu-item title="銷售紀錄清單" icon="o-receipt-percent" link="{{ route('sales.index') }}" />
 					<x-menu-item title="客戶資料管理" icon="o-users" :link="route('sales.customers.index')" />
 					{{-- 業務報表嵌入 --}}
-					<x-menu-item title="銷售業績分析" icon="o-chart-pie" link="/reports/sales" class="text-sm opacity-80" />
+					<x-menu-item title="銷售業績分析" icon="o-chart-pie" link="#" class="text-sm opacity-80" />
 				</x-menu-sub>
 
 				{{-- 3. 庫存管理系統 --}}
 				<x-menu-sub title="庫存管理" icon="o-archive-box">
 					<x-menu-item title="庫存總覽" icon="o-magnifying-glass" :link="route('inventories.index')" />
 					<x-menu-item title="倉庫調撥" icon="o-arrows-right-left" :link="route('inventories.transfers')" />
+					<x-menu-item title="拆裝組合作業" icon="o-beaker" :link="route('inventories.conversions.create')" />
+    <x-menu-item title="拆裝作業紀錄" icon="o-list-bullet" :link="route('inventories.conversions.index')" />
 					<x-menu-item title="庫存盤點" icon="o-check-badge" :link="route('inventories.stocktakes')" />
 					<x-menu-item title="異動流水帳" icon="o-clock" :link="route('inventories.movements')" />
 				</x-menu-sub>
@@ -102,6 +104,12 @@
 
         {{-- 主要內容區 --}}
         <x-slot:content>
+			{{-- 行動端漢堡選單按鈕 --}}
+			{{-- class="lg:hidden" 確保只在手機/平板顯示 --}}
+			<div class="lg:hidden mb-5">
+				<x-button icon="o-bars-3" class="btn-ghost" @click="$wire.drawer = true" />
+			</div>
+			
             {{ $slot }}
         </x-slot:content>
     </x-main>    

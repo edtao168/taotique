@@ -24,7 +24,8 @@
 		</x-tabs>
 
         <x-slot:actions>
-            <x-button label="重置" icon="o-arrow-path" />
+            <x-button label="回首頁" icon="o-home" :link="route('dashboard')" />
+			<x-button label="重置" icon="o-arrow-path" />
             <x-button label="儲存設定" icon="o-check" class="btn-primary" type="submit" spinner="save" />
         </x-slot:actions>
     </x-card>

@@ -3,7 +3,8 @@
     <x-header title="材質定義設定" subtitle="管理 SKU 編碼第 2~4 碼定義：材質" separator>
         <x-slot:actions>
             <x-input wire:model.live="search" placeholder="搜尋材質名稱或代碼 (不含細分)..." icon="o-magnifying-glass" />
-            <x-button label="新增材質" wire:click="$set('myModal', true)" icon="o-plus" class="btn-primary" />
+            <x-button label="回首頁" icon="o-home" :link="route('dashboard')" />
+			<x-button label="新增材質" wire:click="$set('myModal', true)" icon="o-plus" class="btn-primary" />
         </x-slot:actions>
     </x-header>
 

@@ -38,105 +38,116 @@
 
 	{{-- Chart.js 初始化 --}}
 	<script>
-		document.addEventListener('DOMContentLoaded', function() {
-			// 準備數據
-			const labels = @json($monthlyData->pluck('month')->map(fn($m) => \Carbon\Carbon::parse($m)->format('Y/m')));
-			const salesData = @json($monthlyData->pluck('sales'));
-			const profitData = @json($monthlyData->pluck('profit'));
+    // 1. 封裝初始化函式
+    function initDashboardCharts() {
+        // 檢查 Canvas 元素是否存在，避免在其他頁面執行報錯
+        const salesEl = document.getElementById('salesChart');
+        const profitEl = document.getElementById('profitChart');
 
-			// 營業額圖表
-			const salesCtx = document.getElementById('salesChart').getContext('2d');
-			new Chart(salesCtx, {
-				type: 'bar',
-				data: {
-					labels: labels,
-					datasets: [{
-						label: '營業額',
-						data: salesData,
-						backgroundColor: '#3b82f6',
-						borderRadius: 6,
-						borderSkipped: false,
-					}]
-				},
-				options: {
-					responsive: true,
-					maintainAspectRatio: false,
-					plugins: {
-						legend: { display: false },
-						tooltip: {
-							callbacks: {
-								label: function(context) {
-									return 'NT$ ' + context.parsed.y.toLocaleString();
-								}
-							}
-						}
-					},
-					scales: {
-						y: {
-							beginAtZero: true,
-							ticks: {
-								callback: function(value) {
-									return 'NT$ ' + value.toLocaleString();
-								}
-							}
-						},
-						x: {
-							ticks: {
-								maxRotation: 45,
-								minRotation: 45
-							}
-						}
-					}
-				}
-			});
+        if (!salesEl || !profitEl) return;
 
-			// 淨利圖表
-			const profitCtx = document.getElementById('profitChart').getContext('2d');
-			new Chart(profitCtx, {
-				type: 'bar',
-				data: {
-					labels: labels,
-					datasets: [{
-						label: '淨利',
-						data: profitData,
-						backgroundColor: '#10b981',
-						borderRadius: 6,
-						borderSkipped: false,
-					}]
-				},
-				options: {
-					responsive: true,
-					maintainAspectRatio: false,
-					plugins: {
-						legend: { display: false },
-						tooltip: {
-							callbacks: {
-								label: function(context) {
-									return 'NT$ ' + context.parsed.y.toLocaleString();
-								}
-							}
-						}
-					},
-					scales: {
-						y: {
-							beginAtZero: true,
-							ticks: {
-								callback: function(value) {
-									return 'NT$ ' + value.toLocaleString();
-								}
-							}
-						},
-						x: {
-							ticks: {
-								maxRotation: 45,
-								minRotation: 45
-							}
-						}
-					}
-				}
-			});
-		});
-	</script>
+        // 準備數據 (由 Blade 渲染至 JS)
+        const labels = @json($monthlyData->pluck('month')->map(fn($m) => \Carbon\Carbon::parse($m)->format('Y/m')));
+        const salesData = @json($monthlyData->pluck('sales'));
+        const profitData = @json($monthlyData->pluck('profit'));
+
+        // 營業額圖表
+        new Chart(salesEl.getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: '營業額',
+                    data: salesData,
+                    backgroundColor: '#3b82f6',
+                    borderRadius: 6,
+                    borderSkipped: false,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return 'NT$ ' + context.parsed.y.toLocaleString();
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            callback: function(value) {
+                                return 'NT$ ' + value.toLocaleString();
+                            }
+                        }
+                    },
+                    x: {
+                        ticks: {
+                            maxRotation: 45,
+                            minRotation: 45
+                        }
+                    }
+                }
+            }
+        });
+
+        // 淨利圖表
+        new Chart(profitEl.getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: '淨利',
+                    data: profitData,
+                    backgroundColor: '#10b981',
+                    borderRadius: 6,
+                    borderSkipped: false,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return 'NT$ ' + context.parsed.y.toLocaleString();
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            callback: function(value) {
+                                return 'NT$ ' + value.toLocaleString();
+                            }
+                        }
+                    },
+                    x: {
+                        ticks: {
+                            maxRotation: 45,
+                            minRotation: 45
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // 2. 監聽導覽事件 (處理往返 Dashboard)
+    document.addEventListener('livewire:navigated', initDashboardCharts);
+
+    // 3. 處理初次進入頁面
+    document.addEventListener('DOMContentLoaded', initDashboardCharts);
+</script>
 
     {{-- 最近銷貨記錄 --}}
     <div class="bg-white shadow rounded-lg p-6">
