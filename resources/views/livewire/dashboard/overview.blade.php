@@ -155,18 +155,18 @@
         <div class="overflow-x-auto">
             <table class="w-full">
                 <thead>
-                    <tr class="border-b">
-                        <th class="text-left py-2">日期</th>
-                        <th class="text-left py-2">客戶</th>
-                        <th class="text-left py-2">通路</th>
-                        <th class="text-left py-2">顧客付款合計</th>
-                        <th class="text-left py-2">最終訂單進帳</th>
-                        <th class="text-left py-2">狀態</th>
+                    <tr class="border-b border-gray-100">
+                        <th class="text-left py-3 px-2 text-sm font-semibold text-gray-600">日期</th>
+                        <th class="text-left py-3 px-2 text-sm font-semibold text-gray-600">客戶</th>
+                        <th class="text-left py-3 px-2 text-sm font-semibold text-gray-600">通路</th>
+                        <th class="text-left py-3 px-2 text-sm font-semibold text-gray-600">顧客付款合計</th>
+                        <th class="text-left py-3 px-2 text-sm font-semibold text-gray-600">最終訂單進帳</th>
+                        <th class="text-left py-3 px-2 text-sm font-semibold text-gray-600">狀態</th>
                     </tr>
                 </thead>
                 <tbody>
                     @forelse($recentSales as $sale)
-                        <tr class="border-b">
+                        <tr class="divide-y divide-gray-50">
                             <td class="py-2">{{ $sale->created_at->format('Y-m-d') }}</td>
                             <td class="py-2">{{ $sale->customer->name ?? '未知客戶' }}</td>
                             <td class="py-2">{{ $sale->channel }}</td>
