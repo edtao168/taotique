@@ -168,8 +168,8 @@
                     @forelse($recentSales as $sale)
                         <tr class="divide-y divide-gray-50">
                             <td class="py-2 text-gray-600">{{ $sale->created_at->format('Y-m-d') }}</td>
-                            <td class="py-2  text-gray-600">{{ $sale->customer->name ?? '未知客戶' }}</td>
-                            <td class="py-2  text-gray-600">{{ $sale->channel }}</td>
+                            <td class="py-2 text-gray-600">{{ $sale->customer->name ?? '未知客戶' }}</td>
+                            <td class="py-2 text-gray-600">{{ $sale->channel }}</td>
                             <td class="py-2 text-gray-600">NT$ {{ number_format($sale->customer_total) }}</td>
                             <td class="py-2 text-gray-600">NT$ {{ number_format($sale->final_net_amount) }}</td>
                             <td class="py-2">
