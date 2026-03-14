@@ -21,11 +21,11 @@
     @stack('styles')
 </head>
 <body class="min-h-screen font-sans antialiased bg-base-200/50 dark:bg-base-200">
-
+<div x-data="{ openDrawer: false }">
     {{-- Mary UI 的主佈局組件 --}}
     <x-main full-width>
         {{-- 側邊欄 (Sidebar) --}}
-        <x-slot:sidebar drawer="main-drawer" collapsible class="bg-base-100">
+        <x-slot:sidebar drawer="main-drawer" x-model="openDrawer" collapsible class="bg-base-100">
 
             {{-- 系統標誌/Logo --}}
             <div class="p-5 pt-3 flex items-center gap-2">
@@ -107,13 +107,13 @@
 			{{-- 行動端漢堡選單按鈕 --}}
 			{{-- class="lg:hidden" 確保只在手機/平板顯示 --}}
 			<div class="lg:hidden mb-5">
-				<x-button icon="o-bars-3" class="btn-ghost" @click="$wire.drawer = true" />
+				<x-button icon="o-bars-3" class="btn-ghost" @click="openDrawer = !openDrawer" />
 			</div>
 			
             {{ $slot }}
         </x-slot:content>
     </x-main>    
-   
+   </div>
 	@livewireScripts	
 </body>
 </html>
