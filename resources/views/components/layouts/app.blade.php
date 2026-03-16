@@ -31,7 +31,7 @@
     {{-- Mary UI 的主佈局組件 --}}
     <x-main full-width>
         {{-- 側邊欄 (Sidebar) --}}
-        <x-slot:sidebar drawer="main-drawer" id="main-drawer" collapsible class="bg-base-100 w-[80vw] lg:w-80"">
+        <x-slot:sidebar drawer="main-drawer" id="main-drawer" collapsible class="bg-base-100 w-[80vw] lg:w-80">
 
             {{-- 系統標誌/Logo --}}
             <div class="p-5 pt-3 flex items-center gap-2">                
