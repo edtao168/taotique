@@ -8,7 +8,7 @@
     </x-header>
 
     <x-card>
-        <x-table :headers="$headers" :rows="$customers" with-pagination link="sales.customers.index">
+        <x-table :headers="$headers" :rows="$customers" with-pagination @row-click="$wire.showDetails($event.detail.id)">
             {{-- 顧客實付 --}}
 			@scope('cell_customer_paid_sum', $customer)
 				<span class="font-mono text-gray-600">
@@ -34,7 +34,7 @@
         </x-table>
     </x-card>
 
-    <x-drawer wire:model="customerDrawer" title="客戶詳細資料" right separator with-close-button class="w-11/12 lg:w-1/3">
+    <x-drawer wire:model="drawer" title="客戶詳細資料" right separator with-close-button class="w-11/12 lg:w-1/3">
         <x-form wire:submit="save">
             <x-input label="客戶姓名" wire:model="formData.name" icon="o-user" />
             <x-input label="聯絡電話" wire:model="formData.phone" icon="o-phone" />
@@ -42,7 +42,7 @@
             <x-textarea label="備註" wire:model="formData.remark" placeholder="紀錄喜好、成色要求等..." rows="3" />
 
             <x-slot:actions>
-                <x-button label="取消" @click="$wire.customerDrawer = false" />
+                <x-button label="取消" @click="$wire.drawer = false" />
                 <x-button label="儲存客戶" type="submit" icon="o-check" class="btn-primary" spinner="save" />
             </x-slot:actions>
         </x-form>

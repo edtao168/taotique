@@ -92,7 +92,7 @@
     </x-card>
 	
 	{{-- 快速查詢抽屜 (唯讀展示) --}}
-    <x-drawer wire:model="drawer" title="商品詳細資料" right separator with-close-button class="bg-base-100 w-[80vw] lg:w-80">
+    <x-drawer wire:model="drawer" title="商品詳細資料" right separator with-close-button class="w-11/12 lg:w-1/3">
         @if($selectedProduct)
             <div class="space-y-6">
                 <div class="flex justify-between items-start">
