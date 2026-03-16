@@ -15,6 +15,7 @@ class Index extends Component
     public string $search = '';
     public bool $drawer = false;
 	public bool $isReadOnly = false;
+	public array $customerSales = []; // 用於儲存詳情頁的銷售紀錄
     
     // 表單屬性
     public ?Customer $customer = null; // 用於編輯
@@ -58,6 +59,18 @@ class Index extends Component
         $this->drawer = false;
     }
 
+	public function delete(Customer $customer)
+    {
+        // 檢查是否有庫存關聯，避免刪除有資料的客戶
+        if ($customer->sales()->exists()) {
+            $this->error('該客戶已有銷售紀錄，無法刪除');
+            return;
+        }
+
+        $customer->delete();
+        $this->warning('客戶已移至回收桶');
+    }
+
     public function render()
 	{
 		$headers = [
@@ -89,7 +102,9 @@ class Index extends Component
 	{
 		// 1. 找到該名客戶
 		$this->isReadOnly = true;
-		$customer = \App\Models\Customer::findOrFail($id);
+		$customer = Customer::with(['sales' => function($q) {
+			$q->latest()->limit(5); // 顯示最近 5 筆
+		}])->findOrFail($id);
 		
 		// 2. 將資料填入 formData 供 Drawer 顯示
 		$this->formData = [
@@ -100,6 +115,7 @@ class Index extends Component
 		];
 
 		// 3. 開啟 Drawer (確保變數名稱與 Blade 中的 wire:model="drawer" 一致)
+		$this->customerSales = $customer->sales->toArray();
 		$this->drawer = true;
 	}
 }

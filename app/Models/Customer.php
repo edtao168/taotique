@@ -4,11 +4,14 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\DB;
 
 class Customer extends Model
 {
-    protected $fillable = ['name', 'phone', 'email', 'wechat', 'address', 'notes'];
+    use SoftDeletes;
+	
+	protected $fillable = ['name', 'phone', 'email', 'wechat', 'address', 'notes'];
 
     public function sales(): HasMany
     {

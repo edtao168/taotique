@@ -14,6 +14,7 @@ class Index extends Component
     public string $search = '';
     public bool $drawer = false; // 統一使用 $drawer
     public bool $isReadOnly = false; // 控制唯讀狀態
+	public array $purchaseRecords = []; // 用於儲存詳情頁的採購紀錄
 
     // 表單欄位
     public ?Supplier $editingSupplier = null;
@@ -44,8 +45,22 @@ class Index extends Component
 	public function showDetails($id)
     {
         $this->isReadOnly = true;
-        $supplier = Supplier::findOrFail($id);
-        $this->loadSupplier($supplier);
+        $supplier = Supplier::with(['inventories' => function($q) {
+			$q->latest()->limit(5); 
+		}])->findOrFail($id);
+		
+		$this->loadSupplier($supplier);
+
+		// 將入庫紀錄轉換為陣列供顯示
+		$this->purchaseRecords = $supplier->inventories->map(function($inv) {
+			return [
+				'product_name' => $inv->product->name ?? '未知商品',
+				'quantity'     => $inv->quantity,
+				'cost'         => $inv->cost_twd, // 使用換算後的 TWD 成本
+				'date'         => $inv->created_at->format('Y-m-d'),
+			];
+		})->toArray();
+        
         $this->drawer = true;
     }
 
@@ -98,7 +113,7 @@ class Index extends Component
         }
 
         $supplier->delete();
-        $this->warning('供應商已刪除');
+        $this->warning('供應商已移至回收桶');
     }
 
     public function render()
