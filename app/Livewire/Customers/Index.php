@@ -78,4 +78,24 @@ class Index extends Component
 			'headers' => $headers
 		]);
 	}
+	
+	/**
+	 * 顯示客戶詳細資料 (查詢模式)
+	 */
+	public function showDetails($id)
+	{
+		// 1. 找到該名客戶
+		$customer = \App\Models\Customer::findOrFail($id);
+		
+		// 2. 將資料填入 formData 供 Drawer 顯示
+		$this->formData = [
+			'name'   => $customer->name,
+			'phone'  => $customer->phone,
+			'wechat' => $customer->wechat,
+			'remark' => $customer->remark,
+		];
+
+		// 3. 開啟 Drawer (確保變數名稱與 Blade 中的 wire:model="drawer" 一致)
+		$this->drawer = true;
+	}
 }
