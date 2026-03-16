@@ -34,8 +34,7 @@
         <x-slot:sidebar drawer="main-drawer" id="main-drawer" collapsible class="bg-base-100 w-[80vw] lg:w-80"">
 
             {{-- 系統標誌/Logo --}}
-            <div class="p-5 pt-3 flex items-center gap-2">
-                <!-- x-icon name="o-cube-transparent" class="text-primary size-8" /--!>
+            <div class="p-5 pt-3 flex items-center gap-2">                
 				<img src="{{ asset('logo.png') }}" class="w-8" />
                 <div class="font-bold text-xl tracking-tight">陶老闆
 					<span class="text-xs text-gray-500 italic truncate max-w-xs">進銷存系統</span>
@@ -103,9 +102,7 @@
 				<x-menu-item title="登出系統" icon="o-power" no-wire-navigate onclick="event.preventDefault(); document.getElementById('logout-form').submit();" />
 			</x-menu>
 
-			<form id="logout-form" action="{{ route('logout') }}" method="POST" class="hidden">
-				@csrf
-			</form>
+					
         </x-slot:sidebar>
 
         {{-- 主要內容區 --}}
@@ -120,7 +117,10 @@
             {{ $slot }}
         </x-slot:content>
     </x-main>    
-   </div>
+	</div>
+	<form id="logout-form" action="{{ route('logout') }}" method="POST" class="hidden">
+		@csrf
+	</form>	
 	@livewireScripts	
 </body>
 </html>
