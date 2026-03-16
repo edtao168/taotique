@@ -26,7 +26,7 @@
             {{-- 操作欄位 --}}
             @scope('actions', $customer)
                 <div class="flex gap-2">
-                    <x-button icon="o-pencil" wire:click="edit({{ $customer->id }})" class="btn-ghost btn-sm text-blue-500" />
+                    <x-button icon="o-pencil" wire:click="edit({{ $customer->id }})" @click.stop="" class="btn-ghost btn-sm text-blue-500" />
                     {{-- 預留銷售跳轉 --}}
                     <x-button icon="o-shopping-cart" :link="route('sales.index', ['customer_id' => $customer->id])" class="btn-ghost btn-sm" />
                 </div>
@@ -36,14 +36,16 @@
 
     <x-drawer wire:model="drawer" title="客戶詳細資料" right separator with-close-button class="w-11/12 lg:w-1/3">
         <x-form wire:submit="save">
-            <x-input label="客戶姓名" wire:model="formData.name" icon="o-user" />
-            <x-input label="聯絡電話" wire:model="formData.phone" icon="o-phone" />
-            <x-input label="微信 (WeChat)" wire:model="formData.wechat" icon="o-chat-bubble-left-right" />
-            <x-textarea label="備註" wire:model="formData.remark" placeholder="紀錄喜好、成色要求等..." rows="3" />
+            <x-input label="客戶姓名" wire:model="formData.name" icon="o-user" :readonly="$isReadOnly"/>
+            <x-input label="聯絡電話" wire:model="formData.phone" icon="o-phone" :readonly="$isReadOnly"/>
+            <x-input label="微信 (WeChat)" wire:model="formData.wechat" icon="o-chat-bubble-left-right" :readonly="$isReadOnly"/>
+            <x-textarea label="備註" wire:model="formData.notes" placeholder="紀錄喜好、成色要求等..." rows="3" :readonly="$isReadOnly"/>
 
             <x-slot:actions>
                 <x-button label="取消" @click="$wire.drawer = false" />
-                <x-button label="儲存客戶" type="submit" icon="o-check" class="btn-primary" spinner="save" />
+                @if(!$isReadOnly)
+					<x-button label="儲存客戶" type="submit" icon="o-check" class="btn-primary" spinner="save" />
+				@endif
             </x-slot:actions>
         </x-form>
     </x-drawer>

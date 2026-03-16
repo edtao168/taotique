@@ -12,55 +12,81 @@ class Index extends Component
     use WithPagination, Toast;
 
     public string $search = '';
-    public bool $supplierModal = false;
+    public bool $drawer = false; // 統一使用 $drawer
+    public bool $isReadOnly = false; // 控制唯讀狀態
 
     // 表單欄位
     public ?Supplier $editingSupplier = null;
     public string $name = '';
     public string $contact_person = '';
     public string $phone = '';
-	public array $contact_json = [];
+	public array $contact_json = [
+		'wechat' => '',
+        'line' => '',
+        'other' => ''
+	];
 	public string $notes = '';
 
     public function create()
     {
-        $this->reset(['name', 'contact_person', 'phone', 'editingSupplier']);
-        $this->supplierModal = true;
+        $this->isReadOnly = false;
+        $this->reset(['name', 'contact_person', 'phone', 'editingSupplier', 'contact_json', 'notes']);
+        $this->drawer = true;
     }
 
     public function edit(Supplier $supplier)
     {
+        $this->isReadOnly = false;
+        $this->loadSupplier($supplier);
+        $this->drawer = true;   
+    }
+	
+	public function showDetails($id)
+    {
+        $this->isReadOnly = true;
+        $supplier = Supplier::findOrFail($id);
+        $this->loadSupplier($supplier);
+        $this->drawer = true;
+    }
+
+    protected function loadSupplier(Supplier $supplier)
+    {
         $this->editingSupplier = $supplier;
         $this->name = $supplier->name;
-        $this->contact_person = $supplier->contact_person??'';
-        $this->phone = $supplier->phone??'';
-		$this->contact_json = array_merge(
-			['wechat' => '', 'line' => '', 'other' => ''], 
-			$supplier->contact_json ?? []
-		);
-		$this->notes = $supplier->notes ?? '';		
-		$this->supplierModal = true;        
+        $this->contact_person = $supplier->contact_person ?? '';
+        $this->phone = $supplier->phone ?? '';
+        $this->contact_json = array_merge(
+            ['wechat' => '', 'line' => '', 'other' => ''], 
+            $supplier->contact_json ?? []
+        );
+        $this->notes = $supplier->notes ?? '';
     }
 
     public function save()
     {
-        $data = $this->validate([
-			'name' => 'required|unique:suppliers,name,' . ($this->editingSupplier->id ?? 'NULL'),
-			'contact_person' => 'nullable',
-			'phone' => 'nullable',
-			'contact_json' => 'nullable|array',
-			'notes' => 'nullable',
-		]);
+        if ($this->isReadOnly) return;
+
+        $this->validate([
+            'name' => 'required|unique:suppliers,name,' . ($this->editingSupplier->id ?? 'NULL'),
+        ]);
+
+        $dbData = [
+            'name' => $this->name,
+            'contact_person' => $this->contact_person,
+            'phone' => $this->phone,
+            'contact_json' => $this->contact_json,
+            'notes' => $this->notes,
+        ];
 
         if ($this->editingSupplier) {
-            $this->editingSupplier->update($data);
+            $this->editingSupplier->update($dbData);
             $this->success('供應商已更新');
         } else {
-            Supplier::create($data);
+            Supplier::create($dbData);
             $this->success('供應商已創建');
         }
 
-        $this->supplierModal = false;
+        $this->drawer = false;
     }
 
     public function delete(Supplier $supplier)

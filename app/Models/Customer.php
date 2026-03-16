@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\DB;
 
 class Customer extends Model
 {
-    protected $fillable = ['name', 'phone', 'email', 'wechat', 'address', 'remark'];
+    protected $fillable = ['name', 'phone', 'email', 'wechat', 'address', 'notes'];
 
     public function sales(): HasMany
     {

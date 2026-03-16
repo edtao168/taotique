@@ -13,7 +13,8 @@ class Index extends Component
     use WithPagination, Toast;
 
     public string $search = '';
-    public bool $customerDrawer = false;
+    public bool $drawer = false;
+	public bool $isReadOnly = false;
     
     // 表單屬性
     public ?Customer $customer = null; // 用於編輯
@@ -21,20 +22,22 @@ class Index extends Component
         'name' => '',
         'phone' => '',
         'wechat' => '',
-        'remark' => '',
+        'notes' => '',
     ];
 
     public function showCreate()
     {
-        $this->reset(['formData', 'customer']);
-        $this->customerDrawer = true;
+        $this->isReadOnly = false;
+		$this->reset(['formData', 'customer']);
+        $this->drawer = true;
     }
 
     public function edit(Customer $customer)
     {
-        $this->customer = $customer;
+        $this->isReadOnly = false;
+		$this->customer = $customer;
         $this->formData = $customer->toArray();
-        $this->customerDrawer = true;
+        $this->drawer = true;
     }
 
     public function save()
@@ -43,7 +46,7 @@ class Index extends Component
             'formData.name' => 'required|min:2',
             'formData.phone' => 'nullable',
             'formData.wechat' => 'nullable',
-            'formData.remark' => 'nullable',
+            'formData.notes' => 'nullable',
         ]);
 
         Customer::updateOrCreate(
@@ -52,7 +55,7 @@ class Index extends Component
         );
 
         $this->success('客戶資料已儲存');
-        $this->customerDrawer = false;
+        $this->drawer = false;
     }
 
     public function render()
@@ -85,6 +88,7 @@ class Index extends Component
 	public function showDetails($id)
 	{
 		// 1. 找到該名客戶
+		$this->isReadOnly = true;
 		$customer = \App\Models\Customer::findOrFail($id);
 		
 		// 2. 將資料填入 formData 供 Drawer 顯示
@@ -92,7 +96,7 @@ class Index extends Component
 			'name'   => $customer->name,
 			'phone'  => $customer->phone,
 			'wechat' => $customer->wechat,
-			'remark' => $customer->remark,
+			'notes' => $customer->notes,
 		];
 
 		// 3. 開啟 Drawer (確保變數名稱與 Blade 中的 wire:model="drawer" 一致)

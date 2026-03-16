@@ -11,6 +11,7 @@ class Supplier extends Model
         'name',
         'contact_person',
         'phone',
+		'notes',
         // 如果未來要擴展多店，建議在此處預留多店關聯欄位，如 shop_id
     ];
 	protected $casts = [
