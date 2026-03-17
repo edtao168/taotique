@@ -30,6 +30,12 @@
         </div>
     @endif
 
+	{{-- 增加一個固定高度或溢出處理的容器，確保 actions 容易被看見 --}}
+    <div class="pb-20"> {{-- 增加底部填充防止被按鈕擋住 --}}
+        <div class="grid gap-4">
+            </div>
+    </div>
+	
     <x-slot:actions>
         <x-button label="關閉" @click="$wire.viewModal = false" />
         <x-button label="修改資料" icon="o-pencil" wire:click="edit({{ $viewingPartner?->id }})" class="btn-primary" />

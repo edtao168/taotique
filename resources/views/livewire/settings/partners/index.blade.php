@@ -41,7 +41,8 @@
         />
     </div>
 
-    <x-card>
+    {{-- PC 端：顯示表格 --}}
+    <x-card class="hidden md:block">
 		<x-table 
 			:headers="$headers" 
 			:rows="$partners" 
@@ -164,7 +165,46 @@
 			@endscope
 		</x-table>
 	</x-card>
-
+	
+	{{-- 手機端：顯示卡片列表 --}}
+    <div class="block md:hidden space-y-3">
+        @foreach($partners as $partner)
+            <x-card @click="$wire.view({{ $partner->id }})" class="cursor-pointer active:bg-base-200">
+                <div class="flex items-center gap-4">
+                    <x-avatar image="{{ $partner->photo_path ? asset('storage/' . $partner->photo_path) : '/default-avatar.png' }}" class="!w-14 !h-14" />
+                    <div class="flex-1">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <div class="font-bold text-lg text-primary">{{ $partner->name }}</div>
+                                <div class="text-sm opacity-70">{{ $partner->role ?? '一般夥伴' }}</div>
+                            </div>
+                            @if($partner->trashed())
+                                <x-badge value="已離職" class="badge-error badge-sm" />
+                            @else
+                                <x-badge value="在職" class="{{ $partner->is_active ? 'badge-success' : 'badge-warning' }} badge-sm" />
+                            @endif
+                        </div>
+                        
+                        <div class="mt-2 flex flex-wrap gap-2">
+                            @if(!empty(data_get($partner->contacts, 'line')))
+                                <x-badge value="LINE" icon="o-chat-bubble-left-right" class="badge-outline badge-xs text-success" />
+                            @endif
+                            @if(!empty(data_get($partner->contacts, 'wechat')))
+                                <x-badge value="微信" icon="o-chat-bubble-bottom-center-text" class="badge-outline badge-xs text-info" />
+                            @endif
+                        </div>
+                    </div>
+                    <x-icon name="o-chevron-right" class="w-5 h-5 opacity-30" />
+                </div>
+                
+                {{-- 手機端獨立操作按鈕 --}}
+                <x-slot:actions>
+                    <x-button icon="o-pencil" wire:click.stop="edit({{ $partner->id }})" class="btn-sm btn-ghost" />
+                </x-slot:actions>
+            </x-card>
+        @endforeach
+    </div>
+	
     @include('livewire.settings.partners.view-drawer')
     @include('livewire.settings.partners.form-drawer')
 </div>
