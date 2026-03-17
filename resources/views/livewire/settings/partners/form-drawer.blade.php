@@ -28,15 +28,9 @@
         <x-input label="職稱" wire:model="role" icon="o-briefcase" />
         <div class="grid grid-cols-2 gap-2">
             <x-input label="Line ID" wire:model="line_id" />
-            <x-input label="WeChat ID" wire:model="wechat_id" />
+            <x-input label="微信 ID" wire:model="wechat_id" />
         </div>
         <x-datepicker label="入職日期" wire:model="joined_at" icon="o-calendar" />
-    </div>
-
-	{{-- 增加一個固定高度或溢出處理的容器，確保 actions 容易被看見 --}}
-    <div class="pb-20"> {{-- 增加底部填充防止被按鈕擋住 --}}
-        <div class="grid gap-4">
-            </div>
     </div>
 	
     <x-slot:actions>

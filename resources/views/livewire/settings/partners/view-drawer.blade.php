@@ -1,43 +1,64 @@
-<x-drawer wire:model="viewModal" title="夥伴詳細資料" right separator with-close-button class="w-11/12 md:w-1/3">
+<x-drawer wire:model="viewModal" title="夥伴檔案詳情" right separator with-close-button class="w-11/12 md:w-1/3">
     @if($viewingPartner)
-        <div class="space-y-6">
-            <div class="flex justify-center">
-                @if($viewingPartner->photo_path)
-                    <img src="{{ asset('storage/' . $viewingPartner->photo_path) }}" class="w-32 h-32 rounded-full object-cover ring ring-primary ring-offset-2" />
-                @else
-                    <div class="w-32 h-32 rounded-full border-2 border-dashed border-gray-300 flex flex-col items-center justify-center bg-gray-50 text-gray-400">
-                        <x-icon name="o-user" class="w-12 h-12" />
-                        <span class="text-xs">暫無照片</span>
+        <div class="pb-10">
+            {{-- 頂部個人名片區 --}}
+            <div class="flex flex-col items-center py-6 bg-gradient-to-b from-primary/5 to-transparent rounded-xl mb-6">
+                <div class="relative mb-4">
+                    @if($viewingPartner->photo_path)
+                        <img src="{{ asset('storage/' . $viewingPartner->photo_path) }}" class="w-32 h-32 rounded-full object-cover ring-4 ring-base-100 shadow-xl" />
+                    @else
+                        <div class="w-32 h-32 rounded-full border-2 border-dashed border-gray-300 flex flex-col items-center justify-center bg-gray-50 text-gray-400">
+                            <x-icon name="o-user" class="w-12 h-12" />
+                        </div>
+                    @endif
+                    <div class="absolute bottom-1 right-1">
+                        <x-badge value="{{ $viewingPartner->is_active ? '在職中' : '停職' }}" class="{{ $viewingPartner->is_active ? 'badge-success' : 'badge-warning' }} badge-sm shadow" />
                     </div>
-                @endif
-            </div>
-            <div>
-                <h2 class="text-xl font-bold">{{ $viewingPartner->name }}</h2>
-                <p class="text-gray-500 text-sm">{{ $viewingPartner->role ?? '一般夥伴' }}</p>
+                </div>
+                <h2 class="text-2xl font-black text-base-content">{{ $viewingPartner->name }}</h2>
+                <span class="badge badge-ghost mt-1">{{ $viewingPartner->role ?? '未定義職稱' }}</span>
             </div>
 
-            <x-list-item :item="$viewingPartner" no-separator no-hover>
-                <x-slot:actions>
-                    <x-badge value="{{ $viewingPartner->is_active ? '在職' : '停職' }}" class="{{ $viewingPartner->is_active ? 'badge-success' : 'badge-warning' }}" />
-                </x-slot:actions>
-            </x-list-item>
+            {{-- 詳細資訊區 --}}
+            <div class="space-y-1">
+                <x-list-item :item="$viewingPartner" no-separator no-hover>
+                    <x-slot:avatar>
+                        <x-icon name="o-phone" class="w-5 h-5 text-gray-400" />
+                    </x-slot:avatar>
+                    <x-slot:value>
+                        {{ $viewingPartner->phone ?? '尚未填寫' }}
+                    </x-slot:value>
+                    <x-slot:sub-value>聯絡電話</x-slot:sub-value>
+                </x-list-item>
 
-            <div class="grid gap-4 border-t pt-4 text-sm">
-                <x-input label="電話" value="{{ $viewingPartner->phone }}" readonly icon="o-phone" />
-                <x-input label="Line" value="{{ $viewingPartner->contacts['line'] ?? '未提供' }}" readonly icon="o-chat-bubble-left" />
-                <x-input label="入職日期" value="{{ $viewingPartner->joined_at?->format('Y-m-d') ?? '未設定' }}" readonly icon="o-calendar" />
+                <div class="grid grid-cols-2 gap-0 border-y border-base-200">
+                    <x-list-item :item="$viewingPartner" no-separator no-hover class="border-r border-base-200">
+                        <x-slot:avatar><x-icon name="o-chat-bubble-left" class="w-5 h-5 text-success" /></x-slot:avatar>
+                        <x-slot:value>{{ $viewingPartner->contacts['line'] ?? '-' }}</x-slot:value>
+                        <x-slot:sub-value>Line ID</x-slot:sub-value>
+                    </x-list-item>
+                    <x-list-item :item="$viewingPartner" no-separator no-hover>
+                        <x-slot:avatar><x-icon name="o-chat-bubble-bottom-center-text" class="w-5 h-5 text-info" /></x-slot:avatar>
+                        <x-slot:value>{{ $viewingPartner->contacts['wechat'] ?? '-' }}</x-slot:value>
+                        <x-slot:sub-value>微信 ID</x-slot:sub-value>
+                    </x-list-item>
+                </div>
+
+                <x-list-item :item="$viewingPartner" no-separator no-hover>
+                    <x-slot:avatar>
+                        <x-icon name="o-calendar" class="w-5 h-5 text-gray-400" />
+                    </x-slot:avatar>
+                    <x-slot:value>
+                        {{ $viewingPartner->joined_at?->format('Y 年 m 月 d 日') ?? '尚未設定' }}
+                    </x-slot:value>
+                    <x-slot:sub-value>入職日期</x-slot:sub-value>
+                </x-list-item>
             </div>
         </div>
     @endif
 
-	{{-- 增加一個固定高度或溢出處理的容器，確保 actions 容易被看見 --}}
-    <div class="pb-20"> {{-- 增加底部填充防止被按鈕擋住 --}}
-        <div class="grid gap-4">
-            </div>
-    </div>
-	
     <x-slot:actions>
-        <x-button label="關閉" @click="$wire.viewModal = false" />
-        <x-button label="修改資料" icon="o-pencil" wire:click="edit({{ $viewingPartner?->id }})" class="btn-primary" />
+        <x-button label="關閉" @click="$wire.viewModal = false" class="btn-ghost" />
+        <x-button label="立即修改" icon="o-pencil" wire:click="edit({{ $viewingPartner?->id }})" class="btn-primary shadow-lg" />
     </x-slot:actions>
 </x-drawer>
