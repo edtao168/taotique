@@ -26,6 +26,7 @@ class Create extends Component
 	
 	public bool $showSupplierModal = false; // 控制彈窗
 	public string $newSupplierName = '';
+	public bool $showScanner = false; // 控制掃描視窗
 
     // 初始載入
 	public function mount()
@@ -117,4 +118,40 @@ class Create extends Component
         ]);
     }
 	
+	/**
+     * 處理掃描到的條碼
+     */
+    public function handleScannedBarcode(string $barcode)
+    {
+        // 1. 尋找匹配的商品 (假設 SKU 即為條碼)
+        $product = \App\Models\Product::where('sku', $barcode)
+            ->where('is_active', true)
+            ->first();
+
+        if (!$product) {
+            $this->error("找不到條碼為 {$barcode} 的商品");
+            return;
+        }
+
+        // 2. 檢查目前明細是否已有該商品
+        foreach ($this->items as $index => $item) {
+            if ($item['product_id'] == $product->id) {
+                // 若已有，數量 + 1 (使用 bcadd 確保精度)
+                $this->items[$index]['quantity'] = bcadd($this->items[$index]['quantity'], '1', 4);
+                $this->success("已增加 {$product->name} 的數量");
+                return;
+            }
+        }
+
+        // 3. 若無，新增一行
+        $this->items[] = [
+            'product_id' => $product->id,
+            'warehouse_id' => 1,
+            'quantity' => '1',
+            'foreign_price' => $product->cost ?? '0', // 帶入預設成本
+            'cost_twd' => bcmul($product->cost ?? '0', $this->exchange_rate, 4),
+        ];
+
+        $this->success("已加入商品：{$product->name}");
+    }
 }

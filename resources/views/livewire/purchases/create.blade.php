@@ -1,101 +1,118 @@
+{{-- 檔案路徑：resources/views/livewire/purchases/create.blade.php --}}
 <div>
-    <x-header title="建立採購進貨" separator progress-indicator>
+    <x-header title="新增採購單" separator progress-indicator>
         <x-slot:actions>
-            <x-button label="取消" :link="route('purchases.index')" />
-            <x-button label="確認入庫" wire:click="save" class="btn-primary" spinner="save" icon="o-check" />
+            <x-button label="返回列表" icon="o-arrow-left" :link="route('purchases.index')" />
+            <x-button label="儲存並入庫" icon="o-check" class="btn-primary" wire:click="save" spinner />
         </x-slot:actions>
     </x-header>
 
-    <div class="grid lg:grid-cols-4 gap-6">
+    <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {{-- 左側：主表資訊 --}}
-        <div class="lg:col-span-1 space-y-4">
-            <x-card title="單據資訊" shadow separator>
-                <div class="space-y-1">
-					<x-choices label="供應商" wire:model="supplier_id" :options="$suppliers" single searchable />
-					<div class="flex justify-end">
-						<x-button label="新增供應商" icon="o-plus" class="btn-ghost btn-xs text-primary" @click="$wire.showSupplierModal = true" />
-					</div>
-				</div>
-				
-                <x-datetime label="採購日期" wire:model="purchased_at" icon="o-calendar" />
-                <x-select label="幣別" wire:model.live="currency" :options="[['id'=>'CNY','name'=>'人民幣'],['id'=>'TWD','name'=>'新台幣']]" />
-                <x-input label="匯率" wire:model.live="exchange_rate" prefix="1 {{ $currency }} =" suffix="TWD" type="number" step="0.000001" />
-                <x-textarea label="備註" wire:model="remark" rows="3" />
+        <div class="lg:col-span-1">
+            <x-card title="基本資訊" shadow separator>
+                <div class="space-y-4">
+                    <div class="flex items-end gap-2">
+                        <div class="flex-1">
+                            <x-select label="供應商" icon="o-user" :options="$suppliers" wire:model="supplier_id" placeholder="請選擇" />
+                        </div>
+                        <x-button icon="o-plus" class="btn-ghost" @click="$wire.showSupplierModal = true" />
+                    </div>
+
+                    <x-datetime label="採購日期" wire:model="purchased_at" icon="o-calendar" />
+                    
+                    <div class="grid grid-cols-2 gap-2">
+                        <x-input label="幣別" wire:model="currency" readonly />
+                        <x-input label="即時匯率" wire:model.live="exchange_rate" suffix="TWD" />
+                    </div>
+                    
+                    <x-textarea label="備註" wire:model="remark" rows="3" />
+                </div>
             </x-card>
         </div>
 
-        {{-- 右側：明細項目 --}}
+        {{-- 右側：採購明細 --}}
         <div class="lg:col-span-3">
-            <x-card title="採購明細" shadow>
-                <div class="overflow-visible">
-                    <table class="table">
+            <x-card title="採購明細" shadow separator>
+                {{-- --- PC 端表格 (LG 以上顯示) --- --}}
+                <div class="hidden lg:block overflow-x-auto">
+                    <table class="table table-zebra w-full">
                         <thead>
                             <tr>
-                                <th class="w-16">#</th>
-								<th class="min-w-[300px]">商品 (SKU：名稱 = 庫存)</th>
-								<th class="w-24">數量</th>
-								<th class="w-32">成本價</th>
-								<th class="w-16"></th>
+                                <th class="w-1/3">商品名稱</th>
+                                <th>入庫倉庫</th>
+                                <th class="w-32 text-right">數量</th>
+                                <th class="w-40 text-right">外幣單價 ({{ $currency }})</th>
+                                <th class="w-24"></th>
                             </tr>
                         </thead>
                         <tbody>
                             @foreach($items as $index => $item)
-                                <tr wire:key="purchase-item-{{ $index }}">
-                                        <td>{{ $index + 1 }}</td>
-                                        <td class="relative">
-                                            <x-choices
-                                                wire:model.live="items.{{ $index }}.product_id"
-                                                :options="$products"
-                                                placeholder="搜尋 SKU 或名稱..."
-                                                search-function="search"
-                                                no-result-text="找不到商品"
-                                                debounce="300ms"
-                                                single
-                                                searchable
-                                            />
-                                        </td>
-                                        <td>
-                                            <x-input type="number" wire:model.live="items.{{ $index }}.quantity" class="input-sm" />
-                                        </td>
-                                        <td>
-                                            <x-input type="number" wire:model.live="items.{{ $index }}.cost_price" class="input-sm" />
-                                        </td>
-                                        <td>
-                                            <x-button icon="o-trash" wire:click="removeRow({{ $index }})" class="btn-ghost btn-sm text-error" />
-                                        </td>
-                                    </tr>
+                                <tr wire:key="item-pc-{{ $index }}">
+                                    <td>
+                                        <x-select :options="$products" wire:model.live="items.{{ $index }}.product_id" placeholder="選擇商品" />
+                                    </td>
+                                    <td>
+                                        <x-select :options="$warehouses" wire:model="items.{{ $index }}.warehouse_id" />
+                                    </td>
+                                    <td>
+                                        <x-input type="number" step="0.01" wire:model="items.{{ $index }}.quantity" class="text-right" />
+                                    </td>
+                                    <td>
+                                        <x-input type="number" step="0.0001" wire:model="items.{{ $index }}.foreign_price" class="text-right" />
+                                    </td>
+                                    <td class="text-center">
+                                        <x-button icon="o-trash" class="btn-ghost text-red-500" wire:click="removeRow({{ $index }})" />
+                                    </td>
+                                </tr>
                             @endforeach
                         </tbody>
                     </table>
                 </div>
 
+                {{-- --- 手機端卡片式編輯 (LG 以下顯示) --- --}}
+                <div class="block lg:hidden space-y-4">
+                    @foreach($items as $index => $item)
+                        <div wire:key="item-mobile-{{ $index }}" class="border rounded-xl p-4 bg-base-50 relative">
+                            <div class="absolute -top-2 -right-2">
+                                <x-button icon="o-x-mark" class="btn-circle btn-xs btn-error text-white" wire:click="removeRow({{ $index }})" />
+                            </div>
+                            
+                            <div class="space-y-3">
+                                <x-select label="商品 (Row #{{ $index + 1 }})" :options="$products" wire:model.live="items.{{ $index }}.product_id" />
+                                
+                                <div class="grid grid-cols-2 gap-3">
+                                    <x-select label="入庫倉" :options="$warehouses" wire:model="items.{{ $index }}.warehouse_id" />
+                                    <x-input label="數量" type="number" step="0.01" wire:model="items.{{ $index }}.quantity" />
+                                </div>
+
+                                <div class="grid grid-cols-2 gap-3">
+                                    <x-input label="外幣單價 ({{ $currency }})" type="number" step="0.0001" wire:model="items.{{ $index }}.foreign_price" />
+                                    <div class="flex flex-col justify-end pb-1">
+                                        <span class="text-[10px] text-gray-500">預估本幣成本 (TWD)</span>
+                                        <span class="font-bold text-blue-700">
+                                            {{ number_format(bcmul($items[$index]['foreign_price'] ?: 0, $exchange_rate ?: 0, 4), 2) }}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+
                 <x-slot:actions>
-                    <x-button label="增加商品" wire:click="addRow" icon="o-plus" class="btn-outline btn-sm" />
+                    <x-button label="新增一列" icon="o-plus" class="btn-outline btn-sm w-full lg:w-auto" wire:click="addRow" />
                 </x-slot:actions>
             </x-card>
-
-            {{-- 總計預覽 --}}
-            <div class="mt-4 flex justify-end">
-                <div class="stats shadow">
-                    <div class="stat">
-                        <div class="stat-title">預計總成本 (TWD)</div>
-                        <div class="stat-value text-primary">
-                            @php
-                                $total = collect($items)->reduce(fn($carry, $item) => bcadd($carry, bcmul($item['quantity'], $item['cost_twd'], 4), 4), '0');
-                                echo number_format($total, 2);
-                            @endphp
-                        </div>
-                    </div>
-                </div>
-            </div>
         </div>
     </div>
-	{{-- 快速新增供應商的 Modal --}}
-<x-modal wire:model="showSupplierModal" title="快速新增供應商">
-    <x-input label="供應商名稱" wire:model="newSupplierName" placeholder="輸入名稱..." />
-    <x-slot:actions>
-        <x-button label="取消" @click="$wire.showSupplierModal = false" />
-        <x-button label="確認建立" wire:click="saveSupplier" class="btn-primary" spinner="saveSupplier" />
-    </x-slot:actions>
-</x-modal>
+
+    {{-- 快速新增供應商 Modal (不變) --}}
+    <x-modal wire:model="showSupplierModal" title="快速新增供應商">
+        <x-input label="供應商名稱" wire:model="newSupplierName" placeholder="例如：巴西原礦工廠" />
+        <x-slot:actions>
+            <x-button label="取消" @click="$wire.showSupplierModal = false" />
+            <x-button label="確認建立" class="btn-primary" wire:click="saveSupplier" spinner />
+        </x-slot:actions>
+    </x-modal>
 </div>
