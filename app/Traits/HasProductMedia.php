@@ -1,4 +1,4 @@
-<?php // App/Traits/HasProductMedia.php
+<?php // 檔案路徑：app/Traits/HasProductMedia.php
 
 namespace App\Traits;
 
@@ -16,13 +16,20 @@ trait HasProductMedia
         if ($photos) {
             foreach ($photos as $photo) {
                 $path = $photo->store('products/photos', 'public');
-                $product->images()->create(['path' => $path]);
+                
+                // 檢查是否已有首圖，若無，則將此張設為首圖
+                $isFirst = !$product->images()->where('is_primary', true)->exists();
+
+                $product->images()->create([
+                    'path' => $path,
+                    'is_primary' => $isFirst
+                ]);
             }
         }
     }
 
     /**
-     * 統一處理刪除邏輯 (適用於 Edit 模式與 Create 模式的暫存刪除)
+     * 統一處理刪除邏輯
      */
     public function deleteMedia(ProductImage $image)
     {

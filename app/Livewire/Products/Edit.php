@@ -96,7 +96,7 @@ class Edit extends Component
             'price' => 'required|numeric|min:0',
             'unit' => 'required',
             'min_stock' => 'required|integer|min:0',
-            'new_photos.*' => 'nullable|image|max:2048', 
+            'new_photos.*' => 'nullable|mimes:jpg,jpeg,png,webp,avif|max:2048', 
             'video' => 'nullable|mimetypes:video/mp4,video/quicktime|max:20480',
         ];
 

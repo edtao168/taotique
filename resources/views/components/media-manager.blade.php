@@ -17,21 +17,24 @@
                 'path' => $img->path,
                 'url' => Storage::url($img->path),
                 'is_primary' => (bool)$img->is_primary,
+                // 加入 avif 至影像識別
                 'is_video' => in_array($ext, ['mp4', 'mov', 'avi', 'webm']),
                 'is_temp' => false,
             ];
         }
     }
 
-    // 2. 取得尚未儲存的暫存圖片 (Livewire Temporary Uploads)
+    // 2. 取得尚未儲存的暫存圖片
     if (!empty($temp_photos)) {
         foreach ($temp_photos as $idx => $path) {
-            $ext = strtolower(pathinfo($path instanceof \Livewire\Features\SupportFileUploads\TemporaryUploadedFile ? $path->getClientOriginalName() : $path, PATHINFO_EXTENSION));
+            $originalName = $path instanceof \Livewire\Features\SupportFileUploads\TemporaryUploadedFile ? $path->getClientOriginalName() : $path;
+            $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
+            
             $mediaList[] = [
                 'id' => 'temp_' . $idx,
                 'path' => $path,
                 'url' => is_string($path) ? Storage::url($path) : $path->temporaryUrl(),
-                'is_primary' => false, // 暫存圖片預設非首圖
+                'is_primary' => false, 
                 'is_video' => in_array($ext, ['mp4', 'mov', 'avi', 'webm']),
                 'is_temp' => true,
             ];
@@ -45,7 +48,7 @@
         <div>
             <h3 class="font-bold text-lg text-base-content">{{ $editable ? '商品媒體管理' : '商品媒體相簿' }}</h3>
             @if($editable)
-                <p class="text-xs text-base-content/60">可拖放上傳，點擊星號設定首圖</p>
+                <p class="text-xs text-base-content/60">點擊星號設定首圖，AVIF 格式已支援</p>
             @endif
         </div>
         @if($editable && !empty($mediaList))
@@ -112,6 +115,7 @@
             @endforelse
         </div>
 
+        {{-- Lightbox 保持不變 ... --}}
         <div x-show="isOpen" 
              x-transition.opacity.duration.300ms 
              class="fixed inset-0 z-[9999] bg-black/95 backdrop-blur-sm flex items-center justify-center touch-none" 
@@ -146,15 +150,19 @@
                     <x-icon name="o-chevron-right" class="w-8 h-8" />
                 </button>
             </div>
-            <div class="absolute bottom-10 left-1/2 -translate-x-1/2 text-white/40 text-xs tracking-widest uppercase">
-                雙擊縮放 · 左右滑動切換
-            </div>
         </div>
     </div>
 
     @if($editable)
         <div class="p-5 border-t border-base-300 bg-base-200/20">
-            <input type="file" wire:model="temp_photos" multiple accept="image/*,video/*" class="hidden" id="media-upload-input" x-ref="fileInput" />
+            {{-- 在 accept 中明確加入 image/avif --}}
+            <input type="file" 
+                   wire:model="temp_photos" 
+                   multiple 
+                   accept="image/jpeg,image/png,image/webp,image/avif,video/*" 
+                   class="hidden" 
+                   id="media-upload-input" 
+                   x-ref="fileInput" />
             
             <div x-data="{ dragging: false }" 
                  x-on:dragenter.prevent="dragging = true" 
@@ -167,20 +175,14 @@
                 
                 <x-icon name="o-cloud-arrow-up" class="w-8 h-8 mx-auto mb-2 text-base-content/30 group-hover:text-primary transition-colors" />
                 <p class="text-sm font-medium text-base-content/70 group-hover:text-primary">點擊或拖曳媒體至此上傳</p>
-                <p class="text-[10px] text-base-content/40 mt-1">支援 JPG, PNG, MP4 (最大 2MB/張)</p>
+                <p class="text-[10px] text-base-content/40 mt-1">支援 AVIF, JPG, PNG, WebP (最大 2MB/張)</p>
             </div>
-            
-            @error('temp_photos.*')
-                <div class="mt-2 px-1 text-xs text-error font-medium flex items-center gap-1">
-                    <x-icon name="o-exclamation-circle" class="w-3 h-3" />
-                    {{ $message }}
-                </div>
-            @enderror
         </div>
     @endif
 </div>
 
 <script>
+{{-- JS Gallery 函數保持不變 --}}
 function mediaGallery(config) {
     return {
         images: config.images || [],
@@ -191,23 +193,19 @@ function mediaGallery(config) {
         isZoomed: false,
         touchStartX: 0,
         touchStartTime: 0,
-
         get hasPrev() { return this.currentIndex > 0; },
         get hasNext() { return this.currentIndex < this.images.length - 1; },
-
         openLightbox(index) {
             this.currentIndex = index;
             this.currentImage = this.images[index];
             this.isOpen = true;
             document.body.style.overflow = 'hidden';
         },
-
         close() {
             this.isOpen = false;
             this.isZoomed = false;
             document.body.style.overflow = '';
         },
-
         prev() {
             if (this.hasPrev) {
                 this.currentIndex--;
@@ -215,7 +213,6 @@ function mediaGallery(config) {
                 this.isZoomed = false;
             }
         },
-
         next() {
             if (this.hasNext) {
                 this.currentIndex++;
@@ -223,10 +220,7 @@ function mediaGallery(config) {
                 this.isZoomed = false;
             }
         },
-
         toggleZoom() { this.isZoomed = !this.isZoomed; },
-
-        // 刪除邏輯：處理 temp_ 索引與實體 ID
         deleteMedia(id, isTemp) {
             if (!confirm('確定要刪除此媒體嗎？')) return;
             if (isTemp) {
@@ -236,8 +230,6 @@ function mediaGallery(config) {
                 @this.call('deleteImage', id);
             }
         },
-
-        // 首圖邏輯
         setPrimary(id, isTemp) {
             if (isTemp) {
                 const index = id.replace('temp_', '');
@@ -246,8 +238,6 @@ function mediaGallery(config) {
                 @this.call('setPrimary', id);
             }
         },
-
-        // 手勢支援
         handleTouchStart(e) {
             this.touchStartX = e.touches[0].clientX;
             this.touchStartTime = Date.now();

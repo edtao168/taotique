@@ -91,6 +91,10 @@ class Create extends Component
             'sku' => 'required|unique:products,sku',
             'name' => 'required|min:2',
             'price' => 'required|numeric',
+			'unit' => 'required',
+			'min_stock' => 'required|integer|min:0',			
+			'new_photos.*' => 'nullable|mimes:jpg,jpeg,png,webp,avif|max:2048',
+			'video' => 'nullable|mimetypes:video/mp4,video/quicktime|max:20480',
         ]);
 		
         $cat = CategoryDefinition::where('code', $this->category_id)->first();

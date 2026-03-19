@@ -1,6 +1,10 @@
 {{-- 檔案路徑：resources/views/livewire/products/create.blade.php --}}
 <div class="p-6">
-    <x-header title="新增商品基本資料" subtitle="定義 SKU 規格與基本售價，實際庫存與成本請於「採購入庫」處理" separator />
+    <x-header title="新增商品基本資料" subtitle="定義 SKU 規格與基本售價，實際庫存與成本請於「採購入庫」處理" separator >
+		<x-slot:actions>
+            <x-button label="返回列表" icon="o-arrow-left" :link="route('products.index')" />
+        </x-slot:actions>
+    </x-header>
 
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <x-form wire:submit="save" class="space-y-3"> {{-- 比照 edit 調整間距 --}}
