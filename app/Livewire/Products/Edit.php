@@ -8,6 +8,7 @@ use App\Traits\HasProductMedia;
 use Livewire\Component;
 use Livewire\WithFileUploads;
 use Mary\Traits\Toast;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
 class Edit extends Component
@@ -77,6 +78,16 @@ class Edit extends Component
         $this->success("媒體已刪除");
     }
 
+	// 刪除尚未存檔的臨時圖片
+	public function deleteTempPhoto($index)
+	{
+		if (isset($this->new_photos[$index])) {
+			unset($this->new_photos[$index]);
+			$this->new_photos = array_values($this->new_photos); // 重置索引
+			$this->success("臨時圖片已移除");
+		}
+	}
+
     public function save()
     {
         // 整合驗證規則
@@ -119,4 +130,38 @@ class Edit extends Component
         $this->reset(['new_photos', 'temp_photos', 'video']);
         $this->success('商品資訊與媒體更新成功！', redirectTo: route('products.index'));
     }
+	
+	/**
+	 * 設定現有圖片為首圖
+	 */
+	public function setPrimary($imageId)
+	{
+		DB::transaction(function () use ($imageId) {
+			// 將該商品所有圖片設為非首圖
+			ProductImage::where('product_id', $this->product->id)->update(['is_primary' => false]);
+			
+			// 設定選定圖片為首圖
+			ProductImage::where('id', $imageId)->update(['is_primary' => true]);
+		});
+
+		$this->product->load('images');
+		$this->success("首圖已更新");
+	}
+
+	/**
+	 * 設定新上傳的暫存圖片為首圖 (前端邏輯)
+	 */
+	public function setTempPrimary($index)
+	{
+		// 在 new_photos 陣列中，我們定義 index 0 為首圖
+		if (isset($this->new_photos[$index])) {
+			$target = $this->new_photos[$index];
+			unset($this->new_photos[$index]);
+			
+			// 將選中的檔案推到陣列最前面
+			array_unshift($this->new_photos, $target);
+			
+			$this->success("已預設該圖片為首圖");
+		}
+	}
 }
