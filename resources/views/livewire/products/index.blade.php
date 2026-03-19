@@ -1,3 +1,4 @@
+{{-- 檔案路徑：resources/views/livewire/products/index.blade.php --}}
 <div>
     <x-header title="商品清單" separator progress-indicator>
         <x-slot:middle class="!justify-end">
@@ -5,91 +6,128 @@
         </x-slot:middle>
         <x-slot:actions>
             <x-button label="回首頁" icon="o-home" :link="route('dashboard')" />
-			<x-button label="新增商品" icon="o-plus" link="/products/create" class="btn-primary" />
+            <x-button label="新增商品" icon="o-plus" link="/products/create" class="btn-primary" />
         </x-slot:actions>
     </x-header>
 
-    <x-card shadow>
-        {{-- 點擊整列改為觸發 showDetail 查詢 --}}
-        <x-table :headers="$headers" :rows="$products" @row-click="$wire.showDetail($event.detail.id)" class="cursor-pointer" with-pagination>
-            {{-- SKU 樣式 --}}
-            @scope('cell_sku', $product)
-                <x-badge :value="$product->sku" class="badge-neutral font-mono" />
-            @endscope
-			{{-- 縮略圖 --}}
-			@scope('cell_image', $product)
-				@if($product->images->first())
-					<img src="{{ Storage::url($product->images->first()->path) }}" class="w-12 h-12 object-cover rounded-lg shadow-sm" />
-				@else
-					<div class="w-12 h-12 bg-base-200 rounded-lg flex items-center justify-center text-gray-400">
-						<x-icon name="o-photo" class="w-6 h-6" />
-					</div>
-				@endif
-			@endscope
-            @scope('cell_sku', $product)
-				<div class="flex items-center gap-2">
-					{{-- 使用大型、深色背景的 Badge，字體加粗且間距加寬 --}}
-					<x-badge 
-						:value="$product->sku" 
-						class="badge-neutral font-mono text-sm font-bold px-4 py-3 tracking-tighter" 
-					/>
-					
-					{{-- 如果商品已下架，僅顯示一個簡單的顏色點提示，不干擾視覺 --}}
-					@if(!$product->is_active)
-						<div class="w-2 h-2 rounded-full bg-error" title="已停售"></div>
-					@endif
-				</div>
-			@endscope
-			@scope('cell_name', $product)
-                <div class="flex flex-col">
-                    <span class="{{ $product->is_active ? 'font-medium' : 'text-gray-400 line-through' }}">
-                        {{ $product->name }}
-                    </span>
-                    @if($product->remark)
-                        <span class="text-xs text-gray-500 italic truncate max-w-xs">{{ $product->remark }}</span>
+    {{-- --- PC 端表格模式 (LG 以上顯示) --- --}}
+    <div class="hidden lg:block">
+        <x-card shadow>
+            <x-table :headers="$headers" :rows="$products" @row-click="$wire.showDetail($event.detail.id)" class="cursor-pointer" with-pagination>
+                @scope('cell_image', $product)
+                    @if($product->images->first())
+                        <img src="{{ Storage::url($product->images->first()->path) }}" class="w-12 h-12 object-cover rounded-lg shadow-sm" />
+                    @else
+                        <div class="w-12 h-12 bg-base-200 rounded-lg flex items-center justify-center text-gray-400">
+                            <x-icon name="o-photo" class="w-6 h-6" />
+                        </div>
                     @endif
+                @endscope
+
+                @scope('cell_sku', $product)
+                    <div class="flex items-center gap-2">
+                        <x-badge :value="$product->sku" class="badge-neutral font-mono text-sm font-bold px-4 py-3 tracking-tighter" />
+                        @if(!$product->is_active)
+                            <div class="w-2 h-2 rounded-full bg-error" title="已停售"></div>
+                        @endif
+                    </div>
+                @endscope
+
+                @scope('cell_name', $product)
+                    <div class="flex flex-col">
+                        <span class="{{ $product->is_active ? 'font-medium' : 'text-gray-400 line-through' }}">
+                            {{ $product->name }}
+                        </span>
+                        @if($product->remark)
+                            <span class="text-xs text-gray-500 italic truncate max-w-xs">{{ $product->remark }}</span>
+                        @endif
+                    </div>
+                @endscope
+
+                @if(auth()->user()->role === 'owner')
+                    @scope('cell_cost', $product)
+                        <span class="text-error font-bold">$ {{ number_format($product->cost, 2) }}</span>
+                    @endscope
+                @endif
+
+                @scope('cell_price', $product)
+                    <span class="font-bold text-blue-700 text-sm">NT$ {{ number_format($product->price, 0) }}</span>
+                @endscope
+
+                @scope('cell_total_stock', $product)
+                    <span class="{{ $product->total_stock <= ($product->min_stock ?? 0) ? 'text-error font-bold' : '' }}">
+                        {{ $product->total_stock }}
+                    </span>
+                @endscope
+
+                @scope('actions', $product)
+                    <div class="flex gap-2">
+                        <x-button icon="o-pencil" link="{{ route('products.edit', $product->id) }}" class="btn-ghost btn-sm text-blue-500" onclick="event.stopPropagation();" />
+                        <x-button icon="o-trash" wire:click="delete({{ $product->id }})" wire:confirm="確定刪除？" class="btn-ghost btn-sm text-red-500" onclick="event.stopPropagation();" />
+                    </div>
+                @endscope
+            </x-table>
+        </x-card>
+    </div>
+
+    {{-- --- 手機端卡片模式 (LG 以下顯示) --- --}}
+    <div class="block lg:hidden space-y-3">
+        @foreach($products as $product)
+            <x-card class="shadow-sm border border-base-200" @click="$wire.showDetail({{ $product->id }})">
+                <div class="flex gap-4">
+                    {{-- 左側：縮圖 --}}
+                    <div class="relative w-20 h-20 shrink-0">
+                        @if($product->images->first())
+                            <img src="{{ Storage::url($product->images->first()->path) }}" class="w-full h-full object-cover rounded-xl" />
+                        @else
+                            <div class="w-full h-full bg-base-200 rounded-xl flex items-center justify-center text-gray-400">
+                                <x-icon name="o-photo" class="w-8 h-8" />
+                            </div>
+                        @endif
+                        {{-- 庫存警示標籤 --}}
+                        @if($product->total_stock <= ($product->min_stock ?? 0))
+                            <span class="absolute -top-2 -left-2 badge badge-error badge-sm text-white">低庫存</span>
+                        @endif
+                    </div>
+
+                    {{-- 右側：資訊 --}}
+                    <div class="flex-1 min-w-0">
+                        <div class="flex justify-between items-start">
+                            <span class="text-xs font-mono text-gray-500">{{ $product->sku }}</span>
+                            <div class="flex gap-1" onclick="event.stopPropagation();">
+                                <x-button icon="o-pencil" link="{{ route('products.edit', $product->id) }}" class="btn-ghost btn-xs text-blue-500" />
+                                <x-button icon="o-trash" wire:click="delete({{ $product->id }})" wire:confirm="確定刪除？" class="btn-ghost btn-xs text-red-500" />
+                            </div>
+                        </div>
+                        
+                        <h3 class="font-bold truncate text-base mb-1 {{ !$product->is_active ? 'text-gray-400 line-through' : '' }}">
+                            {{ $product->name }}
+                        </h3>
+
+                        <div class="flex justify-between items-end">
+                            <div>
+                                <span class="text-blue-700 font-extrabold text-lg">NT$ {{ number_format($product->price, 0) }}</span>
+                                @if(auth()->user()->role === 'owner')
+                                    <p class="text-[10px] text-error opacity-70">成本: {{ number_format($product->cost, 2) }}</p>
+                                @endif
+                            </div>
+                            <div class="text-right">
+                                <p class="text-xs text-gray-400">剩餘庫存</p>
+                                <p class="font-bold {{ $product->total_stock <= ($product->min_stock ?? 0) ? 'text-error' : 'text-base-content' }}">
+                                    {{ $product->total_stock }} <span class="text-[10px] font-normal">{{ $product->unit }}</span>
+                                </p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-            @endscope
-			@if(auth()->user()->role === 'owner')
-				@scope('cell_cost', $product)
-					$ {{ number_format($product->cost, 2) }}
-				@endscope
-			@endif
-            {{-- 零售價樣式 --}}
-            @scope('cell_price', $product)
-                <span class="font-bold text-blue-700 text-sm">NT$ {{ number_format($product->price, 0) }}</span>
-            @endscope
+            </x-card>
+        @endforeach
 
-            {{-- 總庫存 --}}
-            @scope('cell_total_stock', $product)
-                <span class="@if($product->total_stock <= ($product->min_stock ?? 0)) text-error font-bold @endif">
-                    {{ $product->total_stock }}
-                </span>
-            @endscope
-
-            {{-- 操作按鈕 --}}
-            @scope('actions', $product)
-				<div class="flex gap-2">
-					{{-- 注意 link 屬性的寫法 --}}
-					<x-button 
-						icon="o-pencil" 
-						link="{{ route('products.edit', $product->id) }}" 
-						class="btn-ghost btn-sm text-blue-500" 
-						tooltip="修改商品" 
-						onclick="event.stopPropagation();" 
-					/>
-					<x-button 
-						icon="o-trash" 
-						wire:click="delete({{ $product->id }})" 
-						wire:confirm="確定刪除？" 
-						class="btn-ghost btn-sm text-red-500" 
-						tooltip="刪除" 
-						onclick="event.stopPropagation();" 
-					/>
-				</div>
-			@endscope
-        </x-table>
-    </x-card>
+        {{-- 手機端分頁 --}}
+        <div class="py-4">
+            {{ $products->links(data: ['scrollTo' => false]) }}
+        </div>
+    </div>
 	
 	{{-- 快速查詢抽屜 (唯讀展示) --}}
     <x-drawer wire:model="drawer" title="商品詳細資料" right separator with-close-button class="w-11/12 lg:w-1/3">
