@@ -44,12 +44,12 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/', Overview::class)->name('home');
     Route::get('/dashboard', Overview::class)->name('dashboard');
 
-    // --- 商品管理 (Products) ---
-    Route::prefix('products')->name('products.')->group(function () {
-        Route::get('/', ProductIndex::class)->name('index');    
-        Route::get('/create', ProductCreate::class)->name('create');
-        Route::get('/{product}', ProductShow::class)->name('show');
-        Route::get('/{product}/edit', ProductEdit::class)->name('edit');
+    // --- 採購進貨系統 (Purchases) ---
+    Route::prefix('purchases')->name('purchases.')->group(function () {
+		
+		Route::get('/suppliers', SupplierIndex::class)->name('suppliers.index');
+		Route::get('/', PurchaseIndex::class)->name('index');
+		Route::get('/create', PurchaseCreate::class)->name('create');
     });
 
     // --- 銷售模組 (Sales) ---
@@ -71,15 +71,15 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/stocktakes', Stocktakes::class)->name('stocktakes');
         Route::get('/movements', Movements::class)->name('movements');
     });
-
-    // --- 採購進貨系統 (Purchases) ---
-    Route::prefix('purchases')->name('purchases.')->group(function () {
-		
-		Route::get('/suppliers', SupplierIndex::class)->name('suppliers.index');
-		Route::get('/', PurchaseIndex::class)->name('index');
-		Route::get('/create', PurchaseCreate::class)->name('create');
+	
+    // --- 商品管理 (Products) ---
+    Route::prefix('products')->name('products.')->group(function () {
+        Route::get('/', ProductIndex::class)->name('index');    
+        Route::get('/create', ProductCreate::class)->name('create');
+        Route::get('/{product}', ProductShow::class)->name('show');
+        Route::get('/{product}/edit', ProductEdit::class)->name('edit');
     });
-
+	
     // --- 系統設定 (Settings) ---
     Route::prefix('settings')->group(function () {
         Route::get('/categories', CategoryIndex::class)->name('categories.index');
