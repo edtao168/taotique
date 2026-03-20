@@ -66,7 +66,7 @@
     {{-- 詳情抽屜 (與之前邏輯一致) --}}
     {{-- 檔案路徑：resources/views/livewire/sales/index.blade.php (Drawer 部分) --}}
 
-<x-drawer wire:model="drawer" title="銷貨單據詳情" right separator with-close-button class="w-1/2 lg:w-full">
+<x-drawer wire:model="drawer" title="銷貨單據詳情" right separator with-close-button class="w-[80%] lg:w-1/3">
     @if($selectedSale)
         <div class="space-y-6 pb-20"> {{-- 預留底部空間給按鈕 --}}
             
