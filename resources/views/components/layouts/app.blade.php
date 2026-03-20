@@ -61,9 +61,9 @@
 
 				{{-- 2. 銷貨管理系統 --}}
 				<x-menu-sub title="銷貨管理系統" icon="o-currency-dollar">
-					<x-menu-item title="手動新增銷貨" icon="o-shopping-cart" link="{{ route('sales.create') }}" />
-					<x-menu-item title="銷售紀錄清單" icon="o-receipt-percent" link="{{ route('sales.index') }}" />
-					<x-menu-item title="客戶資料管理" icon="o-users" :link="route('sales.customers.index')" />
+					<x-menu-item title="新增銷貨單" icon="o-plus-circle" :link="route('sales.create')" />
+					<x-menu-item title="銷售數據概況" icon="o-chart-bar" :link="route('sales.index')" />
+					<x-menu-item title="客戶管理" icon="o-users" :link="route('sales.customers.index')" />
 					{{-- 業務報表嵌入 --}}
 					<x-menu-item title="銷售業績分析" icon="o-chart-pie" link="#" class="text-sm opacity-80" />
 				</x-menu-sub>

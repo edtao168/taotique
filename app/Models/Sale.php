@@ -2,6 +2,9 @@
 
 namespace App\Models;
 
+use App\Models\Customer;
+use App\Models\SaleItem;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -124,6 +127,12 @@ class Sale extends Model
 	public function items(): HasMany 
 	{
 		return $this->hasMany(SaleItem::class); 
+	}
+	
+	public function user(): BelongsTo
+	{
+		// 假設您的 sales 表中有 user_id 欄位
+		return $this->belongsTo(User::class);
 	}
 	
 	/**

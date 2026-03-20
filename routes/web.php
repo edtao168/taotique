@@ -13,11 +13,8 @@ use App\Livewire\Products\Edit as ProductEdit;
 
 // 3. 銷售模組
 use App\Livewire\Customers\Index as CustomerIndex;
-use App\Livewire\Sales\Overview as SalesOverview;
-use App\Livewire\Sales\SalesIndex;
-use App\Livewire\Sales\QuickSale;
-use App\Livewire\Sales\ShowSale;
-use App\Livewire\Sales\EditSale;
+use App\Livewire\Sales\Index as SalesIndex;
+use App\Livewire\Sales\Create as SalesCreate;
 
 // 4. 庫存與調撥 (Inventories)
 use App\Livewire\Inventories\Index as InventoryIndex;
@@ -57,12 +54,11 @@ Route::middleware(['auth'])->group(function () {
 
     // --- 銷售模組 (Sales) ---
     Route::prefix('sales')->name('sales.')->group(function () {        
-		Route::get('/overview', SalesOverview::class)->name('overview');
-        Route::get('/customers', CustomerIndex::class)->name('customers.index');
+		Route::get('/overview', SalesIndex::class)->name('overview');    
 		Route::get('/', SalesIndex::class)->name('index');
-        Route::get('/create', QuickSale::class)->name('create');		
-        Route::get('/{sale}', ShowSale::class)->name('show');
-		Route::get('/{sale}/edit', QuickSale::class)->name('edit');
+        Route::get('/create', SalesCreate::class)->name('create');        
+		Route::get('/{sale}/edit', SalesCreate::class)->name('edit');
+		Route::get('/customers', CustomerIndex::class)->name('customers.index');
     });
 
     // --- 庫存與調撥系統 (Inventories) ---
