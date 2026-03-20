@@ -130,9 +130,9 @@
     </div>
 	
 	{{-- 快速查詢抽屜 (唯讀展示) --}}
-    <x-drawer wire:model="drawer" title="商品詳細資料" right separator with-close-button class="w-11/12 lg:w-1/3">
-        @if($selectedProduct)
-            <div class="space-y-6">
+    <x-drawer wire:model="drawer" title="商品詳細資料" right separator with-close-button class="w-11/12 lg:w-1/3">	
+        @if($selectedProduct)			
+            <div class="space-y-6">			
                 <div class="flex justify-between items-start">
                     <div>
                         <p class="text-xs text-gray-500 uppercase tracking-widest">SKU Number</p>
