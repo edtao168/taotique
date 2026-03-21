@@ -168,7 +168,11 @@
                  x-on:dragenter.prevent="dragging = true" 
                  x-on:dragover.prevent="dragging = true" 
                  x-on:dragleave.prevent="dragging = false" 
-                 x-on:drop.prevent="dragging = false; $wire.upload('temp_photos', $event.dataTransfer.files)" 
+                 x-on:drop.prevent="dragging = false; let files = Array.from($event.dataTransfer.files); // 強制轉為陣列
+        if(files.length > 0) {
+            @this.uploadMultiple('temp_photos', files); // 使用 uploadMultiple 明確指定多檔
+        }
+     " 
                  @click="$refs.fileInput.click()" 
                  :class="dragging ? 'border-primary bg-primary/10 ring-2 ring-primary/20' : 'border-base-300'" 
                  class="p-6 border-2 border-dashed rounded-xl text-center bg-base-100 hover:border-primary transition-all cursor-pointer group">

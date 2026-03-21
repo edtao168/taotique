@@ -33,7 +33,9 @@ class Edit extends Component
     {
         if (!empty($this->temp_photos)) {
             foreach ($this->temp_photos as $photo) {
-                $this->new_photos[] = $photo;
+                if ($photo instanceof \Livewire\Features\SupportFileUploads\TemporaryUploadedFile) {
+					$this->new_photos[] = $photo;
+				}
             }
             $this->temp_photos = []; // 清空，準備下一次
 			$this->dispatch('temp-photos-merged'); // 可選：通知前端

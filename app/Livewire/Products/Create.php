@@ -25,6 +25,8 @@ class Create extends Component
     public $remark = '';
     public $min_stock = 0;
 	public $new_photos = [];
+	public $temp_photos = [];     // 臨時接收新上傳
+    public $video;
 
     public function render()
     {
@@ -123,5 +125,32 @@ class Create extends Component
         $this->reset(['new_photos', 'video']);
         $this->success('商品基本資料建檔成功！', redirectTo: '/products');
     }
+	
+	/**
+	 * 處理多圖上傳的累積邏輯
+	 */
+	public function updatedTempPhotos()
+	{
+		if (!empty($this->temp_photos)) {
+			foreach ($this->temp_photos as $photo) {
+				// 嚴謹檢查：確保是合法上傳物件才放入累積陣列
+				if ($photo instanceof \Livewire\Features\SupportFileUploads\TemporaryUploadedFile) {
+					$this->new_photos[] = $photo;
+				}
+			}
+			// 清空臨時變數，讓底層 File Input 可以重複觸發相同的檔案名
+			$this->temp_photos = []; 
+		}
+	}
 
+	/**
+	 * 如果你在 MediaManager 有實作刪除暫存圖的功能，Create 也需要這個
+	 */
+	public function deleteTempPhoto($index)
+	{
+		if (isset($this->new_photos[$index])) {
+			unset($this->new_photos[$index]);
+			$this->new_photos = array_values($this->new_photos); // 重置索引
+		}
+	}
 }
