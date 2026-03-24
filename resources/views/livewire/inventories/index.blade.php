@@ -82,17 +82,12 @@
 			{{ $products->links() }}
 		</div>
 
-		<div class="md:hidden mt-4 flex justify-center">
-			@if($products->hasMorePages())
-				<x-button 
-					label="點擊加載更多水晶..." 
-					wire:click="loadMore" 
-					class="btn-outline btn-sm w-full" 
-					icon="o-magnifying-glass-plus" 
-				/>
+		<div class="py-6 flex flex-col items-center gap-2">
+            @if($products->hasMorePages())
+                <x-button label="載入更多" wire:click="loadMore" class="w-full btn-primary" />
 			@else
-				<span class="text-xs opacity-50 italic">— 已顯示所有庫存項目 —</span>
+				<div class="divider text-xs opacity-50 italic">已載入全部商品</div>
 			@endif
-		</div>
+        </div>
     </div>
 </div>
