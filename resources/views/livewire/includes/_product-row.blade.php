@@ -1,3 +1,4 @@
+{{-- views\livewire\includes\_product-row.blade.php--}}
 {{-- 這裡封裝了「搜尋選取」+「手動輸入」的邏輯 --}}
 <div class="flex flex-col gap-1">
     {{-- 搜尋選取器 --}}

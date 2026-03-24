@@ -50,7 +50,8 @@
             <x-textarea label="備註 (選填)" wire:model="remark" placeholder="原因說明..." class="mt-4" rows="2" />
 
             <x-slot:actions>
-                <x-button label="確認執行調撥" icon="o-check" wire:click="transfer" class="btn-primary" spinner="transfer" />
+                <x-button label="取消" :link="route('inventories.index')" />
+				<x-button label="確認執行調撥" icon="o-check" wire:click="transfer" class="btn-primary" spinner="transfer" />
             </x-slot:actions>
         </x-card>
 

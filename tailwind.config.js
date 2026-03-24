@@ -27,6 +27,25 @@ export default { // Laravel 12 建議使用 export default
 
     // 可選：指定 DaisyUI 主題，確保 dark mode 不會導致文字顏色錯亂
     daisyui: {
-        themes: ["light", "dark"],
+        themes: [
+			{
+				song_dynasty: {
+					"primary": "#7BA2A8",    // 汝窯天青
+					"secondary": "#C7D2D4",  // 月白
+					"accent": "#B45341",     // 硃砂 (用於重要警告或印章感)
+					"neutral": "#4A4A4A",    // 水墨灰
+					"base-100": "#F7F3E8",   // 宣紙色 (主背景)
+					"base-200": "#EDE8DB",   // 稍深的紙色 (側邊欄/卡片)
+					"base-300": "#DED9CD",   // 邊框色
+					"success": "#6B8E23",    // 竹青
+					"error": "#991B1B",      // 絳紅
+
+					// UI 細節調整
+					"--rounded-box": "0.1rem", 
+					"--rounded-btn": "0rem",   // 宋代美學較為方正俐落
+				},
+			},
+			"light", // 保留一個預設主題作為備援
+		],
     },
 }
