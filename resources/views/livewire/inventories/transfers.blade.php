@@ -30,10 +30,13 @@
                     icon="o-cube" 
                     wire:model="product_id" 
                     :options="$products" 
-                    option-label="sku"
-                    placeholder="搜尋 SKU..."
+                    option-label="name"
+                    option-sub-label="sku"
+					placeholder="輸入商品名稱或 SKU 搜尋..."
                     single 
-                    searchable 
+                    searchable
+					search-function="searchProducts" 
+					debounce="300ms"
                 />
 
                 <x-input 

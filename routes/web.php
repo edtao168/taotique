@@ -2,21 +2,21 @@
 
 use Illuminate\Support\Facades\Route;
 
-// 1. Dashboard
+// Dashboard
 use App\Livewire\Dashboard\Overview;
 
-// 2. 商品管理
-use App\Livewire\Products\Index as ProductIndex;
-use App\Livewire\Products\Create as ProductCreate;
-use App\Livewire\Products\Show as ProductShow;
-use App\Livewire\Products\Edit as ProductEdit;
 
-// 3. 銷售模組
+// 採購進貨 (Purchases)
+use App\Livewire\Suppliers\Index as SupplierIndex;
+use App\Livewire\Purchases\Index as PurchaseIndex;
+use App\Livewire\Purchases\Create as PurchaseCreate;
+
+// 銷售模組
 use App\Livewire\Customers\Index as CustomerIndex;
 use App\Livewire\Sales\Index as SalesIndex;
 use App\Livewire\Sales\Create as SalesCreate;
 
-// 4. 庫存與調撥 (Inventories)
+// 庫存與調撥 (Inventories)
 use App\Livewire\Inventories\Index as InventoryIndex;
 use App\Livewire\Inventories\Transfers;
 use App\Livewire\Inventories\Stocktakes;
@@ -24,12 +24,13 @@ use App\Livewire\Inventories\Movements;
 use App\Livewire\Conversions\Index as ConversionIndex;
 use App\Livewire\Conversions\Create as ConversionCreate;
 
-// 5. 採購進貨 (Purchases)
-use App\Livewire\Suppliers\Index as SupplierIndex;
-use App\Livewire\Purchases\Index as PurchaseIndex;
-use App\Livewire\Purchases\Create as PurchaseCreate;
+// 商品管理
+use App\Livewire\Products\Index as ProductIndex;
+use App\Livewire\Products\Create as ProductCreate;
+use App\Livewire\Products\Show as ProductShow;
+use App\Livewire\Products\Edit as ProductEdit;
 
-// 6. 系統設定 (Settings)
+// 系統設定 (Settings)
 use App\Livewire\Settings\Warehouses\Index as WarehouseIndex;
 use App\Livewire\Settings\Shops\Index as ShopIndex;
 use App\Livewire\Settings\Partners\Index as PartnerIndex;

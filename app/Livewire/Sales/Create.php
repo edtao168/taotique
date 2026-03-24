@@ -3,25 +3,28 @@
 
 namespace App\Livewire\Sales;
 
-use Livewire\Component;
-use App\Models\Sale;
 use App\Models\Customer;
+use App\Models\Warehouse; 
 use App\Models\Product;
+use App\Models\Sale;
 use App\Traits\HasProductSearch;
-use Mary\Traits\Toast;
 use Illuminate\Support\Facades\DB;
+use Livewire\Component;
+use Mary\Traits\Toast;
 
 class Create extends Component
 {
     use HasProductSearch, Toast;
 
-    public Sale $sale; 
-    public $sold_at;
     public $customer_id = 1;
+	public Sale $sale; 
+    public $sold_at;    
     public $invoice_number;
     public array $items = []; // 強制轉為 array 確保與 Mary UI 表單兼容
+	public array $productOptions = [];
+	public bool $showScanner = false; // 手機掃碼開關
     
-    // 費用欄位：完全保留您原始的屬性定義
+    // 費用欄位
     public $channel = 'shopee';
     public $payment_method = 'shopee-';
     public $subtotal = '0.00'; 
@@ -33,20 +36,20 @@ class Create extends Component
     public $order_adjustment = 0;
     public $customer_total = '0.00';
 
-    public bool $showScanner = false; // 新增：手機掃碼開關
-
     public function mount(Sale $sale = null)
     {
         $this->sale = ($sale && $sale->exists) ? $sale : new Sale();
+		$this->productOptions = $this->search();
 
         if ($this->sale->exists) {
-            // --- 載入模式：保留您原始的 load 邏輯 ---
+            // --- 載入模式 ---
             $this->sale->load('items.product');
             $this->customer_id = $this->sale->customer_id;
             $this->invoice_number = $this->sale->invoice_number;
             $this->sold_at = $this->sale->sold_at->format('Y-m-d');
             $this->channel = $this->sale->channel;
             $this->payment_method = $this->sale->payment_method;
+			$this->productOptions = $this->search();
             
             // 金額載入
             $this->subtotal = $this->sale->subtotal;
@@ -69,16 +72,60 @@ class Create extends Component
         } else {
             $this->sold_at = now()->format('Y-m-d');
             $this->invoice_number = 'S' . now()->format('YmdHis');
-            $this->addItem();
+            $this->addRow();
+        }
+    }
+	
+	/**
+     * 當選中商品後觸發 (覆寫 updated 鉤子)
+     */
+    public function updated($property, $value)
+    {
+        if (str_contains($property, 'product_id')) {
+            $parts = explode('.', $property);
+            $index = $parts[1];
+            
+            if ($value) {
+                $this->fillProductData($index, $value, 'items');
+                
+                // --- 即時庫存檢查提醒 ---
+                $product = Product::withSum('inventories as stock', 'quantity')->find($value);
+                $currentStock = $product->stock ?? 0;
+                
+                if ($currentStock <= 0) {
+                    $this->warning("警告：{$product->name} 目前無庫存！", position: 'toast-bottom toast-end');
+                } elseif ($currentStock < 5) {
+                    $this->info("注意：{$product->name} 庫存僅剩 {$currentStock} 件。", position: 'toast-bottom toast-end');
+                }
+            }
+			
+            // 選中後自動重新計算總額
+            $this->calculateAll();
+        }
+		
+		// 其他費用異動時重新計算總額
+        if (in_array($property, ['discount', 'platform_coupon', 'shipping_fee_customer', 'platform_fee', 'order_adjustment'])) {
+            $this->calculateAll();
         }
     }
 
-    // --- 保留您原有的 addItem, removeItem, calculateAll 邏輯 ---
-    public function addItem()
+    public function addRow()
     {
-        $this->items[] = ['product_id' => null, 'quantity' => 1, 'price' => 0, 'subtotal' => 0];
+        $this->items[] = [
+            'product_id' => null,
+            'warehouse_id' => Warehouse::first()?->id ?? 1,
+            'quantity' => 1,
+            'price' => 0,
+        ];
     }
 
+	public function removeRow($index)
+    {
+        unset($this->items[$index]);
+        $this->items = array_values($this->items);
+        $this->calculateAll();
+    }
+	
     public function handleScannedBarcode($barcode)
     {
         $product = Product::where('sku', $barcode)->first();
@@ -136,7 +183,8 @@ class Create extends Component
     {
         return view('livewire.sales.create', [
             'customers' => Customer::all(),
-            'products' => Product::where('is_active', true)->get(),
+			'warehouses' => Warehouse::all(),
+            //'products' => Product::where('is_active', true)->get(),
         ]);
     }
 }
