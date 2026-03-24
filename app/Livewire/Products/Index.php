@@ -1,4 +1,4 @@
-<?php
+<?php // app/Livewire/Products/Index.php
 
 namespace App\Livewire\Products;
 
@@ -14,7 +14,23 @@ class Index extends Component
     public string $search = '';
     public bool $drawer = false; // 控制查詢抽屜
     public ?Product $selectedProduct = null;
+    public int $perPage = 8; 
 
+    // 當搜尋關鍵字改變時，重置每頁數量與分頁狀態
+    public function updatedSearch()
+    {
+        $this->perPage = 10;
+        $this->resetPage();
+    }
+
+    /**
+     * 手機端專用：加載更多商品
+     */
+    public function loadMore()
+    {
+        $this->perPage += 10;
+    }
+	
     public function render()
 	{
 		// 1. 先處理查詢與分頁 (將結果存入變數，不要在這裡直接 return)
@@ -24,7 +40,7 @@ class Index extends Component
 				$q->where('name', 'like', "%{$this->search}%")
 				  ->orWhere('sku', 'like', "%{$this->search}%");
 			})
-			->paginate(9);
+			->paginate($this->perPage);
 
 		// 2. 定義表頭
 		$headers = [

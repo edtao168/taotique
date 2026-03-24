@@ -1,4 +1,4 @@
-{{-- 檔案路徑：resources/views/livewire/products/index.blade.php --}}
+{{-- resources/views/livewire/products/index.blade.php --}}
 <div>
     <x-header title="商品清單" separator progress-indicator>
         <x-slot:middle class="!justify-end">
@@ -123,11 +123,15 @@
             </x-card>
         @endforeach
 
-        {{-- 手機端分頁 --}}
-        <div class="py-4">
-            {{ $products->links(data: ['scrollTo' => false]) }}
+        {{-- 手機端優化：改用流式加載按鈕，取代傳統分頁器 --}}
+        <div class="py-6 flex flex-col items-center gap-2">
+            @if($products->hasMorePages())
+                <x-button label="載入更多" wire:click="loadMore" class="w-full btn-primary" />
+			@else
+				<div class="divider text-xs opacity-50 italic">已載入全部商品</div>
+			@endif
         </div>
-    </div>
+    </div>    
 	
 	{{-- 快速查詢抽屜 (唯讀展示) --}}
     <x-drawer wire:model="drawer" title="商品詳細資料" right separator with-close-button class="w-11/12 lg:w-1/3">	

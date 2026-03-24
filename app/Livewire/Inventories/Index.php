@@ -18,7 +18,7 @@ class Index extends Component
     public ?int $selectedShop = null;
     public ?int $selectedWarehouse = null;
     public bool $showLowStockOnly = false;
-	public int $perPage = 10;
+	public int $perPage = 8;
 
 	// 手機端點擊或滾動觸發
 	public function loadMore()
