@@ -78,8 +78,21 @@
             </x-card>
         @endforeach
 
-        <div class="mt-4">
-            {{ $products->links() }}
-        </div>
+		<div class="hidden md:block mt-4">
+			{{ $products->links() }}
+		</div>
+
+		<div class="md:hidden mt-4 flex justify-center">
+			@if($products->hasMorePages())
+				<x-button 
+					label="點擊加載更多水晶..." 
+					wire:click="loadMore" 
+					class="btn-outline btn-sm w-full" 
+					icon="o-magnifying-glass-plus" 
+				/>
+			@else
+				<span class="text-xs opacity-50 italic">— 已顯示所有庫存項目 —</span>
+			@endif
+		</div>
     </div>
 </div>

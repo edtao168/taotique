@@ -18,7 +18,14 @@ class Index extends Component
     public ?int $selectedShop = null;
     public ?int $selectedWarehouse = null;
     public bool $showLowStockOnly = false;
+	public int $perPage = 10;
 
+	// 手機端點擊或滾動觸發
+	public function loadMore()
+	{
+		$this->perPage += 10;
+	}
+	
     public function updated($property)
     {
         if (in_array($property, ['search', 'selectedShop', 'selectedWarehouse', 'showLowStockOnly'])) {
@@ -53,7 +60,7 @@ class Index extends Component
                 $q->whereHas('inventories', fn($i) => $i->where('warehouse_id', $this->selectedWarehouse));
             })
             ->orderBy('sku')
-            ->paginate(10); // 手機端建議每頁數量稍多一點點，或維持 8-10
+            ->paginate($this->perPage);
 
         $headers = [
             ['key' => 'sku', 'label' => 'SKU', 'class' => 'w-32'],
