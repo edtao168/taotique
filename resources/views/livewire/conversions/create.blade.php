@@ -10,9 +10,9 @@
         <x-card shadow>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <x-datepicker label="作業日期" wire:model="process_date" icon="o-calendar" />
-                <x-input label="備註" wire:model="remark" placeholder="輸入加工細節說明..." />
-                <x-choices label="分店" wire:model="store_id" :options="[['id'=>1, 'name'=>'總店']]" readonly />
-            </div>
+                <x-select label="分店" wire:model="store_id" :options="[['id'=>1, 'name'=>'總店']]" />
+				<x-input label="備註" wire:model="remark" placeholder="輸入加工細節說明..." />
+            </div>			                
         </x-card>
 
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
