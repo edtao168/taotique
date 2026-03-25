@@ -18,6 +18,13 @@
     {{-- 1. PC 端顯示：表格模式 (使用 hidden sm:block) --}}    
 	<x-card class="hidden sm:block">
 		<x-table :headers="$headers" :rows="$suppliers" with-pagination @row-click="$wire.showDetails($event.detail.id)">
+			
+			@scope('cell_inventories_sum_cost', $supplier)
+				<span class="text-base-content">
+					{{ number_format($supplier->inventories_sum_cost ?? 0, 2) }}
+				</span>
+			@endscope
+			
 			@scope('actions', $supplier)
 				<div class="flex gap-2">
 					<x-button icon="o-pencil" wire:click="edit({{ $supplier->id }})" @click.stop="" class="btn-sm btn-ghost text-blue-500" />                    
