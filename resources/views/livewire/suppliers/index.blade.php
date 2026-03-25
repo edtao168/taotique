@@ -2,35 +2,38 @@
 <div>
     <x-header title="供應商管理" subtitle="管理您的貨源與採購對象" separator progress-indicator>
         <x-slot:actions>            
-            {{-- PC 端搜尋 --}}
+            {{-- PC 端搜尋：手機端隱藏 --}}
             <x-input placeholder="搜尋名稱、電話..." wire:model.live.debounce="search" icon="o-magnifying-glass" clearable class="max-sm:hidden" />
             <x-button icon="o-home" :link="route('dashboard')" class="btn-ghost sm:hidden" />
             <x-button label="去採購系統" icon="o-archive-box" :link="route('purchases.index')" class="btn-outline" />
-            <x-button label="新增供應商" wire:click="create" icon="o-plus" class="btn-primary" />
+            <x-button label="新增供應商" wire:click="showCreate" icon="o-plus" class="btn-primary" />
         </x-slot:actions>
     </x-header>
 
-    {{-- 手機端搜尋列 --}}
+    {{-- 手機端專用搜尋列：桌機端隱藏 --}}
     <div class="mb-4 sm:hidden">
         <x-input placeholder="搜尋名稱、電話..." wire:model.live.debounce="search" icon="o-magnifying-glass" clearable />
     </div>
 
-    {{-- 1. PC 端顯示：表格模式 --}}
-    <x-card class="hidden sm:block">
-        <x-table :headers="$headers" :rows="$suppliers" with-pagination @row-click="$wire.showDetails($event.detail.id)">
-            @scope('actions', $supplier)
-                <div class="flex gap-2">
-                    <x-button icon="o-pencil" wire:click="edit({{ $supplier->id }})" @click.stop="" class="btn-sm btn-ghost text-blue-500" tooltip="編輯" />                    
-                    <x-button icon="o-plus-circle" :link="route('purchases.create', ['supplier_id' => $supplier->id])" @click.stop="" class="btn-sm btn-ghost text-orange-600" tooltip="新增採購單" />
-                    <x-button icon="o-trash" wire:click="delete({{ $supplier->id }})" wire:confirm="確定要刪除此供應商？" @click.stop="" class="btn-sm btn-ghost text-red-500" tooltip="刪除" />
-                </div>
-            @endscope
-        </x-table>
-    </x-card>
+    {{-- 1. PC 端顯示：表格模式 (使用 hidden sm:block) --}}
+    <div class="hidden sm:block">
+        <x-card>
+            <x-table :headers="$headers" :rows="$suppliers" with-pagination @row-click="$wire.showDetails($event.detail.id)">
+                @scope('actions', $supplier)
+                    <div class="flex gap-2">
+                        <x-button icon="o-pencil" wire:click="edit({{ $supplier->id }})" @click.stop="" class="btn-sm btn-ghost text-blue-500" />                    
+                        <x-button icon="o-plus-circle" :link="route('purchases.create', ['supplier_id' => $supplier->id])" @click.stop="" class="btn-sm btn-ghost text-orange-600" />
+                        <x-button icon="o-trash" wire:click="delete({{ $supplier->id }})" wire:confirm="確定要刪除此供應商？" @click.stop="" class="btn-sm btn-ghost text-red-500" />
+                    </div>
+                @endscope
+            </x-table>
+        </x-card>
+    </div>
 
-    {{-- 2. 手機端顯示：卡片清單模式 --}}
+    {{-- 2. 手機端顯示：卡片清單模式 (使用 sm:hidden) --}}
     <div class="sm:hidden space-y-4">
         @foreach($suppliers as $supplier)
+            {{-- 增加 border-l-4 讓它更有質感 --}}
             <x-card class="shadow-sm border-l-4 border-l-orange-500" @click="$wire.showDetails({{ $supplier->id }})">
                 <div class="flex justify-between items-start">
                     <div>
@@ -43,8 +46,10 @@
                         </div>
                     </div>
                     <div class="text-right">
-                        {{-- 可依照需求放置供應商分類或標籤 --}}
-                        <div class="badge badge-ghost badge-sm text-[10px]">供應商</div>
+                        <div class="text-[10px] uppercase text-gray-400">累計採購</div>
+                        <div class="text-orange-600 font-bold font-mono">
+                            {{ number_format($supplier->inventories_sum_cost ?? 0, 2) }}
+                        </div>
                     </div>
                 </div>
 
@@ -55,6 +60,7 @@
             </x-card>
         @endforeach
 
+        {{-- 手機版分頁 --}}
         <div class="mt-4">
             {{ $suppliers->links(data: ['scrollTo' => false]) }}
         </div>
