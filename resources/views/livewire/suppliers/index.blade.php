@@ -15,20 +15,18 @@
         <x-input placeholder="搜尋名稱、電話..." wire:model.live.debounce="search" icon="o-magnifying-glass" clearable />
     </div>
 
-    {{-- 1. PC 端顯示：表格模式 (使用 hidden sm:block) --}}
-    <div class="hidden sm:block">
-        <x-card>
-            <x-table :headers="$headers" :rows="$suppliers" with-pagination @row-click="$wire.showDetails($event.detail.id)">
-                @scope('actions', $supplier)
-                    <div class="flex gap-2">
-                        <x-button icon="o-pencil" wire:click="edit({{ $supplier->id }})" @click.stop="" class="btn-sm btn-ghost text-blue-500" />                    
-                        <x-button icon="o-plus-circle" :link="route('purchases.create', ['supplier_id' => $supplier->id])" @click.stop="" class="btn-sm btn-ghost text-orange-600" />
-                        <x-button icon="o-trash" wire:click="delete({{ $supplier->id }})" wire:confirm="確定要刪除此供應商？" @click.stop="" class="btn-sm btn-ghost text-red-500" />
-                    </div>
-                @endscope
-            </x-table>
-        </x-card>
-    </div>
+    {{-- 1. PC 端顯示：表格模式 (使用 hidden sm:block) --}}    
+	<x-card class="hidden sm:block">
+		<x-table :headers="$headers" :rows="$suppliers" with-pagination @row-click="$wire.showDetails($event.detail.id)">
+			@scope('actions', $supplier)
+				<div class="flex gap-2">
+					<x-button icon="o-pencil" wire:click="edit({{ $supplier->id }})" @click.stop="" class="btn-sm btn-ghost text-blue-500" />                    
+					<x-button icon="o-plus-circle" :link="route('purchases.create', ['supplier_id' => $supplier->id])" @click.stop="" class="btn-sm btn-ghost text-orange-600" />
+					<x-button icon="o-trash" wire:click="delete({{ $supplier->id }})" wire:confirm="確定要刪除此供應商？" @click.stop="" class="btn-sm btn-ghost text-red-500" />
+				</div>
+			@endscope
+		</x-table>
+	</x-card>
 
     {{-- 2. 手機端顯示：卡片清單模式 (使用 sm:hidden) --}}
     <div class="sm:hidden space-y-4">
