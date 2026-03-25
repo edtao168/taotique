@@ -1,4 +1,4 @@
-<?php
+<?php // app/Livewire/Conversions/Create.php
 
 namespace App\Livewire\Conversions;
 
@@ -13,18 +13,15 @@ class Create extends Component
 {
     use Toast;
 
-    // 單頭資料
     public $process_date;
     public $remark;
     public $store_id = 1;
-
-    // 明細資料：1 為投入 (Input), 2 為產出 (Output)
     public array $items = [];
+    public string $search = ''; // 追蹤搜尋關鍵字
 
     public function mount()
     {
         $this->process_date = now()->format('Y-m-d');
-        // 初始化各一行預留空間
         $this->addItem(1); 
         $this->addItem(2);
     }
@@ -37,6 +34,7 @@ class Create extends Component
             'warehouse_id' => 1,
             'quantity' => 1,
             'cost_snapshot' => 0,
+            'store_id' => $this->store_id,
         ];
     }
 
@@ -44,6 +42,20 @@ class Create extends Component
     {
         unset($this->items[$index]);
         $this->items = array_values($this->items);
+    }
+
+    // 搜尋邏輯與 Transfers 一致
+    public function searchProducts(string $value = '')
+    {
+        $this->search = $value;
+
+        return Product::query()
+            ->where(function($q) use ($value) {
+                $q->where('sku', 'like', "%{$value}%")
+                  ->orWhere('name', 'like', "%{$value}%");
+            })
+            ->take(10)
+            ->get();
     }
 
     public function save()
@@ -65,19 +77,24 @@ class Create extends Component
             foreach ($this->items as $item) {
                 $conversion->items()->create($item);
             }
-
-            // 執行厚 Model 封裝的過帳邏輯
             $conversion->post();
         });
 
-        $this->success('拆裝作業已完成並更新庫存');
+        $this->success('拆裝作業已完成');
         return redirect()->to('/conversions');
     }
 
     public function render()
     {
+        // 初始或搜尋時的商品清單
+        $products = $this->search 
+            ? Product::where('sku', 'like', "%{$this->search}%")
+                     ->orWhere('name', 'like', "%{$this->search}%")
+                     ->take(10)->get()
+            : Product::take(5)->get();
+
         return view('livewire.conversions.create', [
-            'products' => Product::all(),
+            'products' => $products,
             'warehouses' => Warehouse::all(),
         ]);
     }

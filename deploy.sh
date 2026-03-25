@@ -34,4 +34,4 @@ sudo chmod -R 775 storage bootstrap/cache
 # 8. 結束維護模式
 # php artisan up
 
-echo "✅ 部署完成！請使用手機測試漢堡選單。"
+echo "✅ 部署完成！請使用手機測試。"
