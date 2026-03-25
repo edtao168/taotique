@@ -17,7 +17,7 @@
 
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
             {{-- 左側：領料投入 (Type 1) --}}
-            <x-card title="領料投入 (原料/半成品)" shadow separator>
+            <x-card title="領料投入" shadow separator>
                 <x-slot:menu>
                     <x-button icon="o-plus" label="增加原料" class="btn-sm btn-outline" wire:click="addItem(1)" />
                 </x-slot:menu>
@@ -29,10 +29,10 @@
                             <x-choices 
                                 label="原料/半成品" 
                                 wire:model="items.{{ $index }}.product_id" 
-                                :options="$products" 
-                                option-label="name"
+                                :options="$input_products" 
+                                option-label="display_name"
                                 option-sub-label="sku"
-                                search-function="searchProducts"
+                                search-function="searchInputs"
                                 searchable
 								single
                                 debounce="300ms"
@@ -62,10 +62,10 @@
                             <x-choices 
                                 label="成品" 
                                 wire:model="items.{{ $index }}.product_id" 
-                                :options="$products" 
-                                option-label="name"
+                                :options="$output_products" 
+                                option-label="display_name"
                                 option-sub-label="sku"
-                                search-function="searchProducts"
+                                search-function="searchOutputs"
                                 searchable
 								single
                                 debounce="300ms"

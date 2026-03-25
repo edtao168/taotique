@@ -30,15 +30,7 @@ class Stocktakes extends Component
 	public function render()
     {
         return view('livewire.inventories.stocktakes', [
-            'warehouses' => Warehouse::with('shop')->get(),
-            /* 'products' => Product::select('id', 'sku', 'name')
-                ->get()
-                ->map(function ($p) {
-                    return [
-                        'id' => $p->id,
-                        'display_name' => "{$p->sku} - {$p->name}"
-                    ];
-                }), */
+            'warehouses' => Warehouse::with('shop')->get(), 
         ]);
     }
     

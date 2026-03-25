@@ -30,12 +30,12 @@
                     icon="o-cube" 
                     wire:model="product_id" 
                     :options="$products" 
-                    option-label="name"
+                    option-label="display_name"
                     option-sub-label="sku"
 					placeholder="輸入商品名稱或 SKU 搜尋..."
                     single 
                     searchable
-					search-function="searchProducts" 
+					search-function="search" 
 					debounce="300ms"
                 />
 

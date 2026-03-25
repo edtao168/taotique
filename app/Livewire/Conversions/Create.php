@@ -1,4 +1,5 @@
 <?php // app/Livewire/Conversions/Create.php
+//商品選單比照盤點單，但因為這裏需要兩組商品選單，所以還是有些差異
 
 namespace App\Livewire\Conversions;
 
@@ -17,13 +18,20 @@ class Create extends Component
     public $remark;
     public $store_id = 1;
     public array $items = [];
-    public string $search = ''; // 追蹤搜尋關鍵字
+    
+    // 將搜尋結果分開
+    public array $input_products = [];  // 原料搜尋結果
+    public array $output_products = []; // 成品搜尋結果
 
     public function mount()
     {
         $this->process_date = now()->format('Y-m-d');
         $this->addItem(1); 
         $this->addItem(2);
+        
+        // 初始載入
+        $this->searchInputs();
+        $this->searchOutputs();
     }
 
     public function addItem(int $type)
@@ -32,8 +40,8 @@ class Create extends Component
             'type' => $type,
             'product_id' => null,
             'warehouse_id' => 1,
-            'quantity' => 1,
-            'cost_snapshot' => 0,
+            'quantity' => '1.0000',
+            'cost_snapshot' => '0.0000',
             'store_id' => $this->store_id,
         ];
     }
@@ -44,18 +52,38 @@ class Create extends Component
         $this->items = array_values($this->items);
     }
 
-    // 搜尋邏輯與 Transfers 一致
-    public function searchProducts(string $value = '')
+    /**
+     * 搜尋原料 (Type 1)
+     */
+    public function searchInputs(string $value = '')
     {
-        $this->search = $value;
-
-        return Product::query()
-            ->where(function($q) use ($value) {
-                $q->where('sku', 'like', "%{$value}%")
-                  ->orWhere('name', 'like', "%{$value}%");
-            })
+        $this->input_products = Product::query()
+            ->where(fn($q) => $q->where('sku', 'like', "%{$value}%")->orWhere('name', 'like', "%{$value}%"))
+            // 可以在此加入過濾邏輯，例如：->where('category', 'raw_material')
             ->take(10)
-            ->get();
+            ->get()
+            ->map(fn($p) => [
+                'id' => $p->id,
+                'display_name' => "[原料] {$p->sku} - {$p->name}",
+            ])
+            ->toArray();
+    }
+
+    /**
+     * 搜尋成品 (Type 2)
+     */
+    public function searchOutputs(string $value = '')
+    {
+        $this->output_products = Product::query()
+            ->where(fn($q) => $q->where('sku', 'like', "%{$value}%")->orWhere('name', 'like', "%{$value}%"))
+            // 可以在此加入過濾邏輯，例如：->where('category', 'finished_good')
+            ->take(10)
+            ->get()
+            ->map(fn($p) => [
+                'id' => $p->id,
+                'display_name' => "[成品] {$p->sku} - {$p->name}",
+            ])
+            ->toArray();
     }
 
     public function save()
@@ -77,7 +105,7 @@ class Create extends Component
             foreach ($this->items as $item) {
                 $conversion->items()->create($item);
             }
-            $conversion->post();
+            $conversion->post(); 
         });
 
         $this->success('拆裝作業已完成');
@@ -86,15 +114,7 @@ class Create extends Component
 
     public function render()
     {
-        // 初始或搜尋時的商品清單
-        $products = $this->search 
-            ? Product::where('sku', 'like', "%{$this->search}%")
-                     ->orWhere('name', 'like', "%{$this->search}%")
-                     ->take(10)->get()
-            : Product::take(5)->get();
-
         return view('livewire.conversions.create', [
-            'products' => $products,
             'warehouses' => Warehouse::all(),
         ]);
     }

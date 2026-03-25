@@ -17,48 +17,68 @@ class Transfers extends Component
     public ?int $from_warehouse_id = null;
     public ?int $to_warehouse_id = null;
     public ?int $product_id = null;
-    public int $quantity = 1;
+    public string $quantity = '1.0000'; // 符合 DECIMAL(16,4) 規格
     public string $remark = '';
-	public string $search = '';	
+    public array $products = []; // 儲存格式化後的商品選單
+
+    public function mount()
+    {
+        $this->search(); // 初始載入預設商品
+    }
 
     /**
-     * 執行調撥邏輯
+     * 統一搜尋邏輯：與 Stocktakes 保持一致
      */
+    public function search(string $value = '')
+    {
+        $this->products = Product::query()
+            ->where('sku', 'like', "%{$value}%")
+            ->orWhere('name', 'like', "%{$value}%")
+            ->take(10)
+            ->get()
+            ->map(fn($p) => [
+                'id' => $p->id,
+                'display_name' => "{$p->sku} - {$p->name}",
+                'sku' => $p->sku
+            ])
+            ->toArray();
+    }
+
     public function transfer()
     {
         $this->validate([
             'from_warehouse_id' => 'required|different:to_warehouse_id',
             'to_warehouse_id' => 'required',
             'product_id' => 'required',
-            'quantity' => 'required|integer|min:1',
+            'quantity' => 'required|numeric|min:0.0001',
         ]);
 
         try {
             DB::transaction(function () {
-                // 1. 鎖定來源庫存 (inventories 才有 store_id)
+                // 1. 鎖定來源庫存並確保資料一致性
                 $sourceInv = Inventory::where('warehouse_id', $this->from_warehouse_id)
                     ->where('product_id', $this->product_id)
-                    ->where('store_id', 1) // 多店預留於庫存層
+                    ->where('store_id', 1) 
                     ->lockForUpdate()
                     ->first();
 
-                if (!$sourceInv || $sourceInv->quantity < $this->quantity) {
-                    throw new \Exception("來源倉庫存不足！(目前: " . ($sourceInv->quantity ?? 0) . ")");
+                if (!$sourceInv || bccomp($sourceInv->quantity, $this->quantity, 4) === -1) {
+                    throw new \Exception("來源倉庫存不足！(目前: " . number_format($sourceInv->quantity ?? 0, 2) . ")");
                 }
 
-                // 2. 數值嚴謹運算 (bc函式)
+                // 2. 數值嚴謹運算：使用 bcsub
                 $sourceInv->quantity = bcsub($sourceInv->quantity, $this->quantity, 4);
                 $sourceInv->save();
 
-                // 3. 增加目標庫存
+                // 3. 增加目標庫存：使用 bcadd
                 $targetInv = Inventory::firstOrCreate(
                     ['warehouse_id' => $this->to_warehouse_id, 'product_id' => $this->product_id, 'store_id' => 1],
-                    ['quantity' => 0]
+                    ['quantity' => '0.0000']
                 );
                 $targetInv->quantity = bcadd($targetInv->quantity, $this->quantity, 4);
                 $targetInv->save();
 
-                // 4. 紀錄異動 (Movement)
+                // 4. 紀錄異動流水
                 $logBase = [
                     'product_id' => $this->product_id,
                     'user_id' => auth()->id(),
@@ -68,7 +88,7 @@ class Transfers extends Component
 
                 InventoryMovement::create(array_merge($logBase, [
                     'warehouse_id' => $this->from_warehouse_id,
-                    'quantity' => -$this->quantity,
+                    'quantity' => bcmul($this->quantity, '-1', 4),
                     'remark' => "撥至倉庫 ID: {$this->to_warehouse_id}. {$this->remark}",
                 ]));
 
@@ -81,38 +101,17 @@ class Transfers extends Component
 
             $this->success("調撥完成");
             $this->reset(['product_id', 'quantity', 'remark']);
+            $this->search(); // 重置商品清單
 
         } catch (\Exception $e) {
             $this->error($e->getMessage());
         }
     }
 
-    public function searchProducts(string $value = '')
+    public function render()
     {
-        // 更新搜尋文字屬性
-        $this->search = $value;
-
-        // 直接 return 給 Mary UI，這是最穩定的做法
-        return Product::query()
-            ->where(function($q) use ($value) {
-                $q->where('sku', 'like', "%{$value}%")
-                  ->orWhere('name', 'like', "%{$value}%");
-            })
-            ->take(10)
-            ->get();
-    }
-	
-	public function render()
-    {
-        $products = $this->search 
-            ? Product::where('sku', 'like', "%{$this->search}%")
-                     ->orWhere('name', 'like', "%{$this->search}%")
-                     ->take(10)->get()
-            : Product::take(5)->get();
-
         return view('livewire.inventories.transfers', [
             'warehouses' => Warehouse::all(),
-            'products' => $products,
         ]);
-    }	
+    }
 }
