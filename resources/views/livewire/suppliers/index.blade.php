@@ -1,6 +1,6 @@
 {{-- 檔案路徑：resources/views/livewire/suppliers/index.blade.php --}}
 <div>
-    <x-header title="供應商管理" subtitle="管理您的貨源與採購對象" separator progress-indicator>
+    <x-header title="供應商管理" subtitle="管理您的貨源與採購記錄" separator progress-indicator>
         <x-slot:actions>            
             {{-- PC 端搜尋：手機端隱藏 --}}
             <x-input placeholder="搜尋名稱、電話..." wire:model.live.debounce="search" icon="o-magnifying-glass" clearable class="max-sm:hidden" />
