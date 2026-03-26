@@ -12,40 +12,38 @@ class Movements extends Component
 
     public string $search = '';
     public ?string $type = null;
-    public string $sortField = 'created_at';
-    public string $sortDirection = 'desc';
+    public array $sortBy = ['column' => 'created_at', 'direction' => 'desc'];
     
     // 加入這個屬性來控制載入數量
     public int $perPage = 10;
 
-    // 排序方法
-    public function sortBy($field)
-    {
-        if ($this->sortField === $field) {
-            $this->sortDirection = $this->sortDirection === 'asc' ? 'desc' : 'asc';
-        } else {
-            $this->sortField = $field;
-            $this->sortDirection = 'asc';
-        }
-    }
-    
-    // 新增 loadMore 方法
+    // 載入更多 方法
     public function loadMore()
     {
         $this->perPage += 10;
     }
     
-    // 更新 render 方法中的 paginate 為使用 perPage
+    // 編譯並取得最終 HTML 原始碼 方法
     public function render()
     {
         $query = InventoryMovement::query()
-            ->with(['product', 'warehouse.shop', 'user'])
-            ->when($this->search, function ($q) {
-                $q->whereHas('product', fn($p) => $p->where('sku', 'like', "%{$this->search}%")
-                    ->orWhere('name', 'like', "%{$this->search}%"));
-            })
-            ->when($this->type, fn($q) => $q->where('type', $this->type))
-            ->orderBy($this->sortField, $this->sortDirection);
+			->with(['product', 'warehouse.shop', 'user'])
+			->withAggregate('product', 'sku')  // 產生 product_sku 欄位
+			->when($this->search, function ($q) {
+				$q->whereHas('product', fn($p) => $p->where('sku', 'like', "%{$this->search}%")
+					->orWhere('name', 'like', "%{$this->search}%"));
+			})
+			->when($this->type, fn($q) => $q->where('type', $this->type));
+
+		// 排序邏輯
+		$column = $this->sortBy['column'];
+		$direction = $this->sortBy['direction'];
+
+		if ($column === 'product.sku') {
+			$query->orderBy('product_sku', $direction);
+		} else {
+			$query->orderBy($column, $direction);
+		}
         
         $movements = $query->paginate($this->perPage);
 
@@ -55,7 +53,7 @@ class Movements extends Component
             ['key' => 'warehouse.name', 'label' => '倉庫/店別'],
             ['key' => 'type_label', 'label' => '異動類型'],
             ['key' => 'quantity', 'label' => '異動量', 'class' => 'text-right font-bold'],
-            ['key' => 'remark', 'label' => '備註'],
+            ['key' => 'remark', 'label' => '備註', 'sortable' => false],
             ['key' => 'user.name', 'label' => '操作人'],
         ];
 

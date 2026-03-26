@@ -14,10 +14,19 @@
 
     <!-- 桌面版表格 (md以上螢幕顯示) -->
     <x-card shadow class="hidden md:block">
-        <x-table :headers="$headers" :rows="$movements" with-pagination>
-            @scope('cell_created_at', $m)
+        <x-table 
+			:headers="$headers" 
+			:rows="$movements" 
+			:sort-by="$sortBy" 
+			with-pagination
+		>
+			@scope('cell_created_at', $m)
                 <span class="text-xs opacity-70">{{ $m->created_at->format('Y-m-d H:i') }}</span>
             @endscope
+			
+			@scope('cell_product.sku', $m)
+				<span class="font-mono">{{ $m->product->sku }}</span>
+			@endscope
 
             @scope('cell_type_label', $m)
                 <x-badge :value="$m->type_name" class="{{ $m->type_color }} badge-sm" />
