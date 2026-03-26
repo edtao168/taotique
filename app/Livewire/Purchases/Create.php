@@ -21,48 +21,36 @@ class Create extends Component
     public $exchange_rate = '4.5';
     public $remark;
     public array $items = [];
-    public bool $showScanner = false;
-    public $scannedBarcode;
     
-    // 商品選項列表 - 必須為公開屬性才能傳給視圖
+    // 掃描相關
+    public bool $showCameraScanner = false;  // 相機掃描 Modal
+    public bool $showManualInput = false;    // 手動輸入 Modal（保留掃碼槍功能）
+    public $scannedBarcode;
+    public ?int $currentScanIndex = null;    // 當前掃描的行索引
+    
+    // 商品選項列表
     public array $productOptions = [];
 
     public function mount()
     {
         $this->purchased_at = now()->format('Y-m-d');
         $this->addRow();
-        
-        // 初始化時載入商品選項
         $this->productOptions = $this->search();
     }
     
     public function updated($property, $value)
     {
-        // 處理 x-choices 選擇商品 (使用 selected_product_id)
         if (str_contains($property, 'selected_product_id') && $value) {
             $parts = explode('.', $property);
             $index = $parts[1];
-            
-            // 將選中的商品 ID 存入 product_id
             $this->items[$index]['product_id'] = $value;
             $this->fillProductData($index, $value, 'items');
         }
         
-        // 處理原本的 product_id 直接選擇
         if (str_contains($property, 'product_id') && $value) {
             $parts = explode('.', $property);
             $index = $parts[1];
             $this->fillProductData($index, $value, 'items');
-        }
-		
-		// 🔧 新增：即時處理掃描條碼輸入（支援手機掃描槍）
-        if ($property === 'scannedBarcode' && !empty($value)){
-            // 檢查是否為完整的條碼（掃描槍通常會自動送出 Enter，但手機可能不會）
-            // 這裡我們假設條碼長度達到一定值就自動處理，或包含換行符
-            $barcode = trim($value);
-            if (strlen($barcode) >= 3) { // 最小條碼長度檢查
-                $this->handleScannedBarcode($barcode);
-            }
         }
     }
 
@@ -114,17 +102,46 @@ class Create extends Component
         $this->items = array_values($this->items);
     }
     
-     // 🔧 新增：專門給特定行掃描條碼的方法
-    public function scanForRow($index)
+    // 🔧 開啟相機掃描（手機相機）
+    public function openCameraScanner($index)
     {
         $this->currentScanIndex = $index;
-        $this->showScanner = true;
-        $this->scannedBarcode = '';
-        $this->dispatch('focus-scanner-input');
+        $this->showCameraScanner = true;
+        $this->dispatch('start-camera-scan');
     }
     
-    // 🔧 新增：處理掃描結果並填入指定行
-    public function handleScannedBarcodeForRow($barcode, $index)
+    // 🔧 開啟手動輸入（掃碼槍/手動輸入）
+    public function openManualInput($index)
+    {
+        $this->currentScanIndex = $index;
+        $this->showManualInput = true;
+        $this->scannedBarcode = '';
+        $this->dispatch('focus-manual-input');
+    }
+
+    // 🔧 處理掃描結果（來自前端相機掃描）
+    public function handleCameraScan($barcode)
+    {
+        $this->processBarcode($barcode);
+        $this->showCameraScanner = false;
+    }
+    
+    // 🔧 處理手動輸入（掃碼槍或鍵盤輸入）
+    public function handleManualInput()
+    {
+        $barcode = trim($this->scannedBarcode);
+        if (empty($barcode)) {
+            $this->error('請輸入條碼');
+            return;
+        }
+        
+        $this->processBarcode($barcode);
+        $this->showManualInput = false;
+        $this->scannedBarcode = '';
+    }
+
+    // 🔧 統一處理條碼邏輯
+    private function processBarcode($barcode)
     {
         $product = Product::where('sku', $barcode)
             ->where('is_active', true)
@@ -132,52 +149,26 @@ class Create extends Component
 
         if (!$product) {
             $this->error("找不到條碼為 {$barcode} 的商品");
-            $this->scannedBarcode = '';
             return;
         }
 
-        // 填入指定行
-        $this->items[$index]['product_id'] = $product->id;
-        $this->items[$index]['name'] = $product->name;
-        $this->items[$index]['foreign_price'] = $product->last_purchase_price ?? 0;
-        
-        $this->success("已選擇商品：{$product->name}");
-        $this->scannedBarcode = '';
-        $this->showScanner = false;
-        
-        // 刷新商品選項以顯示選中狀態
-        $this->productOptions = $this->search();
-    }
-    
-    public $currentScanIndex = null;
-    
-    public function handleScannedBarcode(string $barcode)
-    {
-        $barcode = trim($barcode);
-        $product = Product::where('sku', $barcode)
-            ->where('is_active', true)
-            ->first();
-
-        if (!$product) {
-            $this->error("找不到條碼為 {$barcode} 的商品");
-            $this->scannedBarcode = '';
-            return;
-        }
-
-        // 🔧 如果有指定行索引，填入該行
-        if ($this->currentScanIndex !== null) {
-            $this->handleScannedBarcodeForRow($barcode, $this->currentScanIndex);
+        // 如果有指定行索引，填入該行
+        if ($this->currentScanIndex !== null && isset($this->items[$this->currentScanIndex])) {
+            $this->items[$this->currentScanIndex]['product_id'] = $product->id;
+            $this->items[$this->currentScanIndex]['name'] = $product->name;
+            $this->items[$this->currentScanIndex]['foreign_price'] = $product->last_purchase_price ?? 0;
+            
+            $this->success("已選擇商品：{$product->name}");
+            $this->productOptions = $this->search();
             $this->currentScanIndex = null;
             return;
         }
 
-        // 原有的邏輯：檢查是否已存在於 items 中
+        // 檢查是否已存在於 items 中（自動增加數量）
         foreach ($this->items as $index => $item) {
             if ($item['product_id'] == $product->id) {
                 $this->items[$index]['quantity'] = bcadd($this->items[$index]['quantity'], '1', 4);
                 $this->success("已增加 {$product->name} 的數量");
-                $this->scannedBarcode = '';
-                $this->showScanner = false;
                 return;
             }
         }
@@ -192,8 +183,6 @@ class Create extends Component
         ];
 
         $this->success("已加入商品：{$product->name}");
-        $this->scannedBarcode = '';
-        $this->showScanner = false;
     }
 
     public function render()
