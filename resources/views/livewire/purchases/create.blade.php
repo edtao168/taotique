@@ -58,11 +58,7 @@
                                         @php
                                             $selectedProduct = collect($productOptions)->firstWhere('id', $items[$index]['product_id']);
                                         @endphp
-                                        @if($selectedProduct)
-                                            <div class="text-xs text-gray-500 mt-1">
-                                                SKU: {{ $selectedProduct['sku'] ?? 'N/A' }}
-                                            </div>
-                                        @endif
+                                        
                                     @endif
                                 </div>
 

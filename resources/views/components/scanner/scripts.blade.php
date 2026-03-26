@@ -5,15 +5,13 @@
 
 <script src="https://unpkg.com/@zxing/library@0.20.0/umd/index.min.js"></script>
 <script>
-    // 掃描器全域狀態
     window.BarcodeScanner = {
         codeReader: null,
         isScanning: false,
         continuousMode: false,
         lastScanTime: 0,
-        scanCooldown: 1500, // 連續掃描冷卻時間（毫秒）
+        scanCooldown: 1500,
         
-        // 啟動相機
         async start(options = {}) {
             const { continuous = false, onScan } = options;
             this.continuousMode = continuous;
@@ -27,22 +25,38 @@
             }
             
             try {
+                // 🔧 新增：先檢查瀏覽器支援
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    throw new Error('瀏覽器不支援相機功能');
+                }
+                
+                // 🔧 新增：檢查是否為 HTTPS 或 localhost
+                if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+                    throw new Error('相機功能需要 HTTPS 安全連線');
+                }
+                
                 this.codeReader = new ZXing.BrowserMultiFormatReader();
                 
                 // 取得相機設備
                 const devices = await this.codeReader.listVideoInputDevices();
-                const backCamera = devices.find(d => 
-                    d.label.toLowerCase().includes('back') || 
-                    d.label.toLowerCase().includes('environment') ||
-                    d.label.toLowerCase().includes('後')
-                );
-                const deviceId = backCamera ? backCamera.deviceId : devices[0]?.deviceId;
+                console.log('可用相機:', devices); // 除錯用
                 
-                if (!deviceId) {
+                if (!devices || devices.length === 0) {
                     throw new Error('找不到相機設備');
                 }
                 
-                status.textContent = continuous ? '連續掃描中...' : '正在掃描...';
+                // 優先選擇後置相機
+                const backCamera = devices.find(d => 
+                    d.label.toLowerCase().includes('back') || 
+                    d.label.toLowerCase().includes('environment') ||
+                    d.label.toLowerCase().includes('後') ||
+                    d.label.toLowerCase().includes('rear')
+                );
+                
+                const deviceId = backCamera ? backCamera.deviceId : devices[0].deviceId;
+                console.log('使用相機:', backCamera?.label || devices[0].label); // 除錯用
+                
+                status.textContent = continuous ? '連續掃描中...' : '請對準條碼...';
                 this.isScanning = true;
                 
                 await this.codeReader.decodeFromVideoDevice(deviceId, video, (result, err) => {
@@ -52,7 +66,6 @@
                         const barcode = result.text;
                         const now = Date.now();
                         
-                        // 連續模式冷卻檢查（避免重複掃描同一條碼）
                         if (this.continuousMode && (now - this.lastScanTime < this.scanCooldown)) {
                             return;
                         }
@@ -60,38 +73,50 @@
                         this.lastScanTime = now;
                         status.textContent = '掃描成功: ' + barcode;
                         
-                        // 震動反饋
-                        if (navigator.vibrate) {
-                            navigator.vibrate(200);
-                        }
+                        if (navigator.vibrate) navigator.vibrate(200);
                         
-                        // 呼叫回調或發送 Livewire 事件
                         if (onScan) {
                             onScan(barcode);
                         } else {
                             Livewire.dispatch('camera-scan-result', { barcode: barcode });
                         }
                         
-                        // 單次模式停止掃描
-                        if (!this.continuousMode) {
-                            this.stop();
-                        }
+                        if (!this.continuousMode) this.stop();
                     }
                     
                     if (err && !(err instanceof ZXing.NotFoundException)) {
-                        console.error(err);
-                        status.textContent = '掃描錯誤: ' + err.message;
+                        console.error('掃描錯誤:', err);
+                        // 不顯示錯誤，因為 NotFoundException 是正常的（還沒對準條碼）
                     }
                 });
                 
             } catch (error) {
                 console.error('相機啟動失敗:', error);
-                if (status) status.textContent = '相機啟動失敗: ' + error.message;
-                Livewire.dispatch('camera-failed');
+                
+                let errorMsg = '相機啟動失敗';
+                
+                // 🔧 友善的錯誤訊息
+                if (error.message.includes('Permission denied') || error.message.includes('拒絕')) {
+                    errorMsg = '相機權限被拒絕，請檢查瀏覽器設定';
+                } else if (error.message.includes('HTTPS')) {
+                    errorMsg = '相機功能需要 HTTPS 安全連線';
+                } else if (error.message.includes('不支援')) {
+                    errorMsg = '瀏覽器不支援相機功能';
+                } else if (error.message.includes('找不到')) {
+                    errorMsg = '找不到相機設備';
+                } else {
+                    errorMsg = '相機啟動失敗: ' + error.message;
+                }
+                
+                if (status) status.textContent = errorMsg;
+                
+                // 3 秒後自動切換到手動輸入
+                setTimeout(() => {
+                    Livewire.dispatch('camera-failed');
+                }, 3000);
             }
         },
         
-        // 停止相機
         stop() {
             this.isScanning = false;
             if (this.codeReader) {
@@ -106,23 +131,17 @@
         }
     };
 
-    // Livewire 事件監聽
     document.addEventListener('livewire:initialized', () => {
-        // 啟動相機掃描
         Livewire.on('start-camera-scan', () => {
             setTimeout(() => {
                 const component = Livewire.find(document.querySelector('[wire\\:id]')?.getAttribute('wire:id'));
                 const isContinuous = component?.get('scanMode') === 'continuous';
                 BarcodeScanner.start({ continuous: isContinuous });
-            }, 300);
+            }, 500); // 🔧 延長等待時間，確保 Modal 已開啟
         });
         
-        // 停止相機掃描
-        Livewire.on('stop-camera-scan', () => {
-            BarcodeScanner.stop();
-        });
+        Livewire.on('stop-camera-scan', () => BarcodeScanner.stop());
         
-        // 聚焦手動輸入框
         Livewire.on('focus-manual-input', () => {
             setTimeout(() => {
                 const input = document.getElementById('manual-barcode-input');
@@ -133,7 +152,6 @@
             }, 300);
         });
         
-        // 相機失敗
         Livewire.on('camera-failed', () => {
             const component = Livewire.find(document.querySelector('[wire\\:id]')?.getAttribute('wire:id'));
             if (component) {
@@ -144,13 +162,6 @@
         });
     });
 
-    // 頁面離開時清理
-    window.addEventListener('beforeunload', () => {
-        BarcodeScanner.stop();
-    });
-    
-    // Livewire 導航時清理
-    document.addEventListener('livewire:navigating', () => {
-        BarcodeScanner.stop();
-    });
+    window.addEventListener('beforeunload', () => BarcodeScanner.stop());
+    document.addEventListener('livewire:navigating', () => BarcodeScanner.stop());
 </script>
