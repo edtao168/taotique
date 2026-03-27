@@ -1,30 +1,30 @@
 {{-- 
-    掃描按鈕元件
+    掃描觸發按鈕元件
     用法：<x-scanner.button :index="$index" mode="single" />
-    參數：
-    - index: 行索引（可選）
-    - mode: 'single'（單次）或 'continuous'（連續）
 --}}
 
 @props(['index' => null, 'mode' => 'single'])
 
-<div class="dropdown dropdown-click dropdown-end z-[9999]">
-    <label tabindex="0" class="btn btn-ghost btn-sm btn-circle">
-        <x-icon name="o-qr-code" class="w-5 h-5" />
-    </label>
-    <ul tabindex="0" class="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-52 mt-1
-               !z-[9999] relative">
-        <li>
-            <a wire:click="openCameraScanner({{ $index ? "'$index'" : 'null' }}, '{{ $mode }}')" class="cursor-pointer">
-                <x-icon name="o-camera" class="w-4 h-4" />
-                相機掃描
-            </a>
-        </li>
-        <li>
-            <a wire:click="openManualInput({{ $index ? "'$index'" : 'null' }}, '{{ $mode }}')">
-                <x-icon name="o-pencil" class="w-4 h-4" />
-                掃碼槍 / 手動輸入
-            </a>
-        </li>
-    </ul>
+{{-- 🔧 修正：使用 x-data 和 x-on:click.stop 阻止事件冒泡 --}}
+<div class="flex items-center gap-1" 
+     x-data 
+     x-on:click.stop 
+     x-on:mousedown.stop 
+     x-on:touchstart.stop>
+    
+    {{-- 相機掃描按鈕 --}}
+    <button type="button" 
+            wire:click="openCameraScanner({{ $index ?? 'null' }}, '{{ $mode }}')"
+            class="btn btn-ghost btn-sm btn-circle"
+            title="相機掃描">
+        <x-icon name="o-camera" class="w-5 h-5 text-blue-600" />
+    </button>
+    
+    {{-- 手動輸入按鈕 --}}
+    <button type="button" 
+            wire:click="openManualInput({{ $index ?? 'null' }}, '{{ $mode }}')"
+            class="btn btn-ghost btn-sm btn-circle"
+            title="掃碼槍 / 手動輸入">
+        <x-icon name="o-pencil" class="w-4 h-4 text-gray-600" />
+    </button>
 </div>
