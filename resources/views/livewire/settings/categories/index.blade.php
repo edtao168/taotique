@@ -30,7 +30,7 @@
 						{{-- 點擊區域：整合 Code 與 Name --}}
 						<div wire:click="edit('{{ $item->code }}')" class="flex-1 cursor-pointer">
 							<div class="flex items-center gap-2">
-								<span class="badge badge-primary font-mono font-bold">[{{ $item->code }}]</span>
+								<span class="badge badge-primary font-mono font-bold">{{ $item->code }}</span>
 								<span class="text-lg font-bold">{{ $item->name }}</span>
 							</div>
 							@if($item->remark)
