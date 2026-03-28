@@ -23,28 +23,35 @@
         </div>
 
         {{-- 手機端卡片 --}}
-        <div class="md:hidden">
-            @foreach($rows as $item)
-                <div class="p-4 border-b border-base-200 last:border-none">
-                    <div class="flex justify-between items-center">
-                        <div wire:click="edit('{{ $item->code }}')" class="badge badge-primary font-mono">
-																						<div class="flex items-center gap-2">
-                                <span class="badge badge-primary font-mono font-bold">[{{ $item->code }}]</span>
-                                <span class="text-lg font-bold">{{ $item->name }}</span>
-                            </div>
-                            <span class="ml-2">{{ $item->name }}</span>
-                            @if($item->remark)
-                                <p class="text-xs text-gray-400 mt-1">{{ $item->remark }}</p>
-                            @endif
-                        </div>
-                        <div class="flex gap-1">
-                            <x-button icon="o-pencil" wire:click="edit('{{ $item->code }}')" class="btn-sm btn-ghost text-primary" />
-                            <x-button icon="o-trash" wire:click="delete('{{ $item->code }}')" wire:confirm="確定要刪除嗎？" class="btn-sm btn-ghost text-error" />
-                        </div>
-                    </div>
-                </div>
-            @endforeach
-        </div>
+		<div class="md:hidden">
+			@foreach($rows as $item)
+				<div class="p-4 border-b border-base-200 last:border-none">
+					<div class="flex justify-between items-center">
+						{{-- 點擊區域：整合 Code 與 Name --}}
+						<div wire:click="edit('{{ $item->code }}')" class="flex-1 cursor-pointer">
+							<div class="flex items-center gap-2">
+								<span class="badge badge-primary font-mono font-bold">[{{ $item->code }}]</span>
+								<span class="text-lg font-bold">{{ $item->name }}</span>
+							</div>
+							@if($item->remark)
+								<p class="text-xs text-gray-400 mt-1">{{ $item->remark }}</p>
+							@endif
+						</div>
+						
+						{{-- 操作按鈕 --}}
+						<div class="flex gap-1">
+							<x-button icon="o-pencil" wire:click="edit('{{ $item->code }}')" class="btn-sm btn-ghost text-primary" />
+							<x-button icon="o-trash" wire:click="delete('{{ $item->code }}')" 
+								wire:confirm="確定要刪除嗎？" class="btn-sm btn-ghost text-error" />
+						</div>
+					</div>
+				</div>
+			@endforeach
+			
+			@if($rows->isEmpty())
+				<div class="p-8 text-center text-gray-400">目前沒有符合的類別定義</div>
+			@endif
+		</div>
     </x-card>
 
     <x-modal wire:model="myModal" separator>
