@@ -28,7 +28,7 @@
             @foreach($rows as $item)
                 <div class="p-4 border-b border-base-200 last:border-none">
                     <div class="flex justify-between items-center">
-                        <div wire:click="edit('{{ $item->code }}')" class="flex-1">
+                        <div wire:click="edit('{{ $item->code }}')" class="badge badge-primary font-mono">
                             <span class="font-mono text-primary font-bold">[{{ $item->code }}]</span>
                             <span class="ml-2">{{ $item->name }}</span>
                             @if($item->remark)
