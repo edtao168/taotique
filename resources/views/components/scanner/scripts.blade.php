@@ -30,7 +30,7 @@
                     throw new Error('瀏覽器不支援相機功能');
                 }
                 
-                // 🔧 新增：檢查是否為 HTTPS 或 localhost
+                // 檢查是否為 HTTPS 或 localhost
                 if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
                     throw new Error('相機功能需要 HTTPS 安全連線');
                 }
@@ -45,15 +45,16 @@
                     throw new Error('找不到相機設備');
                 }
                 
-                // 優先選擇後置相機
-                const backCamera = devices.find(d => 
-                    d.label.toLowerCase().includes('back') || 
-                    d.label.toLowerCase().includes('environment') ||
-                    d.label.toLowerCase().includes('後') ||
-                    d.label.toLowerCase().includes('rear')
-                );
+                // 過濾出真正的後置鏡頭，排除虛擬設備
+				const backCamera = devices.reverse().find(d => 
+					d.label.toLowerCase().includes('back') || 
+					d.label.toLowerCase().includes('rear') ||
+					d.label.toLowerCase().includes('environment') ||
+					d.label.toLowerCase().includes('後')
+				);
                 
-                const deviceId = backCamera ? backCamera.deviceId : devices[0].deviceId;
+                // 如果找不到標籤，改用最後一個設備（通常手機最後一個是主鏡頭）
+				const deviceId = backCamera ? backCamera.deviceId : devices[devices.length - 1].deviceId;
                 console.log('使用相機:', backCamera?.label || devices[0].label); // 除錯用
                 
                 status.textContent = continuous ? '連續掃描中...' : '請對準條碼...';
