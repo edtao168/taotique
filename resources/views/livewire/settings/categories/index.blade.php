@@ -14,7 +14,6 @@
             <x-table :headers="$headers" :rows="$rows" class="cursor-pointer">
                 @scope('cell_actions', $item)
                     <div class="flex gap-2 justify-end">
-                        {{-- 傳入字串 code 需加單引號 --}}
                         <x-button icon="o-pencil" wire:click.stop="edit('{{ $item->code }}')" class="btn-sm btn-ghost text-primary" />
                         <x-button icon="o-trash" wire:click.stop="delete('{{ $item->code }}')" 
                             wire:confirm="確定要刪除嗎？" class="btn-sm btn-ghost text-error" />
@@ -29,7 +28,10 @@
                 <div class="p-4 border-b border-base-200 last:border-none">
                     <div class="flex justify-between items-center">
                         <div wire:click="edit('{{ $item->code }}')" class="badge badge-primary font-mono">
-                            <span class="font-mono text-primary font-bold">[{{ $item->code }}]</span>
+																						<div class="flex items-center gap-2">
+                                <span class="badge badge-primary font-mono font-bold">[{{ $item->code }}]</span>
+                                <span class="text-lg font-bold">{{ $item->name }}</span>
+                            </div>
                             <span class="ml-2">{{ $item->name }}</span>
                             @if($item->remark)
                                 <p class="text-xs text-gray-400 mt-1">{{ $item->remark }}</p>
