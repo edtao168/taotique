@@ -8,15 +8,46 @@
     </x-header>
 
     <x-card padding="none">
-        <x-table :headers="$headers" :rows="$rows" class="cursor-pointer">
-            @scope('cell_actions', $item)
-                <div class="flex gap-2 justify-end">
-                    <x-button icon="o-pencil" wire:click.stop="edit({{ $item->code }})" class="btn-sm btn-ghost text-primary" />
-                    <x-button icon="o-trash" wire:click.stop="delete({{ $item->code }})" 
-                        wire:confirm="確定要刪除嗎？" class="btn-sm btn-ghost text-error" />
+        {{-- PC 端：顯示完整表格 --}}
+        <div class="hidden md:block">
+            <x-table :headers="$headers" :rows="$rows" striped>
+                @scope('cell_actions', $item)
+                    <div class="flex gap-2">
+                        <x-button icon="o-pencil" wire:click="edit('{{ $item->code }}')" class="btn-sm btn-ghost text-primary" />
+                        <x-button icon="o-trash" wire:click="delete('{{ $item->code }}')" 
+                            wire:confirm="確定要刪除嗎？" class="btn-sm btn-ghost text-error" />
+                    </div>
+                @endscope
+            </x-table>
+        </div>
+
+        {{-- 手機端：顯示卡片式佈局 --}}
+        <div class="md:hidden">
+            @foreach($rows as $item)
+                <div class="p-4 border-b border-base-200 last:border-none">
+                    <div class="flex justify-between items-start mb-2">
+                        <div>
+                            <span class="badge badge-primary font-mono">{{ $item->code }}</span>
+                            <span class="text-lg font-bold ml-2">{{ $item->name }}</span>
+                        </div>
+                        <div class="flex gap-1">
+                            <x-button icon="o-pencil" wire:click="edit('{{ $item->code }}')" class="btn-xs btn-ghost text-primary" />
+                            <x-button icon="o-trash" wire:click="delete('{{ $item->code }}')" 
+                                wire:confirm="確定要刪除嗎？" class="btn-xs btn-ghost text-error" />
+                        </div>
+                    </div>
+                    @if($item->remark)
+                        <div class="text-sm text-gray-500 italic">
+                            {{ $item->remark }}
+                        </div>
+                    @endif
                 </div>
-            @endscope
-        </x-table>
+            @endforeach
+            
+            @if($rows->isEmpty())
+                <div class="p-8 text-center text-gray-400">尚無資料</div>
+            @endif
+        </div>
     </x-card>
 	
 	{{-- 將 Modal 移進根 div 裡面 --}}
