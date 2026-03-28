@@ -36,15 +36,21 @@ class Index extends Component
         ]);
     }
 
+    public function create()
+    {
+        $this->reset(['code', 'name', 'remark', 'editingItem']); // 強制清空所有欄位與編輯目標
+        $this->myModal = true;
+    }
+
     public function edit(CategoryDefinition $item)
     {
         $this->editingItem = $item;
         $this->code = $item->code;
         $this->name = $item->name;
-		$this->remark = $item->remark;
+        $this->remark = $item->remark;
         $this->myModal = true;
     }
-
+		
     public function save()
     {
         $data = $this->validate([
