@@ -37,6 +37,7 @@ class Create extends Component
     public $customer_total = '0.00';
 
     public function mount(Sale $sale = null)
+	//元件建構函式，負責初始化資料和狀態，且只執行一次
     {
         $this->sale = ($sale && $sale->exists) ? $sale : new Sale();
 		$this->productOptions = $this->search();
@@ -75,6 +76,16 @@ class Create extends Component
             $this->addRow();
         }
     }
+	
+	public function render()
+	//元件渲染器，負責將資料傳遞給視圖並在每次更新時重新執行。
+    {
+        return view('livewire.sales.create', [
+            'customers' => Customer::all(),
+			'warehouses' => Warehouse::all(),
+            //'products' => Product::where('is_active', true)->get(),
+        ]);
+    }	
 	
 	/**
      * 當選中商品後觸發 (覆寫 updated 鉤子)
@@ -178,13 +189,35 @@ class Create extends Component
             $this->error($e->getMessage());
         }
     }
-
-    public function render()
+    
+	/**
+     * 核心計算邏輯：確保所有金額符合 BC Math 規範
+     */
+    public function calculateAll()
     {
-        return view('livewire.sales.create', [
-            'customers' => Customer::all(),
-			'warehouses' => Warehouse::all(),
-            //'products' => Product::where('is_active', true)->get(),
-        ]);
+        $newSubtotal = '0.0000';
+
+        // 1. 計算商品明細總額
+        foreach ($this->items as $index => $item) {
+            $price = $item['price'] ?: '0';
+            $qty = $item['quantity'] ?: '0';
+            
+            // 單項小計 = price * quantity
+            $rowTotal = bcmul((string)$price, (string)$qty, 4);
+            $this->items[$index]['subtotal'] = $rowTotal;
+            
+            // 累加至總額
+            $newSubtotal = bcadd($newSubtotal, $rowTotal, 4);
+        }
+
+        $this->subtotal = $newSubtotal;
+
+        // 2. 計算買家應付 (Customer Total)
+        // 公式：銷售總額 + 買家付運費 - 賣場折扣 - 平台優惠券
+        $customerTotal = bcadd($this->subtotal, (string)($this->shipping_fee_customer ?: 0), 4);
+        $customerTotal = bcsub($customerTotal, (string)($this->discount ?: 0), 4);
+        $customerTotal = bcsub($customerTotal, (string)($this->platform_coupon ?: 0), 4);
+        
+        $this->customer_total = $customerTotal;
     }
 }
