@@ -194,11 +194,8 @@
 
 		{{-- 2. 手機端：顯示卡片列表 (md 以下) --}}
 		<div class="md:hidden space-y-3">
-			@forelse($recentSales as $sale)
-				{{-- 修正點：加上 cursor-pointer 並使用 wire:navigate 實現全卡片點擊 --}}
-				<div 
-					wire:click="$navigating = true; window.location.href='/sales/{{ $sale->id }}/edit'" 
-					class="p-4 border border-gray-100 rounded-xl bg-gray-50/30 space-y-3 cursor-pointer hover:bg-gray-100 transition-colors active:scale-[0.98]"
+			@forelse($recentSales as $sale)				
+				<div class="p-4 border border-gray-100 rounded-xl bg-gray-50/30 space-y-3 cursor-pointer hover:bg-gray-100 transition-colors active:scale-[0.98]"
 				>
 					<div class="flex justify-between items-start">
 						<div>
