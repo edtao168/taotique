@@ -56,8 +56,7 @@
 											search-function="search"
 											option-label="name"
 											searchable 
-											single 
-											debounce="300ms"
+											single
 										/>
 										
 									</td>
@@ -84,7 +83,15 @@
 					@foreach($items as $index => $item)
 						<div wire:key="mobile-item-{{ $index }}" class="p-3 border rounded-lg bg-base-100 relative">
 							<x-button icon="o-trash" class="btn-error btn-xs absolute top-1 right-1 rounded-full" wire:click="removeRow({{ $index }})" />
-							<x-choices label="商品" wire:model.live="items.{{ $index }}.product_id" :options="$productOptions" searchable single />
+							<x-choices 
+								label="商品" 
+								wire:model.live="items.{{ $index }}.product_id" 
+								:options="$productOptions" 
+								search-function="search"
+								option-label="name"
+								searchable 
+								single 
+							/>
 							<div class="grid grid-cols-2 gap-2 mt-2">
 								<x-input label="單價" wire:model.live.debounce.500ms="items.{{ $index }}.price" />
 								<x-input label="數量" type="number" wire:model.live.debounce.500ms="items.{{ $index }}.quantity" />
