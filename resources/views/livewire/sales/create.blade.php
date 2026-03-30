@@ -49,7 +49,7 @@
 						<tbody>
 							@foreach($items as $index => $item)
 								<tr wire:key="pc-item-{{ $index }}">
-									<td class="min-w-[250px]">
+									<td class="min-w-[300px]">
 										<x-choices 
 											wire:model.live="items.{{ $index }}.product_id" 
 											:options="$productOptions"
@@ -108,18 +108,18 @@
 
         {{-- 3. 右側：結算結帳 (1/4) --}}
         <div class="lg:col-span-3 space-y-4">
-            <x-card title="結算結帳" shadow class="bg-base-100 border-t-4 border-primary">
+            <x-card title="結算" shadow class="bg-base-100 border-t-4 border-primary">
                 <div class="space-y-4">
                     {{-- 第一列：小計 --}}
                     <div class="flex justify-between items-center p-2 bg-base-200/50 rounded-lg">
-                        <span class="font-bold opacity-70">原始小計</span>
+                        <span class="font-bold opacity-70">小計</span>
                         <span class="font-mono text-right">NT$ {{ number_format($subtotal, 0) }}</span>
                     </div>
 
                     {{-- 第二列：雙欄對照 --}}
                     <div class="grid grid-cols-2 gap-4 text-xs">
                         <div class="space-y-3">
-                            <div class="badge badge-info scale-75 text-lg">買家</div>
+                            <div class="badge badge-info badge-outline font-bold px-4 py-3">買家</div>
                             <x-input label="買家運費" wire:model.live.debounce.500ms="shipping_fee_customer" prefix="+" class="input-sm text-right font-mono" />
                             <x-input label="賣場折扣" wire:model.live.debounce.500ms="discount" prefix="-" class="input-sm text-right font-mono text-error" />
                             <x-input label="平台優惠" wire:model.live.debounce.500ms="platform_coupon" prefix="-" class="input-sm text-right font-mono text-error" />
@@ -129,7 +129,7 @@
                             </div>
                         </div>
                         <div class="space-y-3">
-                            <div class="badge badge-success scale-75" text-lg>賣家</div>
+                            <div class="badge badge-success badge-outline font-bold px-4 py-3">賣家</div>
                             <x-input label="平台手續費" wire:model.live.debounce.500ms="platform_fee" prefix="-" class="input-sm text-right font-mono text-warning" />
                             <x-input label="平台代付運費" wire:model.live.debounce.500ms="shipping_fee_platform" prefix="-" class="input-sm text-right font-mono text-warning" />
                             <x-input label="帳款調整" wire:model.live.debounce.500ms="order_adjustment" prefix="±" class="input-sm text-right font-mono" />

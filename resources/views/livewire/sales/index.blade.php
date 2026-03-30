@@ -152,7 +152,7 @@
 					@foreach($selectedSale->items as $item)
 						<div class="p-4 border rounded-xl bg-base-50 shadow-sm">
 							<div class="flex justify-between items-start mb-2">
-								<span class="font-bold text-sm text-gray-700 line-clamp-1 w-3/4">{{ $item->product->name }}</span>
+								<span class="font-bold text-sm text-gray-700 line-clamp-1 w-3/4">{{ $item->product->full_display_name }}</span>
 								<x-badge :value="'x' . (int)$item->quantity" class="badge-neutral font-mono" />
 							</div>
 							<div class="flex justify-between items-end">
@@ -173,7 +173,7 @@
 					<x-table :headers="[['key' => 'product.name', 'label' => '品名'], ['key' => 'quantity', 'label' => '數量', 'class' => 'text-right'], ['key' => 'subtotal', 'label' => '小計', 'class' => 'text-right font-mono']]" :rows="$selectedSale->items" no-hover>
 						@scope('cell_product.name', $item)
 							<div class="flex flex-col">
-								<span class="font-medium text-sm">{{ $item->product->name }}</span>
+								<span class="font-medium text-sm">{{ $item->product->full_display_name }}</span>
 								<span class="text-[10px] text-gray-400 font-mono">成本: {{ number_format($item->cost_snapshot, 0) }}</span>
 							</div>
 						@endscope

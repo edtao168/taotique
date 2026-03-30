@@ -25,7 +25,7 @@ trait HasProductSearch
             ->get()
             ->map(fn($p) => [
                 'id'   => $p->id,
-                'name' => "{$p->sku} : {$p->name}", 
+                'name' => $p->full_display_name, 
             ])
             ->toArray();
 

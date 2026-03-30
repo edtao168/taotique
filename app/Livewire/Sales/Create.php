@@ -38,56 +38,54 @@ class Create extends Component
     public $customer_total = '0.0000';
 	public $final_net_amount = '0.0000';
 
-    public function mount(Sale $sale = null)
-	//元件建構函式，負責初始化資料和狀態，且只執行一次
-    {
-        $this->sale = ($sale && $sale->exists) ? $sale : new Sale();
-		$this->productOptions = $this->search();
+    //元件建構函式，負責初始化資料和狀態，且只執行一次	
+	public function mount(Sale $sale = null)
+	{
+		$this->sale = ($sale && $sale->exists) ? $sale : new Sale();
 
-        if ($this->sale->exists) {
-            // --- 載入模式 ---
-            $this->sale->load('items.product');
-            $this->customer_id = $this->sale->customer_id;
-            $this->invoice_number = $this->sale->invoice_number;
-            $this->sold_at = $this->sale->sold_at->format('Y-m-d');
-            $this->channel = $this->sale->channel;
-            $this->payment_method = $this->sale->payment_method;
-			$this->productOptions = $this->search();
-            
-            // 金額載入
-            $this->subtotal = $this->sale->subtotal;
-            $this->discount = $this->sale->discount;
-            $this->platform_coupon = $this->sale->platform_coupon;
-            $this->shipping_fee_customer = $this->sale->shipping_fee_customer;
-            $this->shipping_fee_platform = $this->sale->shipping_fee_platform;
-            $this->platform_fee = $this->sale->platform_fee;
-            $this->order_adjustment = $this->sale->order_adjustment;
-            $this->customer_total = $this->sale->customer_total;
+		if ($this->sale->exists) {
+			// 1. 填充單據基本資訊
+			$this->customer_id = $this->sale->customer_id;
+			$this->sold_at = $this->sale->sold_at->format('Y-m-d');
+			$this->channel = $this->sale->channel;
+			$this->payment_method = $this->sale->payment_method;
+			$this->platform_fee = $this->sale->platform_fee;
+			$this->shipping_fee_platform = $this->sale->shipping_fee_platform;
+			$this->order_adjustment = $this->sale->order_adjustment;
+			$this->shipping_fee_customer = $this->sale->shipping_fee_customer;
 
-            foreach ($this->sale->items as $item) {
-                $this->items[] = [
-                    'product_id' => $item->product_id,
-                    'quantity' => (float)$item->quantity,
-                    'price' => $item->price,
-                    'subtotal' => $item->subtotal,
-                ];
-            }
+			// 2. 關鍵：轉換明細為陣列，並確保數值為字串以利 bcmath 運算
+			$this->items = $this->sale->items->map(fn($item) => [
+				'product_id' => $item->product_id,
+				'price' => (string)$item->price,
+				'quantity' => (string)$item->quantity,
+			])->toArray();
+
+			// 3. 預載商品下拉選單需要的「名稱」
+			$productIds = collect($this->items)->pluck('product_id')->filter()->toArray();
+			$this->productOptions = Product::whereIn('id', $productIds)
+				->get()
+				->map(fn($p) => [
+					'id'   => $p->id,
+					'name' => $p->full_display_name, // 這裡對應到 blade 的 option-label="name"
+				])->toArray();
+
+			// 4. 執行初次計算，確保 $final_net_amount 不是 0
 			$this->calculateAll();
-        } else {
-            $this->sold_at = now()->format('Y-m-d');
-            $this->invoice_number = 'S' . now()->format('YmdHis');
-            $this->addRow();
-			$this->productOptions = $this->search();
-        }
-    }
+		} else {
+			$this->sold_at = now()->format('Y-m-d');
+			if (empty($this->items)) {
+				$this->addRow();
+			}
+		}
+	}
 	
 	public function render()
 	//元件渲染器，負責將資料傳遞給視圖並在每次更新時重新執行。
     {
         return view('livewire.sales.create', [
             'customers' => Customer::all(),
-			'warehouses' => Warehouse::all(),
-            //'products' => Product::where('is_active', true)->get(),
+			'warehouses' => Warehouse::all(),            
         ]);
     }	
 	
