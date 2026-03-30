@@ -18,7 +18,7 @@ npm install
 npm run build
 
 # 5. 執行資料庫遷移 (確保 DECIMAL(16,4) 等結構同步)
-# php artisan migrate --force
+php artisan migrate --force
 
 # 6. 清除並優化快取
 echo "🧹 清除快取..."
