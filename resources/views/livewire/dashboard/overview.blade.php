@@ -150,43 +150,81 @@
 </script>
 
     {{-- 最近銷貨記錄 --}}
-    <div class="bg-white shadow rounded-lg p-6">
-        <h2 class="text-lg font-semibold mb-4">最近銷貨記錄</h2>
-        <div class="overflow-x-auto">
-            <table class="w-full">
-                <thead>
-                    <tr class="border-b border-gray-100">
-                        <th class="text-left py-3 px-2 text-sm font-semibold text-gray-600">日期</th>
-                        <th class="text-left py-3 px-2 text-sm font-semibold text-gray-600">客戶</th>
-                        <th class="text-left py-3 px-2 text-sm font-semibold text-gray-600">通路</th>
-                        <th class="text-left py-3 px-2 text-sm font-semibold text-gray-600">顧客付款合計</th>
-                        <th class="text-left py-3 px-2 text-sm font-semibold text-gray-600">最終訂單進帳</th>
-                        <th class="text-left py-3 px-2 text-sm font-semibold text-gray-600">狀態</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @forelse($recentSales as $sale)
-                        <tr class="divide-y divide-gray-50">
-                            <td class="py-2 text-gray-600">{{ $sale->created_at->format('Y-m-d') }}</td>
-                            <td class="py-2 text-gray-600">{{ $sale->customer->name ?? '未知客戶' }}</td>
-                            <td class="py-2 text-gray-600">{{ $sale->channel }}</td>
-                            <td class="py-2 text-gray-600">NT$ {{ number_format($sale->customer_total) }}</td>
-                            <td class="py-2 text-gray-600">NT$ {{ number_format($sale->final_net_amount) }}</td>
-                            <td class="py-2">
-                                <span class="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs">
-                                    {{ $sale->status ?? '完成' }}
-                                </span>
-                            </td>
-                        </tr>
-                    @empty
-                        <tr>
-                            <td colspan="6" class="text-center py-4 text-gray-500">
-                                暫無銷貨記錄
-                            </td>
-                        </tr>
-                    @endforelse
-                </tbody>
-            </table>
-        </div>
-    </div>
+	<div class="bg-white shadow rounded-lg p-4 md:p-6">
+		<div class="flex justify-between items-center mb-4">
+			<h2 class="text-lg font-semibold text-gray-800">最近銷貨記錄</h2>
+			<x-button label="查看全部" link="/sales" class="btn-ghost btn-sm text-primary" />
+		</div>
+
+		{{-- 1. 電腦端：顯示完整表格 (md 以上) --}}
+		<div class="hidden md:block overflow-x-auto">
+			<table class="w-full">
+				<thead>
+					<tr class="border-b border-gray-100 bg-gray-50/50">
+						<th class="text-left py-3 px-2 text-xs font-bold text-gray-500 uppercase">日期</th>
+						<th class="text-left py-3 px-2 text-xs font-bold text-gray-500 uppercase">客戶</th>
+						<th class="text-left py-3 px-2 text-xs font-bold text-gray-500 uppercase">通路</th>
+						<th class="text-right py-3 px-2 text-xs font-bold text-gray-500 uppercase">顧客付款</th>
+						<th class="text-right py-3 px-2 text-xs font-bold text-gray-500 uppercase">最終進帳</th>
+						<th class="text-center py-3 px-2 text-xs font-bold text-gray-500 uppercase">狀態</th>
+					</tr>
+				</thead>
+				<tbody>
+					@forelse($recentSales as $sale)
+						<tr class="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
+							<td class="py-3 px-2 text-sm text-gray-600">{{ $sale->created_at->format('Y-m-d') }}</td>
+							<td class="py-3 px-2 text-sm font-medium text-gray-900">{{ $sale->customer->name ?? '未知客戶' }}</td>
+							<td class="py-3 px-2 text-sm text-gray-600">
+								<span class="badge badge-ghost badge-sm">{{ $sale->channel }}</span>
+							</td>
+							<td class="py-3 px-2 text-sm text-right font-mono text-blue-600">NT$ {{ number_format($sale->customer_total) }}</td>
+							<td class="py-3 px-2 text-sm text-right font-mono font-bold text-emerald-600">NT$ {{ number_format($sale->final_net_amount) }}</td>
+							<td class="py-3 px-2 text-center">
+								<span class="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-[10px] font-bold">
+									{{ $sale->status ?? '完成' }}
+								</span>
+							</td>
+						</tr>
+					@empty
+						<tr><td colspan="6" class="text-center py-10 text-gray-400">暫無銷貨記錄</td></tr>
+					@endforelse
+				</tbody>
+			</table>
+		</div>
+
+		{{-- 2. 手機端：顯示卡片列表 (md 以下) --}}
+		<div class="md:hidden space-y-3">
+			@forelse($recentSales as $sale)
+				<div class="p-4 border border-gray-100 rounded-xl bg-gray-50/30 space-y-3">
+					<div class="flex justify-between items-start">
+						<div>
+							<div class="text-xs text-gray-400">{{ $sale->created_at->format('Y-m-d H:i') }}</div>
+							<div class="font-bold text-gray-800">{{ $sale->customer->name ?? '未知客戶' }}</div>
+						</div>
+						<span class="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-[10px] font-bold">
+							{{ $sale->status ?? '完成' }}
+						</span>
+					</div>
+
+					<div class="grid grid-cols-2 gap-2 pt-2 border-t border-gray-100">
+						<div>
+							<div class="text-[10px] text-gray-400 uppercase">顧客付款</div>
+							<div class="text-sm font-mono text-blue-600 font-bold">NT$ {{ number_format($sale->customer_total) }}</div>
+						</div>
+						<div class="text-right">
+							<div class="text-[10px] text-gray-400 uppercase">最終進帳</div>
+							<div class="text-sm font-mono text-emerald-600 font-bold">NT$ {{ number_format($sale->final_net_amount) }}</div>
+						</div>
+					</div>
+
+					<div class="flex justify-between items-center text-[10px]">
+						<span class="text-gray-400">來源通路：<span class="text-gray-600">{{ $sale->channel }}</span></span>
+						<x-button icon="o-chevron-right" link="/sales/{{ $sale->id }}/edit" class="btn-ghost btn-xs" />
+					</div>
+				</div>
+			@empty
+				<div class="text-center py-10 text-gray-400 text-sm italic">暫無銷貨記錄</div>
+			@endforelse
+		</div>
+	</div>
 </div>

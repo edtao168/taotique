@@ -25,6 +25,6 @@
             wire:click="openManualInput({{ $index ?? 'null' }}, '{{ $mode }}')"
             class="btn btn-ghost btn-sm btn-circle"
             title="掃碼槍 / 手動輸入">
-        <x-icon name="o-pencil" class="w-4 h-4 text-gray-600" />
+        <x-icon name="o-qr-code" class="w-4 h-4 text-gray-600" />
     </button>
 </div>

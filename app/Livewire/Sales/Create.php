@@ -7,6 +7,7 @@ use App\Models\Customer;
 use App\Models\Warehouse; 
 use App\Models\Product;
 use App\Models\Sale;
+use App\Traits\HasBarcodeScanner;
 use App\Traits\HasProductSearch;
 use Illuminate\Support\Facades\DB;
 use Livewire\Component;
@@ -14,7 +15,7 @@ use Mary\Traits\Toast;
 
 class Create extends Component
 {
-    use HasProductSearch, Toast;
+    use HasBarcodeScanner, HasProductSearch, Toast;
 
     public $customer_id = 1;
 	public Sale $sale; 
@@ -27,14 +28,15 @@ class Create extends Component
     // 費用欄位
     public $channel = 'shopee';
     public $payment_method = 'shopee-';
-    public $subtotal = '0.00'; 
-    public $discount = 0;
-    public $platform_coupon = 0;
-    public $shipping_fee_customer = 0;
+    public $subtotal = '0.0000';
+    public $discount = '0.0000';
+    public $shipping_fee_customer = '0.0000';
+    public $platform_coupon = 0;    
     public $shipping_fee_platform = 0;
     public $platform_fee = 0;
     public $order_adjustment = 0;
-    public $customer_total = '0.00';
+    public $customer_total = '0.0000';
+	public $final_net_amount = '0.0000';
 
     public function mount(Sale $sale = null)
 	//元件建構函式，負責初始化資料和狀態，且只執行一次
@@ -74,6 +76,7 @@ class Create extends Component
             $this->sold_at = now()->format('Y-m-d');
             $this->invoice_number = 'S' . now()->format('YmdHis');
             $this->addRow();
+			$this->productOptions = $this->search();
         }
     }
 	
@@ -88,45 +91,66 @@ class Create extends Component
     }	
 	
 	/**
-     * 當選中商品後觸發 (覆寫 updated 鉤子)
+     * 監聽所有影響金額的屬性異動
      */
     public function updated($property, $value)
     {
-        if (str_contains($property, 'product_id')) {
+        // 商品與庫存邏輯
+        if (str_contains($property, 'product_id') && $value) {
             $parts = explode('.', $property);
             $index = $parts[1];
-            
-            if ($value) {
-                $this->fillProductData($index, $value, 'items');
-                
-                // --- 即時庫存檢查提醒 ---
-                $product = Product::withSum('inventories as stock', 'quantity')->find($value);
-                $currentStock = $product->stock ?? 0;
-                
-                if ($currentStock <= 0) {
-                    $this->warning("警告：{$product->name} 目前無庫存！", position: 'toast-bottom toast-end');
-                } elseif ($currentStock < 5) {
-                    $this->info("注意：{$product->name} 庫存僅剩 {$currentStock} 件。", position: 'toast-bottom toast-end');
-                }
+            $product = Product::find($value);
+            if ($product) {
+                $this->items[$index]['price'] = (string)$product->price;
             }
-			
-            // 選中後自動重新計算總額
-            $this->calculateAll();
         }
-		
-		// 其他費用異動時重新計算總額
-        if (in_array($property, ['discount', 'platform_coupon', 'shipping_fee_customer', 'platform_fee', 'order_adjustment'])) {
+
+        // 觸發重新計算的欄位清單
+        $calcFields = [
+            'items', 'discount', 'platform_coupon', 'shipping_fee_customer', 
+            'platform_fee', 'shipping_fee_platform', 'order_adjustment'
+        ];
+
+        if (collect($calcFields)->contains(fn($field) => str_contains($property, $field))) {
             $this->calculateAll();
         }
     }
 
+    /**
+     * 核心計算邏輯 (BC Math)
+     */
+    public function calculateAll()
+    {
+        // 1. 計算商品小計 (Subtotal)
+        $newSubtotal = '0.0000';
+        foreach ($this->items as $item) {
+            $rowTotal = bcmul((string)($item['price'] ?? 0), (string)($item['quantity'] ?? 0), 4);
+            $newSubtotal = bcadd($newSubtotal, $rowTotal, 4);
+        }
+        $this->subtotal = $newSubtotal;
+
+        // 2. 計算買家實付 (Customer Total)
+        // 公式：小計 + 買家運費 - 賣場折扣 - 平台優惠券
+        $customerTotal = bcadd($this->subtotal, (string)($this->shipping_fee_customer ?: 0), 4);
+        $customerTotal = bcsub($customerTotal, (string)($this->discount ?: 0), 4);
+        $customerTotal = bcsub($customerTotal, (string)($this->platform_coupon ?: 0), 4);
+        $this->customer_total = $customerTotal;
+
+        // 3. 計算賣家實收 (Final Net Amount)
+        // 公式：買家實付 - 平台手續費 - 平台代付運費 + 帳款調整
+        $net = bcsub($this->customer_total, (string)($this->platform_fee ?: 0), 4);
+        $net = bcsub($net, (string)($this->shipping_fee_platform ?: 0), 4);
+        $net = bcadd($net, (string)($this->order_adjustment ?: 0), 4);
+        $this->final_net_amount = $net;
+    }
+	
     public function addRow()
     {
         $this->items[] = [
             'product_id' => null,
             'warehouse_id' => Warehouse::first()?->id ?? 1,
-            'quantity' => 1,
-            'price' => 0,
+            'quantity' => '1.0000',
+			'price' => '0.0000'
         ];
     }
 
@@ -190,34 +214,58 @@ class Create extends Component
         }
     }
     
+	
 	/**
-     * 核心計算邏輯：確保所有金額符合 BC Math 規範
+     * 🔧 實現掃描回調
+     * 零售邏輯：若商品已在清單中，則數量 +1；否則新增一行
      */
-    public function calculateAll()
+    public function onBarcodeScanned(string $barcode, ?int $index = null): void
     {
-        $newSubtotal = '0.0000';
-
-        // 1. 計算商品明細總額
-        foreach ($this->items as $index => $item) {
-            $price = $item['price'] ?: '0';
-            $qty = $item['quantity'] ?: '0';
-            
-            // 單項小計 = price * quantity
-            $rowTotal = bcmul((string)$price, (string)$qty, 4);
-            $this->items[$index]['subtotal'] = $rowTotal;
-            
-            // 累加至總額
-            $newSubtotal = bcadd($newSubtotal, $rowTotal, 4);
+        $product = $this->findProductByBarcode($barcode);
+        
+        if (!$product) {
+            $this->error("找不到條碼為 {$barcode} 的商品");
+            return;
         }
 
-        $this->subtotal = $newSubtotal;
+        // 獲取當前庫存（考慮 store_id 預設為 1）
+        $currentStock = DB::table('inventories')
+            ->where('product_id', $product->id)
+            ->where('store_id', 1)
+            ->sum('quantity');
 
-        // 2. 計算買家應付 (Customer Total)
-        // 公式：銷售總額 + 買家付運費 - 賣場折扣 - 平台優惠券
-        $customerTotal = bcadd($this->subtotal, (string)($this->shipping_fee_customer ?: 0), 4);
-        $customerTotal = bcsub($customerTotal, (string)($this->discount ?: 0), 4);
-        $customerTotal = bcsub($customerTotal, (string)($this->platform_coupon ?: 0), 4);
-        
-        $this->customer_total = $customerTotal;
+        // 檢查是否已存在於 items 中
+        foreach ($this->items as $i => $item) {
+            if ($item['product_id'] == $product->id) {
+                $newQty = bcadd($this->items[$i]['quantity'], '1', 4);
+                
+                // 簡單庫存預警
+                if (bccomp($newQty, (string)$currentStock, 4) > 0) {
+                    $this->warning("{$product->name} 庫存不足（剩餘 {$currentStock}）");
+                }
+
+                $this->items[$i]['quantity'] = $newQty;
+                $this->calculateAll();
+                $this->success("已增加 {$product->name} 數量至 " . (int)$newQty);
+                return;
+            }
+        }
+
+        // 若不在清單中，則新增一行（或填入指定空行）
+        $newRow = [
+            'product_id' => $product->id,
+            'warehouse_id' => Warehouse::first()?->id ?? 1,
+            'quantity' => '1.0000',
+            'price' => (string)($product->price ?? '0.0000'), // 自動帶入零售價
+        ];
+
+        if ($index !== null && empty($this->items[$index]['product_id'])) {
+            $this->items[$index] = $newRow;
+        } else {
+            $this->items[] = $newRow;
+        }
+
+        $this->calculateAll();
+        $this->success("已加入商品：{$product->name}");
     }
 }

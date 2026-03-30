@@ -1,162 +1,150 @@
 {{-- 檔案路徑：resources/views/livewire/sales/create.blade.php --}}
 <div>
-    <x-header 
-        title="{{ $this->sale->exists ? '修改銷貨單' : '新增銷貨單' }}" 
-        subtitle="{{ $this->sale->exists ? '正在編輯單號：' . $this->sale->invoice_number : '建立新的銷售紀錄' }}" 
-        separator 
-    />
+    <x-header title="{{ $sale->exists ? '編輯銷售單' : '建立銷售單' }}" separator progress-indicator>
+        <x-slot:actions>
+            <x-button label="取消" icon="o-x-mark" link="/sales" />
+            <x-button label="確認過帳" icon="o-paper-airplane" class="btn-primary" wire:click="save" spinner />
+        </x-slot:actions>
+    </x-header>
 
-    <x-form wire:submit="save">
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {{-- 左側區域 --}}
-            <div class="lg:col-span-2 space-y-6">
-                {{-- 1. 基本資訊：完全保留您的原始代碼 --}}
-                <x-card title="基本資訊" shadow>
-                    <div class="grid grid-cols-2 gap-4">
-                        <x-datetime label="銷售日期" wire:model="sold_at" type="date" icon="o-calendar" />
-                        <x-select label="客戶" :options="$customers" wire:model="customer_id" placeholder="選擇客戶" />
-                        <x-select 
-                            label="銷售通路" 
-                            wire:model="channel"
-                            :options="[['id' => 'shopee', 'name' => '蝦皮購物'], ['id' => 'store', 'name' => '實體店面'], ['id' => 'social', 'name' => '社群/私訊']]" 
-                        />
-                        <x-select 
-                            label="付款方式" 
-                            wire:model="payment_method"
-                            :options="[['id' => 'shopee-', 'name' => '蝦皮錢包'], ['id' => 'cash', 'name' => '現金'], ['id' => 'transfer', 'name' => '銀行轉帳']]" 
-                        />
-                    </div>
-                </x-card>
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+        
+        {{-- 1. 左側：單據屬性 (1/4) --}}
+        <div class="lg:col-span-3 space-y-4">
+            <x-card title="單據資訊" shadow separator>
+                <div class="space-y-4">
+                    <x-choices label="客戶" wire:model="customer_id" :options="$customers" single />
+                    <x-datetime label="銷售日期" wire:model="sold_at" icon="o-calendar" />
+                    <x-select label="管道" wire:model="channel" :options="[['id'=>'store','name'=>'門市'], ['id'=>'shopee','name'=>'蝦皮']]" />
+                    <x-select label="支付" wire:model="payment_method" :options="[['id'=>'cash','name'=>'現金'], ['id'=>'transfer','name'=>'轉帳']]" />
+                    <x-textarea label="備註" wire:model="remark" rows="2" />
+                </div>
+            </x-card>
+        </div>
 
-                {{-- 2. 商品明細：重構為 Grid 佈局 --}}
-				<x-card title="商品明細" shadow separator>
-					{{-- PC 端表頭：確保對齊感 (僅在 lg 顯示) --}}
-					<div class="hidden lg:grid grid-cols-12 gap-4 mb-3 px-4 text-xs font-bold opacity-40 uppercase tracking-widest">
-						<div class="col-span-6">搜尋商品 (SKU / 名稱)</div>
-						<div class="col-span-2 text-center">數量</div>
-						<div class="col-span-2 text-right">銷售單價</div>
-						<div class="col-span-2 text-right">小計 (TWD)</div>
+        {{-- 2. 中間：商品明細 (2/4) --}}
+		<div class="lg:col-span-6">
+			<x-card shadow separator>
+				<x-slot:title>
+					<div class="flex justify-between items-center w-full">
+						<span class="font-bold">商品明細</span>
+						<div class="flex items-center gap-2">
+							<span class="text-xs opacity-50">連續掃描模式</span>
+							<x-scanner.button mode="continuous" class="btn-xs btn-outline flex flex-row items-center gap-1" />
+						</div>
 					</div>
+				</x-slot:title>
 
-					<div class="space-y-4">
-						@foreach($items as $index => $item)
-							<div wire:key="sale-row-{{ $index }}" class="p-4 border rounded-xl bg-base-50 relative">
-								
-								{{-- 刪除按鈕：漂浮在右上角 --}}
-								<x-button 
-									icon="o-trash" 
-									class="btn-error btn-xs absolute -top-2 -right-2 rounded-full shadow-sm text-white" 
-									wire:click="removeRow({{ $index }})" 
-								/>
-
-								{{-- Grid 容器 --}}
-								<div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-center">
-									
-									{{-- 1. 商品搜尋：寬度佔 6/12 --}}
-									<div class="lg:col-span-6">
+				<div class="hidden md:block overflow-visible">
+					<table class="table table-compact w-full">
+						<thead>
+							<tr class="bg-base-200">
+								<th>商品名稱(搜尋或掃描)</th>
+								<th class="w-30 text-center">單價</th>
+								<th class="w-20 text-center">數量</th>
+								<th class="w-30 text-center">小計</th>
+								<th class="w-10"></th>
+							</tr>
+						</thead>
+						<tbody>
+							@foreach($items as $index => $item)
+								<tr wire:key="pc-item-{{ $index }}">
+									<td class="min-w-[250px]">
 										<x-choices 
 											wire:model.live="items.{{ $index }}.product_id" 
-											:options="$productOptions" 
+											:options="$productOptions"
 											search-function="search"
 											option-label="name"
-											searchable
-											single
+											searchable 
+											single 
 											debounce="300ms"
-											placeholder="輸入 SKU 或名稱搜尋..."
-											no-result-text="找不到商品"
 										/>
-									</div>
+										
+									</td>
+									<td>
+										<x-input wire:model.live.debounce.500ms="items.{{ $index }}.price" class="font-mono text-right" />
+									</td>
+									<td>
+										<x-input type="number" wire:model.live.debounce.500ms="items.{{ $index }}.quantity" class="font-mono text-right" />
+									</td>
+									<td class="font-mono text-right">
+										{{ number_format(bcmul($item['price'] ?? 0, $item['quantity'] ?? 0, 4), 0) }}
+									</td>
+									<td>
+										<x-button icon="o-trash" class="btn-ghost btn-xs text-error" wire:click="removeRow({{ $index }})" />
+									</td>
+								</tr>
+							@endforeach
+						</tbody>
+					</table>
+				</div>
 
-									{{-- 2. 數量：寬度佔 2/12 --}}
-									<div class="lg:col-span-2 text-center">
-										<x-input 
-											type="number" 
-											label="數量" {{-- 手機端會顯示 Label --}}
-											wire:model.live="items.{{ $index }}.quantity" 
-											class="text-center font-bold lg:label-none" 
-										/>
-									</div>
-
-									{{-- 3. 銷售單價：寬度佔 2/12 --}}
-									<div class="lg:col-span-2 text-right">
-										<x-input 
-											label="單價" 
-											wire:model.live="items.{{ $index }}.price" 
-											class="text-right text-blue-700 lg:label-none" 
-										/>
-									</div>
-
-									{{-- 4. 小計：寬度佔 2/12 --}}
-									<div class="lg:col-span-2 text-right px-2">
-										<span class="text-xs text-gray-400 block lg:hidden">小計</span>
-										<span class="font-mono font-bold text-gray-700">
-											{{ number_format(bcmul($items[$index]['price'] ?? 0, $items[$index]['quantity'] ?? 0, 4), 2) }}
-										</span>
-									</div>
-
-								</div>
+				{{-- 手機端同步移除單行掃描按鈕 --}}
+				<div class="md:hidden space-y-3">
+					@foreach($items as $index => $item)
+						<div wire:key="mobile-item-{{ $index }}" class="p-3 border rounded-lg bg-base-100 relative">
+							<x-button icon="o-trash" class="btn-error btn-xs absolute top-1 right-1 rounded-full" wire:click="removeRow({{ $index }})" />
+							<x-choices label="商品" wire:model.live="items.{{ $index }}.product_id" :options="$productOptions" searchable single />
+							<div class="grid grid-cols-2 gap-2 mt-2">
+								<x-input label="單價" wire:model.live.debounce.500ms="items.{{ $index }}.price" />
+								<x-input label="數量" type="number" wire:model.live.debounce.500ms="items.{{ $index }}.quantity" />
 							</div>
-						@endforeach
-					</div>
-
-					<x-slot:actions>
-						<x-button label="追加商品列" icon="o-plus" class="btn-outline btn-sm w-full lg:w-auto" wire:click="addRow" />
-					</x-slot:actions>
-				</x-card>
-            </div>
-
-            {{-- 3. 右側帳務摘要 --}}
-            <div class="lg:col-span-1">
-                <div class="sticky top-6">
-                    <x-card title="帳務摘要" shadow>
-						<div class="space-y-3 mb-4">
-							<x-input label="銷售總額" wire:model.live="subtotal" prefix="NT$" readonly class="bg-base-200" />
 						</div>
-                        <div class="grid grid-cols-2 gap-4">
-                            <div class="space-y-3 p-3 border rounded-lg bg-base-100">
-                                <div class="badge badge-outline badge-info">買家</div>
-                                
-                                <x-input label="買家付運費" wire:model.live="shipping_fee_customer" prefix="NT$" />
-                                <x-input label="賣場折扣" wire:model.live="discount" prefix="NT$" />
-                                <x-input label="平台優惠券" wire:model.live="platform_coupon" prefix="NT$" />
-								<div class="mt-auto pt-2">
-									<x-input 
-										label="買家實付金額" 
-										wire:model.live="customer_total" 
-										prefix="NT$" 
-										readonly 
-										class="bg-transparent border-info text-info font-black" 
-									/>
-								</div>
-                            </div>
+					@endforeach
+				</div>
 
-                            <div class="space-y-3 p-3 border rounded-lg bg-base-100">
-                                <div class="badge badge-outline badge-error">賣家</div>                            
-                                <x-input label="手續費" wire:model.live="platform_fee" prefix="NT$" />
-                                <x-input label="平台代付運費" wire:model.live="shipping_fee_platform" prefix="NT$" />
-                                <x-input label="帳款調整" wire:model.live="order_adjustment" prefix="NT$" />
-                            </div>
-                        </div>
+				<x-slot:actions>
+					<x-button label="手動新增行" icon="o-plus" class="btn-ghost btn-sm w-full border-dashed border-2" wire:click="addRow" />
+				</x-slot:actions>
+			</x-card>
+		</div>
 
-                        <div class="divider"></div>
+        {{-- 3. 右側：結算結帳 (1/4) --}}
+        <div class="lg:col-span-3 space-y-4">
+            <x-card title="結算結帳" shadow class="bg-base-100 border-t-4 border-primary">
+                <div class="space-y-4">
+                    {{-- 第一列：小計 --}}
+                    <div class="flex justify-between items-center p-2 bg-base-200/50 rounded-lg">
+                        <span class="font-bold opacity-70">原始小計</span>
+                        <span class="font-mono text-right">NT$ {{ number_format($subtotal, 0) }}</span>
+                    </div>
 
-                        {{-- 底部：預計淨收益 --}}
-                        <div class="p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl border border-emerald-100">
-                            <div class="flex justify-between items-center">
-                                <span class="text-sm text-emerald-600 font-bold">預計淨進帳 (Net)</span>
-                                <div class="text-2xl font-black text-emerald-700">
-                                    NT$ {{ number_format(max(0, (float)$customer_total - (float)$platform_fee - (float)$shipping_fee_platform + (float)$order_adjustment), 2) }}
-                                </div>
+                    {{-- 第二列：雙欄對照 --}}
+                    <div class="grid grid-cols-2 gap-4 text-xs">
+                        <div class="space-y-3">
+                            <div class="badge badge-info scale-75 text-lg">買家</div>
+                            <x-input label="買家運費" wire:model.live.debounce.500ms="shipping_fee_customer" prefix="+" class="input-sm text-right font-mono" />
+                            <x-input label="賣場折扣" wire:model.live.debounce.500ms="discount" prefix="-" class="input-sm text-right font-mono text-error" />
+                            <x-input label="平台優惠" wire:model.live.debounce.500ms="platform_coupon" prefix="-" class="input-sm text-right font-mono text-error" />
+                            <div class="pt-2 border-t border-dashed">
+                                <div class="text-[10px] opacity-50">買家實付</div>
+                                <div class="text-lg font-bold text-blue-600 font-mono">NT$ {{ number_format($customer_total, 0) }}</div>
                             </div>
                         </div>
+                        <div class="space-y-3">
+                            <div class="badge badge-success scale-75" text-lg>賣家</div>
+                            <x-input label="平台手續費" wire:model.live.debounce.500ms="platform_fee" prefix="-" class="input-sm text-right font-mono text-warning" />
+                            <x-input label="平台代付運費" wire:model.live.debounce.500ms="shipping_fee_platform" prefix="-" class="input-sm text-right font-mono text-warning" />
+                            <x-input label="帳款調整" wire:model.live.debounce.500ms="order_adjustment" prefix="±" class="input-sm text-right font-mono" />
+                        </div>
+                    </div>
 
-                        <x-slot:actions>
-                            <x-button label="取消" :link="route('sales.index')" />
-                            <x-button label="儲存單據" type="submit" class="btn-primary" icon="o-check" spinner="save" />
-                        </x-slot:actions>
-                    </x-card>
+                    <div class="divider my-0"></div>
+
+                    {{-- 第三列：賣家實收 --}}
+                    <div class="p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl border border-emerald-100">
+                        <div class="text-[15px] text-emerald-600 font-bold tracking-widest uppercase mb-1">最終訂單進帳</div>
+                        <div class="text-4xl font-black text-emerald-600 font-mono">
+                            NT$ {{ number_format($final_net_amount, 0) }}
+                        </div>
+                    </div>
+
+                    <x-button label="確認收銀 / 過帳" icon="o-check" class="btn-primary w-full btn-lg" wire:click="save" spinner />
                 </div>
-            </div>
+            </x-card>
         </div>
-    </x-form>
+    </div>
+
+    <x-scanner.modal />
+    <x-scanner.scripts />
 </div>
