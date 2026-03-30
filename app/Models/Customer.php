@@ -26,4 +26,20 @@ class Customer extends Model
         $total = $this->total_spent_sum ?? '0';
 		return bcadd((string)$total, '0', 2);
     }
+	
+	/**
+	 * 統一格式化客戶下拉選單選項
+	 * 只回傳必要的 ID 與名稱，確保資安與效能
+	 */
+	public static function getOptions(): array
+	{
+		return self::where('is_active', true) // 僅抓取啟用的客戶
+			->orderBy('name', 'asc')
+			->get(['id', 'name'])
+			->map(fn($c) => [
+				'id'   => $c->id,
+				'name' => $c->name,
+			])
+			->toArray();
+	}
 }

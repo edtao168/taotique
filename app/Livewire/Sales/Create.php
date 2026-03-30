@@ -80,12 +80,13 @@ class Create extends Component
 		}
 	}
 	
-	public function render()
 	//元件渲染器，負責將資料傳遞給視圖並在每次更新時重新執行。
+	public function render()	
     {
         return view('livewire.sales.create', [
-            'customers' => Customer::all(),
-			'warehouses' => Warehouse::all(),            
+            'channels'   => \App\Models\Shop::getOptions(),
+			'warehouses' => \App\Models\Warehouse::getOptions(),
+			'customers'  => \App\Models\Customer::getOptions(),            
         ]);
     }	
 	

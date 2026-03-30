@@ -20,4 +20,15 @@ class Warehouse extends Model
         // 這裡會尋找 warehouses 表中的 shop_id 欄位
         return $this->belongsTo(Shop::class);
     }
+	
+	// app/Models/Warehouse.php 定義一個靜態方法
+	public static function getOptions(): array
+	{
+		return self::with('shop')
+			->get()
+			->map(fn($w) => [
+				'id'   => $w->id,
+				'name' => "{$w->shop->name} - {$w->name}"
+			])->toArray();
+	}
 }

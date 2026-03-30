@@ -15,8 +15,9 @@
                 <div class="space-y-4">
                     <x-choices label="客戶" wire:model="customer_id" :options="$customers" single />
                     <x-datetime label="銷售日期" wire:model="sold_at" icon="o-calendar" />
-                    <x-select label="管道" wire:model="channel" :options="[['id'=>'store','name'=>'門市'], ['id'=>'shopee','name'=>'蝦皮']]" />
-                    <x-select label="支付" wire:model="payment_method" :options="[['id'=>'cash','name'=>'現金'], ['id'=>'transfer','name'=>'轉帳']]" />
+                    <x-select label="管道" wire:model="channel" :options="$channels" />
+                    <x-select label="支付方式" wire:model="payment_method" :options="config('business.payment_methods')" 
+/>
                     <x-textarea label="備註" wire:model="remark" rows="2" />
                 </div>
             </x-card>
