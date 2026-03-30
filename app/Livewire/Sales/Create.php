@@ -72,6 +72,7 @@ class Create extends Component
                     'subtotal' => $item->subtotal,
                 ];
             }
+			$this->calculateAll();
         } else {
             $this->sold_at = now()->format('Y-m-d');
             $this->invoice_number = 'S' . now()->format('YmdHis');

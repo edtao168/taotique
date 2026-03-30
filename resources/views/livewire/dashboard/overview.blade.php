@@ -195,12 +195,17 @@
 		{{-- 2. 手機端：顯示卡片列表 (md 以下) --}}
 		<div class="md:hidden space-y-3">
 			@forelse($recentSales as $sale)
-				<div class="p-4 border border-gray-100 rounded-xl bg-gray-50/30 space-y-3">
+				{{-- 修正點：加上 cursor-pointer 並使用 wire:navigate 實現全卡片點擊 --}}
+				<div 
+					wire:click="$navigating = true; window.location.href='/sales/{{ $sale->id }}/edit'" 
+					class="p-4 border border-gray-100 rounded-xl bg-gray-50/30 space-y-3 cursor-pointer hover:bg-gray-100 transition-colors active:scale-[0.98]"
+				>
 					<div class="flex justify-between items-start">
 						<div>
 							<div class="text-xs text-gray-400">{{ $sale->created_at->format('Y-m-d H:i') }}</div>
 							<div class="font-bold text-gray-800">{{ $sale->customer->name ?? '未知客戶' }}</div>
 						</div>
+						{{-- 狀態標籤 --}}
 						<span class="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-[10px] font-bold">
 							{{ $sale->status ?? '完成' }}
 						</span>
@@ -219,7 +224,7 @@
 
 					<div class="flex justify-between items-center text-[10px]">
 						<span class="text-gray-400">來源通路：<span class="text-gray-600">{{ $sale->channel }}</span></span>
-						<x-button icon="o-chevron-right" link="/sales/{{ $sale->id }}/edit" class="btn-ghost btn-xs" />
+						<x-icon name="o-chevron-right" class="w-4 h-4 text-gray-300" />
 					</div>
 				</div>
 			@empty
