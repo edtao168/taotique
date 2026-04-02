@@ -129,7 +129,26 @@ class Sale extends Model
 		return $this->hasMany(SaleItem::class); 
 	}
 	
-	public function user(): BelongsTo
+	/**
+     * 通路/營業點
+     */
+    public function shop()
+    {
+        return $this->belongsTo(Shop::class, 'channel', 'id');  // channel 欄位儲存 shop_id
+    }
+	
+	/**
+     * 倉庫
+     */
+    public function warehouse()
+    {
+        return $this->belongsTo(Warehouse::class);
+    }
+	
+	/**
+     * 建立者
+     */
+	 public function user(): BelongsTo
 	{
 		// 假設您的 sales 表中有 user_id 欄位
 		return $this->belongsTo(User::class);

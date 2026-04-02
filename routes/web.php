@@ -15,6 +15,8 @@ use App\Livewire\Purchases\Create as PurchaseCreate;
 use App\Livewire\Customers\Index as CustomerIndex;
 use App\Livewire\Sales\Index as SalesIndex;
 use App\Livewire\Sales\Create as SalesCreate;
+use App\Livewire\Sales\Returns\ReturnCreate;
+use App\Livewire\Sales\Returns\ReturnIndex;
 
 // 庫存與調撥 (Inventories)
 use App\Livewire\Inventories\Index as InventoryIndex;
@@ -60,6 +62,10 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/create', SalesCreate::class)->name('create');        
 		Route::get('/{sale}/edit', SalesCreate::class)->name('edit');
 		Route::get('/customers', CustomerIndex::class)->name('customers.index');
+		Route::prefix('returns')->name('returns.')->group(function () {
+			Route::get('/', ReturnIndex::class)->name('index');
+			Route::get('/create/{sale}', ReturnCreate::class)->name('create');
+		});
     });
 
     // --- 庫存與調撥系統 (Inventories) ---

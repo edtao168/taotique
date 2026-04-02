@@ -63,6 +63,7 @@
 				<x-menu-sub title="銷貨管理系統" icon="o-currency-dollar">
 					<x-menu-item title="新增銷貨單" icon="o-plus-circle" :link="route('sales.create')" />
 					<x-menu-item title="銷售數據概況" icon="o-chart-bar" :link="route('sales.index')" />
+					<x-menu-item title="銷貨退回紀錄" icon="o-arrow-path" :link="route('sales.returns.index')" />
 					<x-menu-item title="客戶管理" icon="o-users" :link="route('sales.customers.index')" />
 					{{-- 業務報表嵌入 --}}
 					<x-menu-item title="銷售業績分析" icon="o-chart-pie" link="#" class="text-sm opacity-80" />

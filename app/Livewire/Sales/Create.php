@@ -4,6 +4,7 @@
 namespace App\Livewire\Sales;
 
 use App\Models\Customer;
+use App\Models\Inventory;
 use App\Models\Warehouse; 
 use App\Models\Product;
 use App\Models\Sale;
@@ -24,6 +25,7 @@ class Create extends Component
     public array $items = []; // 強制轉為 array 確保與 Mary UI 表單兼容
 	public array $productOptions = [];
 	public bool $showScanner = false; // 手機掃碼開關
+	public $warehouse_id = null;
     
     // 費用欄位
     public $channel = 'shopee';
@@ -38,16 +40,20 @@ class Create extends Component
     public $customer_total = '0.0000';
 	public $final_net_amount = '0.0000';
 
-    //元件建構函式，負責初始化資料和狀態，且只執行一次	
+	/**
+     * 元件建構函式，負責初始化資料和狀態，且只執行一次
+     */	
 	public function mount(Sale $sale = null)
 	{
 		$this->sale = ($sale && $sale->exists) ? $sale : new Sale();
 
 		if ($this->sale->exists) {
 			// 1. 填充單據基本資訊
+			$this->invoice_number = $this->sale->invoice_number;
 			$this->customer_id = $this->sale->customer_id;
 			$this->sold_at = $this->sale->sold_at->format('Y-m-d');
 			$this->channel = $this->sale->channel;
+			$this->warehouse_id = $this->sale->warehouse_id; 
 			$this->payment_method = $this->sale->payment_method;
 			$this->platform_fee = $this->sale->platform_fee;
 			$this->shipping_fee_platform = $this->sale->shipping_fee_platform;
@@ -57,6 +63,7 @@ class Create extends Component
 			// 2. 關鍵：轉換明細為陣列，並確保數值為字串以利 bcmath 運算
 			$this->items = $this->sale->items->map(fn($item) => [
 				'product_id' => $item->product_id,
+				'warehouse_id' => $item->warehouse_id,
 				'price' => (string)$item->price,
 				'quantity' => (string)$item->quantity,
 			])->toArray();
@@ -74,6 +81,8 @@ class Create extends Component
 			$this->calculateAll();
 		} else {
 			$this->sold_at = now()->format('Y-m-d');
+			$defaultWarehouse = Warehouse::where('is_active', true)->first();
+            $this->warehouse_id = $defaultWarehouse?->id;
 			if (empty($this->items)) {
 				$this->addRow();
 			}
@@ -88,6 +97,71 @@ class Create extends Component
 			'warehouses' => \App\Models\Warehouse::getOptions(),
 			'customers'  => \App\Models\Customer::getOptions(),            
         ]);
+    }	
+	
+    /**
+     * 修正：手動新增行時，預設帶入第一個有效倉庫
+     */
+    public function addRow()
+    {
+        $defaultWarehouseId = Warehouse::where('is_active', true)->first()?->id ?? 1;
+        
+        $this->items[] = [
+            'product_id' => null,
+            'warehouse_id' => $defaultWarehouseId, // 確保畫面上能顯示選中的倉庫
+            'quantity' => '1.0000',
+            'price' => '0.0000'
+        ];
+    }
+
+    /**
+     * 修正：儲存邏輯
+     * 考慮到您在 Index.php 寫了帶有 Warehouse 的交易邏輯，
+     * 建議將核心扣庫存邏輯封裝在 Sale Model 的 createWithCalculations 中。
+     */
+    public function save()
+    {
+        $this->validate([
+            'customer_id' => 'required',
+            'sold_at'     => 'required|date',
+            'items.*.product_id' => 'required',
+            'items.*.warehouse_id' => 'required|exists:warehouses,id', // 驗證倉庫
+            'items.*.quantity'   => 'required|numeric|min:0.0001',
+            'items.*.price'      => 'required|numeric',
+        ]);
+
+        $allData = [
+            'customer_id'           => $this->customer_id,
+            'invoice_number'        => $this->invoice_number,
+            'channel'               => $this->channel,
+			'warehouse_id'          => $this->warehouse_id,
+            'payment_method'        => $this->payment_method,
+            'subtotal'              => $this->subtotal,
+            'discount'              => $this->discount,
+            'platform_coupon'       => $this->platform_coupon,
+            'shipping_fee_customer' => $this->shipping_fee_customer,
+            'shipping_fee_platform' => $this->shipping_fee_platform,
+            'platform_fee'          => $this->platform_fee,
+            'order_adjustment'      => $this->order_adjustment,
+            'customer_total'        => $this->customer_total,
+            'final_net_amount'      => $this->final_net_amount,
+            'sold_at'               => $this->sold_at,
+            //'shop_id'              => 1, // 多店預留
+        ];
+
+        try {
+            // 建議將 DB::transaction 與 lockForUpdate 實作在 Model 層
+            // 這裡呼叫 Model 方法
+            if ($this->sale->exists) {
+                $this->sale->updateWithCalculations($allData, $this->items);
+                $this->success('訂單已更新', redirectTo: route('sales.index'));
+            } else {
+                Sale::createWithCalculations($allData, $this->items);
+                $this->success('新訂單已建立', redirectTo: route('sales.index'));
+            }
+        } catch (\Exception $e) {
+            $this->error($e->getMessage());
+        }
     }	
 	
 	/**
@@ -144,16 +218,6 @@ class Create extends Component
         $this->final_net_amount = $net;
     }
 	
-    public function addRow()
-    {
-        $this->items[] = [
-            'product_id' => null,
-            'warehouse_id' => Warehouse::first()?->id ?? 1,
-            'quantity' => '1.0000',
-			'price' => '0.0000'
-        ];
-    }
-
 	public function removeRow($index)
     {
         unset($this->items[$index]);
@@ -174,46 +238,6 @@ class Create extends Component
             $this->success("已加入: {$product->name}");
         }
     }
-
-    public function save()
-    {
-        // 此處完全沿用您原始代碼的 validate 與 try-catch 邏輯
-        $this->validate([
-            'customer_id' => 'required',
-            'sold_at'     => 'required|date',
-            'items.*.product_id' => 'required',
-            'items.*.quantity'   => 'required|numeric|min:1',
-            'items.*.price'      => 'required|numeric',
-        ]);
-
-        $allData = [
-            'customer_id'           => $this->customer_id,
-            'invoice_number'        => $this->invoice_number,
-            'channel'               => $this->channel,
-            'payment_method'        => $this->payment_method,
-            'subtotal'              => $this->subtotal,
-            'discount'              => $this->discount,
-            'platform_coupon'       => $this->platform_coupon,
-            'shipping_fee_customer' => $this->shipping_fee_customer,
-            'shipping_fee_platform' => $this->shipping_fee_platform,
-            'platform_fee'          => $this->platform_fee,
-            'order_adjustment'      => $this->order_adjustment,
-            'sold_at'               => $this->sold_at,
-        ];
-
-        try {
-            if ($this->sale->exists) {
-                $this->sale->updateWithCalculations($allData, $this->items);
-                $this->success('訂單已更新', redirectTo: route('sales.index'));
-            } else {
-                Sale::createWithCalculations($allData, $this->items);
-                $this->success('新訂單已建立', redirectTo: route('sales.index'));
-            }
-        } catch (\Exception $e) {
-            $this->error($e->getMessage());
-        }
-    }
-    
 	
 	/**
      * 🔧 實現掃描回調
@@ -228,10 +252,10 @@ class Create extends Component
             return;
         }
 
-        // 獲取當前庫存（考慮 store_id 預設為 1）
+        // 獲取當前庫存（考慮 shop_id 預設為 1）
         $currentStock = DB::table('inventories')
             ->where('product_id', $product->id)
-            ->where('store_id', 1)
+            ->where('shop_id', 1)
             ->sum('quantity');
 
         // 檢查是否已存在於 items 中

@@ -3,9 +3,13 @@
 
 namespace App\Livewire\Sales;
 
-use Livewire\Component;
+use App\Models\Inventory;
+use App\Models\Product;
 use App\Models\Sale;
+use App\Models\Warehouse;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
+use Livewire\Component;
 use Livewire\WithPagination;
 use Mary\Traits\Toast;
 
@@ -16,11 +20,47 @@ class Index extends Component
     public string $search = '';
     public bool $drawer = false;
     public ?Sale $selectedSale = null;
+	public $selectedWarehouse = null;
+    public $warehouses = [];
 
     // 篩選條件
     public $dateRange = 'month'; 
 
     /**
+	 * 元件初始化
+	 */
+	public function mount()
+	{
+		// 1. 載入所有啟用的倉庫供篩選器或彈窗使用
+		$this->warehouses = Warehouse::where('is_active', true)
+			->orderBy('id', 'asc')
+			->get();
+
+		// 2. 預設篩選邏輯：若無特定設定，預設選取第一個倉庫（或不限）
+		// 根據您的業務需求，初期預設 store_id 為 1，此處亦可預設 warehouse_id
+		$this->selectedWarehouse = $this->selectedWarehouse ?? null;
+
+		// 3. 初始化日期篩選範圍
+		if (empty($this->dateRange)) {
+			$this->dateRange = 'month'; 
+		}
+
+		// 4. 如果是從特定銷售單跳轉過來（選填）
+		// 確保 selectedSale 結構完整以供 Drawer 渲染
+		if ($this->selectedSale) {
+			$this->selectedWarehouse = $this->selectedSale->warehouse_id;
+		}
+	}
+	
+	/**
+	 * 處理倉庫篩選異動
+	 */
+	public function updatedSelectedWarehouse($value)
+	{
+		$this->resetPage(); // 切換倉庫時重置分頁
+	}
+	
+	/**
      * 觸發詳情抽屜
      */
     public function showDetail($id)
@@ -39,7 +79,7 @@ class Index extends Component
         $this->drawer = false;
         $this->success('訂單已刪除，庫存已回滾');
     }
-
+		
     public function render()
     {
         // --- 1. 統計數據邏輯 ---
@@ -55,7 +95,7 @@ class Index extends Component
         $monthProfit = Sale::whereBetween('sold_at', [$startOfMonth, $endOfMonth])->get()->sum('final_net_amount');
 
         // --- 2. 銷售清單查詢 (合併原 SalesIndex 邏輯) ---
-        $sales = Sale::with(['customer', 'user'])
+        $sales = Sale::with(['customer', 'user', 'shop'])
             ->when($this->search, function ($query) {
                 $query->where('invoice_number', 'like', "%{$this->search}%")
                       ->orWhereHas('customer', fn($q) => $q->where('name', 'like', "%{$this->search}%"));
@@ -65,7 +105,7 @@ class Index extends Component
 
         $headers = [
             ['key' => 'invoice_number', 'label' => '訂單單號', 'class' => 'font-mono'],
-            ['key' => 'channel', 'label' => '通路', 'class' => 'w-24'],
+            ['key' => 'shop.name', 'label' => '通路', 'class' => 'w-40'],
             ['key' => 'customer.name', 'label' => '客戶'],
             ['key' => 'customer_total', 'label' => '應收總額', 'textAlign' => 'text-right'],
             ['key' => 'sold_at', 'label' => '日期', 'class' => 'w-32'],

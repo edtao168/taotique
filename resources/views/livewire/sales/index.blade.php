@@ -91,7 +91,7 @@
 					<div>
 						<p class="text-[10px] text-gray-400">付款方式</p>
 						<x-badge :value="$selectedSale->payment_method" class="badge-ghost badge-sm font-bold" />
-					</div>
+					</div>					
 				</div>
 			</div>
 			
@@ -105,9 +105,7 @@
 					<p class="text-[10px] text-emerald-600 mb-1 font-bold">預計單據淨利</p>
 					<p class="text-xl font-black text-emerald-800 font-mono">NT$ {{ number_format($selectedSale->final_net_amount, 0) }}</p>
 				</div>
-			</div>
-
-			
+			</div>			
 
 			{{-- 3. 買家細目與賣家支出 (並排顯示) --}}
 			<div class="grid grid-cols-2 gap-3">
@@ -170,7 +168,7 @@
 
 				{{-- PC 端表格 --}}
 				<div class="hidden lg:block">
-					<x-table :headers="[['key' => 'product.name', 'label' => '品名'], ['key' => 'quantity', 'label' => '數量', 'class' => 'text-right'], ['key' => 'subtotal', 'label' => '小計', 'class' => 'text-right font-mono']]" :rows="$selectedSale->items" no-hover>
+					<x-table :headers="[['key' => 'product.name', 'label' => '品名'], ['key' => 'warehouse_id', 'label' => '庫別', 'class' => 'text-right'], ['key' => 'quantity', 'label' => '數量', 'class' => 'text-right'], ['key' => 'subtotal', 'label' => '小計', 'class' => 'text-right font-mono']]" :rows="$selectedSale->items" no-hover>
 						@scope('cell_product.name', $item)
 							<div class="flex flex-col">
 								<span class="font-medium text-sm">{{ $item->product->full_display_name }}</span>
@@ -199,6 +197,12 @@
 						icon="o-pencil" 
 						:link="route('sales.edit', $selectedSale->id)" 
 						class="btn-primary flex-1 text-white" 
+					/>
+					<x-button 
+						label="退貨" 
+						icon="o-arrow-path" 
+						:link="route('sales.returns.create', ['sale' => $selectedSale->id])"
+						class="btn-outline-dark flex-1"	
 					/>
 				</div>
 			</x-slot:actions>
