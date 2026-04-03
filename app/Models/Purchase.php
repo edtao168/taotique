@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\DB;
 
 class Purchase extends Model
@@ -12,8 +14,16 @@ class Purchase extends Model
         'currency', 'exchange_rate', 'total_foreign', 'total_twd', 
         'purchased_at', 'remark'
     ];
-
-    public function items() { return $this->hasMany(PurchaseItem::class); }
+	
+	protected function casts(): array
+    {
+        return [
+            'purchased_at' => 'datetime', // 強制轉換為 Carbon 物件
+            'exchange_rate' => 'decimal:4',
+            'total_twd' => 'decimal:4',
+            'total_foreign' => 'decimal:4',
+        ];
+    }    
 
     /**
      * 執行採購單入庫：處理明細、換算匯率、更新庫存與加權成本
@@ -65,4 +75,36 @@ class Purchase extends Model
             ]);
         });
     }
+	/**
+     * 明細
+     */	 
+	public function items(): HasMany
+	{
+		return $this->hasMany(PurchaseItem::class); 
+	}
+	
+	/**
+     * 供應商
+     */
+	public function supplier(): BelongsTo
+	{		
+		return $this->belongsTo(Supplier::class);
+	}
+	
+	/**
+     * 倉庫
+     */
+    public function warehouse(): BelongsTo
+    {
+        return $this->belongsTo(Warehouse::class);
+    }
+	
+	/**
+     * 建立者
+     */
+	 public function user(): BelongsTo
+	{
+		// 假設您的 sales 表中有 user_id 欄位
+		return $this->belongsTo(User::class);
+	}
 }

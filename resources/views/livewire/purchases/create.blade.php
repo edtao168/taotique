@@ -1,8 +1,12 @@
 {{-- 檔案路徑：resources/views/livewire/purchases/create.blade.php --}}
 <div>
-    <x-header title="新增採購單" separator progress-indicator>
+    <x-header :title="$isEdit ? '修改採購單 - ' . $purchase->purchase_number : '新增採購單'" separator progress-indicator>
         <x-slot:actions>
-            <x-button label="返回列表" icon="o-arrow-left" link="/purchases" />
+            <x-button label="返回列表" icon="o-arrow-left" :link="route('purchases.index')" />
+            {{-- 上方也加入動作按鈕 --}}
+            @if($isEdit)
+                <x-button label="退貨申請" icon="o-arrow-path" :link="route('purchases.returns.create', $purchase->id)" class="btn-outline btn-sm" />
+            @endif
             <x-button label="儲存入庫" icon="o-check" class="btn-primary" wire:click="save" spinner />
         </x-slot:actions>
     </x-header>
@@ -19,7 +23,7 @@
         </div>
 
         {{-- 右側：採購明細 --}}
-        <div class="lg:col-span-3">
+        <div class="lg:col-span-3 pb-24 lg:pb-0">
             <x-card title="商品明細" shadow separator>
                 <div class="hidden lg:grid grid-cols-12 gap-4 mb-2 px-4 text-sm font-bold opacity-60">
                     <div class="col-span-6">商品選擇與確認</div>
@@ -82,6 +86,20 @@
 
                 <x-slot:actions>
                     <x-button label="追加商品列" icon="o-plus" class="btn-outline btn-sm w-full" wire:click="addRow" />
+                </x-slot:actions>
+				
+				<x-slot:actions>
+                    <div class="flex flex-col w-full gap-2">
+                        <x-button label="追加商品列" icon="o-plus" class="btn-outline btn-sm w-full" wire:click="addRow" />
+                        
+                        {{-- 底部動作列 (手機端特別有用) --}}
+                        @if($isEdit)
+                        <div class="grid grid-cols-2 gap-2 mt-4 lg:hidden">
+                             <x-button label="退貨" icon="o-arrow-path" :link="route('purchases.returns.create', $purchase->id)" class="btn-outline" />
+                             <x-button label="儲存修改" icon="o-check" class="btn-primary" wire:click="save" />
+                        </div>
+                        @endif
+                    </div>
                 </x-slot:actions>
             </x-card>
         </div>

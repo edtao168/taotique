@@ -53,6 +53,7 @@ Route::middleware(['auth'])->group(function () {
 		Route::get('/suppliers', SupplierIndex::class)->name('suppliers.index');
 		Route::get('/', PurchaseIndex::class)->name('index');
 		Route::get('/create', PurchaseCreate::class)->name('create');
+		Route::get('/{purchase}/edit', PurchaseCreate::class)->name('edit');
     });
 
     // --- 銷售模組 (Sales) ---

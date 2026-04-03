@@ -16,7 +16,10 @@ class Create extends Component
 {
     use HasBarcodeScanner, HasProductSearch, Toast;
 
-    public $supplier_id;
+    public ?Purchase $purchase = null;
+    public bool $isEdit = false;
+	
+	public $supplier_id;
     public $purchased_at;
     public $currency = 'CNY';
     public $exchange_rate = '4.5';
@@ -24,11 +27,27 @@ class Create extends Component
     public array $items = [];
     public array $productOptions = [];
 
-    public function mount()
+    public function mount(?Purchase $purchase = null)
     {
-        $this->purchased_at = now()->format('Y-m-d');
-        $this->addRow();
-        $this->productOptions = $this->search();
+        if ($purchase && $purchase->exists) {
+            $this->isEdit = true;
+            $this->purchase = $purchase;
+            $this->supplier_id = $purchase->supplier_id;
+            $this->purchased_at = $purchase->purchased_at->format('Y-m-d');
+            $this->currency = $purchase->currency;
+            $this->exchange_rate = $purchase->exchange_rate;
+            $this->remark = $purchase->remark;
+            
+            $this->items = $purchase->items->map(fn($item) => [
+                'product_id' => $item->product_id,
+                'warehouse_id' => $item->warehouse_id,
+                'quantity' => (float)$item->quantity,
+                'foreign_price' => (float)$item->foreign_price,
+            ])->toArray();
+        } else {
+            $this->purchased_at = now()->format('Y-m-d');
+            $this->addRow();
+        }
     }
     
     public function updated($property, $value)
@@ -88,29 +107,47 @@ class Create extends Component
         $this->validate([
             'supplier_id' => 'required',
             'purchased_at' => 'required|date',
+            'items.*.product_id' => 'required',
             'items.*.quantity' => 'required|numeric|min:0.01',
-            'items.*.foreign_price' => 'required|numeric',
         ]);
 
-        $validItems = array_filter($this->items, fn($item) => !empty($item['product_id']) && $item['quantity'] > 0);
-        if (empty($validItems)) {
-            $this->error('請至少新增一個有效商品');
-            return;
-        }
+        DB::transaction(function () {
+            if ($this->isEdit) {
+                // 1. 修改模式：精確沖銷舊明細對應的庫存
+                foreach ($this->purchase->items as $oldItem) {
+                    Inventory::where('product_id', $oldItem->product_id)
+                        ->where('warehouse_id', $oldItem->warehouse_id)
+                        ->where('purchase_item_id', $oldItem->id)
+                        ->delete();
+                }
+                $this->purchase->items()->delete();
+                
+                $this->purchase->update([
+                    'supplier_id' => $this->supplier_id,
+                    'exchange_rate' => $this->exchange_rate,
+                    'purchased_at' => $this->purchased_at,
+                    'remark' => $this->remark,
+                ]);
+                $target = $this->purchase;
+            } else {
+                // 2. 新增模式
+                $target = Purchase::create([
+                    'purchase_number' => 'PO' . now()->format('YmdHis'),
+                    'supplier_id' => $this->supplier_id,
+                    'user_id' => auth()->id(),
+                    'currency' => $this->currency,
+                    'exchange_rate' => $this->exchange_rate,
+                    'purchased_at' => $this->purchased_at,
+                    'remark' => $this->remark,
+                    'store_id' => 1,
+                ]);
+            }
 
-        $purchase = Purchase::create([
-            'purchase_number' => 'PO' . now()->format('YmdHis'),
-            'supplier_id' => $this->supplier_id,
-            'user_id' => auth()->id(),
-            'currency' => $this->currency,
-            'exchange_rate' => $this->exchange_rate,
-            'purchased_at' => $this->purchased_at,
-            'remark' => $this->remark,
-        ]);
+            // 3. 呼叫 Model 層的進貨處理程序 (處理加權平均成本與新庫存寫入)
+            $target->processInbound($this->items);
+        });
 
-        $purchase->processInbound($validItems);
-
-        $this->success('採購單已入庫，商品成本已自動更新', redirectTo: route('purchases.index'));
+        $this->success($this->isEdit ? '採購單修改完成' : '採購入庫成功', redirectTo: route('purchases.index'));
     }
     
     public function addRow()

@@ -6,95 +6,115 @@
         </x-slot:middle>
         <x-slot:actions>
             <x-button label="回首頁" icon="o-home" :link="route('dashboard')" />
-            <x-button label="新增採購" icon="o-plus" link="/purchases/create" class="btn-primary" />
+            <x-button label="新增採購" icon="o-plus" :link="route('purchases.create')" class="btn-primary" />
         </x-slot:actions>
     </x-header>
 
-    {{-- --- PC 端表格模式 (LG 以上顯示) --- --}}
+    {{-- PC 端表格 --}}
     <div class="hidden lg:block">
         <x-card shadow>
-            <x-table :headers="$headers" :rows="$purchases" with-pagination>
+            <x-table :headers="$headers" :rows="$purchases" @row-click="$wire.showDetail($event.detail.id)" class="cursor-pointer" with-pagination>
                 @scope('cell_purchase_number', $purchase)
-                    <span class="font-mono font-bold">{{ $purchase->purchase_number }}</span>
+                    <x-badge :value="$purchase->purchase_number" class="badge-neutral font-mono" />
                 @endscope
 
                 @scope('cell_supplier_name', $purchase)
                     {{ $purchase->supplier?->name ?? 'N/A' }}
                 @endscope
 
-                @scope('cell_total_foreign', $purchase)
-                    <div class="text-right">
-                        {{ $purchase->currency }} {{ number_format($purchase->total_foreign, 2) }}
-                        <div class="text-[10px] text-gray-400">匯率: {{ $purchase->exchange_rate }}</div>
-                    </div>
-                @endscope
-
                 @scope('cell_total_twd', $purchase)
-                    <div class="text-right font-bold text-blue-700">
-                        NT$ {{ number_format($purchase->total_twd, 0) }}
-                    </div>
-                @endscope
-
-                @scope('actions', $purchase)
-                    <div class="flex gap-2 justify-end">
-                        <x-button icon="o-eye" link="{{ route('purchases.show', $purchase->id) }}" class="btn-ghost btn-sm text-blue-500" />
-                        <x-button icon="o-trash" wire:click="confirmDelete({{ $purchase->id }})" class="btn-ghost btn-sm text-red-500" />
-                    </div>
+                    <span class="font-bold text-blue-700">NT$ {{$purchase->total_twd }}</span>
                 @endscope
             </x-table>
         </x-card>
     </div>
 
-    {{-- --- 手機端卡片模式 (LG 以下顯示) --- --}}
+    {{-- 手機端卡片 --}}
     <div class="block lg:hidden space-y-3">
         @foreach($purchases as $purchase)
-            <x-card class="shadow-sm border border-base-200">
-                <div class="flex flex-col gap-2">
-                    {{-- 頂部：單號與日期 --}}
-                    <div class="flex justify-between items-start border-b border-base-200 pb-2">
-                        <div>
-                            <p class="text-[10px] text-gray-500 uppercase tracking-tighter">Purchase No.</p>
-                            <p class="font-mono font-bold text-sm">{{ $purchase->purchase_number }}</p>
-                        </div>
-                        <div class="text-right">
-                            <p class="text-[10px] text-gray-500">採購日期</p>
-                            <p class="text-xs">{{ $purchase->purchased_at->format('Y-m-d') }}</p>
-                        </div>
+            <div class="border rounded-xl p-4 bg-base-100 active:bg-base-200 transition-colors shadow-sm" @click="$wire.showDetail({{ $purchase->id }})">
+                <div class="flex justify-between items-start mb-2">
+                    <x-badge :value="$purchase->purchase_number" class="badge-neutral badge-sm font-mono" />
+                    <span class="text-[10px] text-gray-500">{{ $purchase->purchased_at->format('Y-m-d') }}</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <div>
+                        <p class="font-bold text-base">{{ $purchase->supplier?->name ?? '未知供應商' }}</p>
+                        <p class="text-xs text-gray-400">{{ $purchase->currency }} @ {{ $purchase->exchange_rate }}</p>
                     </div>
-
-                    {{-- 中部：供應商與金額 --}}
-                    <div class="flex justify-between items-center py-1">
-                        <div class="flex items-center gap-2">
-                            <x-icon name="o-user" class="w-4 h-4 text-gray-400" />
-                            <span class="font-medium">{{ $purchase->supplier?->name ?? '未知供應商' }}</span>
-                        </div>
-                        <div class="text-right">
-                            <span class="text-blue-700 font-extrabold text-lg">
-                                NT$ {{ number_format($purchase->total_twd, 0) }}
-                            </span>
-                        </div>
-                    </div>
-
-                    {{-- 底部：外幣詳細與操作 --}}
-                    <div class="flex justify-between items-end bg-base-50 p-2 rounded-lg">
-                        <div class="text-[10px] text-gray-500">
-                            外幣總計: {{ $purchase->currency }} {{ number_format($purchase->total_foreign, 2) }} <br>
-                            匯率快照: {{ $purchase->exchange_rate }}
-                        </div>
-                        <div class="flex gap-1">
-                            <x-button icon="o-eye" label="查看" link="{{ route('purchases.show', $purchase->id) }}" class="btn-ghost btn-xs text-blue-500" />
-                            <x-button icon="o-trash" label="刪除" wire:click="confirmDelete({{ $purchase->id }})" class="btn-ghost btn-xs text-red-500" />
-                        </div>
+                    <div class="text-right">
+                        <p class="text-blue-700 font-black text-lg">NT$ {{ number_format($purchase->total_twd, 0) }}</p>
                     </div>
                 </div>
-            </x-card>
+            </div>
         @endforeach
-
-        {{-- 手機端分頁 --}}
-        <div class="py-4">
+        <div class="mt-4">
             {{ $purchases->links(data: ['scrollTo' => false]) }}
         </div>
     </div>
+
+    {{-- 採購詳情 Drawer --}}
+    <x-drawer wire:model="drawer" title="採購單據詳情" right separator with-close-button class="w-11/12 lg:w-1/3">
+        @if($selectedPurchase)
+            <div class="space-y-6 pb-20">
+                {{-- 基本資訊 --}}
+                <div class="bg-base-100 border rounded-xl p-4 shadow-sm">
+                    <div class="grid grid-cols-2 gap-y-4 text-sm">
+                        <div>
+                            <p class="text-[10px] text-gray-400 font-bold">採購日期</p>
+                            <p class="font-medium">{{ $selectedPurchase->purchased_at->format('Y-m-d') }}</p>
+                        </div>
+                        <div>
+                            <p class="text-[10px] text-gray-400 font-bold">供應商</p>
+                            <p class="font-medium text-blue-700">{{ $selectedPurchase->supplier?->name }}</p>
+                        </div>
+                        <div>
+                            <p class="text-[10px] text-gray-400 font-bold">幣別/匯率</p>
+                            <p class="text-sm font-mono">{{ $selectedPurchase->currency }} / {{ $selectedPurchase->exchange_rate }}</p>
+                        </div>
+                        <div>
+                            <p class="text-[10px] text-gray-400 font-bold">經辦人</p>
+                            <p class="text-sm">{{ $selectedPurchase->user?->name }}</p>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- 總額統計 --}}
+                <div class="p-4 border rounded-xl bg-blue-50/50">
+                    <p class="text-[10px] text-blue-600 mb-1 font-bold">採購總金額 (TWD)</p>
+                    <p class="text-2xl font-black text-blue-800 font-mono">NT$ {{ number_format($selectedPurchase->total_twd, 0) }}</p>
+                </div>
+
+                {{-- 商品明細 --}}
+                <div>
+                    <p class="text-sm font-bold border-l-4 border-primary pl-2 mb-3">入庫明細</p>
+                    <div class="space-y-2">
+                        @foreach($selectedPurchase->items as $item)
+                            <div class="p-3 border rounded-lg bg-base-50 text-sm">
+                                <div class="flex justify-between">
+                                    <span class="font-bold">{{ $item->product->name }}</span>
+                                    <span class="font-mono">x{{ (int)$item->quantity }}</span>
+                                </div>
+                                <div class="flex justify-between mt-1 text-[11px] text-gray-500">
+                                    <span>外幣: {{ number_format($item->foreign_price, 2) }}</span>
+                                    <span class="text-blue-600 font-bold">NT$ {{ number_format($item->subtotal_twd, 0) }}</span>
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+            </div>
+
+            <x-slot:actions>
+                <div class="flex gap-3 w-full border-t pt-4 bg-base-100">
+                    <x-button label="刪除" icon="o-trash" wire:click="confirmDelete({{ $selectedPurchase->id }})" class="btn-error btn-outline flex-1" />
+                    <x-button label="修改" icon="o-pencil" :link="route('purchases.edit', $selectedPurchase->id)" class="btn-primary flex-1 text-white" />
+                    <x-button label="退貨" icon="o-arrow-path" class="btn-outline flex-1" />
+                </div>
+            </x-slot:actions>
+        @endif
+    </x-drawer>
+	{{-- <x-button label="退貨" icon="o-arrow-path" :link="route('purchases.returns.create', ['purchase' => $selectedPurchase->id])" class="btn-outline flex-1" /> --}}
 
     {{-- 刪除確認 Modal --}}
     <x-modal wire:model="deleteModal" title="確認刪除採購單？" separator>

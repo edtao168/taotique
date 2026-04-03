@@ -2,7 +2,11 @@
 
 namespace App\Livewire\Purchases;
 
+use App\Models\Inventory;
+use App\Models\Product;
 use App\Models\Purchase;
+use App\Models\Warehouse;
+use Illuminate\Support\Facades\DB;
 use Livewire\Component;
 use Livewire\WithPagination;
 use Mary\Traits\Toast;
@@ -12,6 +16,7 @@ class Index extends Component
     use WithPagination, Toast;
 
     public string $search = '';
+	public bool $drawer = false;	
     public array $sortBy = ['column' => 'purchased_at', 'direction' => 'desc'];
 	public bool $deleteModal = false;
     public ?Purchase $selectedPurchase = null;
@@ -29,23 +34,31 @@ class Index extends Component
     {
         if (!$this->selectedPurchase) return;
 
-        // 如果使用者勾選了同步扣除
-        if ($this->shouldSyncInventory) {
-            // 找到該採購單對應的所有庫存紀錄並刪除
-            Inventory::where('purchase_id', $this->selectedPurchase->id)->delete();
-        }
+        DB::transaction(function () {
+            if ($this->shouldSyncInventory) {
+                // 根據 product_id + warehouse_id 並鎖定採購單關聯進行刪除
+                foreach ($this->selectedPurchase->items as $item) {
+                    Inventory::where('product_id', $item->product_id)
+                        ->where('warehouse_id', $item->warehouse_id)
+                        ->where('purchase_item_id', $item->id) // 建議保留此關聯以精確刪除該批次
+                        ->delete();
+                }
+            }
 
-        // 刪除採購單本身
-        $this->selectedPurchase->delete();
+            // 刪除明細與主表 (受資料庫級聯或手動刪除)
+            $this->selectedPurchase->items()->delete();
+            $this->selectedPurchase->delete();
+        });
 
         $this->deleteModal = false;
-        $this->success('採購單已刪除' . ($this->shouldSyncInventory ? '，庫存已同步扣除。' : '。'));
+        $this->drawer = false;
+        $this->selectedPurchase = null;
+        $this->success('採購單已刪除，相關庫存已同步更新。');
     }
 
     public function render()
     {
-        $headers = [
-            ['key' => 'id', 'label' => '#', 'class' => 'w-1'],
+        $headers = [            
             ['key' => 'purchase_number', 'label' => '單號', 'class' => 'font-semibold'],
             ['key' => 'supplier_name', 'label' => '供應商', 'sortBy' => 'supplier_id'],
             ['key' => 'purchased_at', 'label' => '日期'],
@@ -66,5 +79,29 @@ class Index extends Component
             'purchases' => $purchases,
             'headers' => $headers
         ]);
+    }
+	
+	/**
+     * 顯示採購單詳情
+     * 由 Blade 中的 @row-click 或手機端 @click 觸發
+     */
+    public function showDetail(int $id): void
+    {
+        // 載入採購單並預載入關聯資料，確保 Drawer 顯示時不會產生 N+1 查詢
+        $this->selectedPurchase = Purchase::with(['supplier', 'items.product', 'user'])
+            ->findOrFail($id);
+
+        $this->drawer = true;
+    }
+
+    /**
+     * 重置選中的資料（當關閉 Drawer 時可以選擇性呼叫）
+     */
+    public function updatedDrawer($value): void
+    {
+        if (!$value) {
+            // 當 Drawer 關閉時，不一定要清除資料，保留可增加流暢感，
+            // 但若有安全性考量可在此清除：$this->selectedPurchase = null;
+        }
     }
 }
