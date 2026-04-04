@@ -1,6 +1,6 @@
 {{-- 檔案路徑：resources/views/livewire/sales/return-create.blade.php --}}
 
-<div class="pb-20 space-y-4">
+<div class="pb-80 space-y-4">
     {{-- 1. 原單資訊摘要 (手機端隱藏部分次要資訊) --}}
     <x-card shadow class="bg-base-200/50">
         <div class="flex justify-between items-center">
@@ -64,77 +64,77 @@
 	{{-- 「商品退回清單」 --}}
 	<x-card title="退回商品明細" separator class="mt-4">
 		@if($sale->items->isEmpty())
-        <div class="py-10 text-center text-gray-400">
-            <x-icon name="o-shopping-cart" class="w-10 h-10 mb-2 opacity-20" />
-            <p>此訂單無商品</p>
-        </div>
-    @else
-        <div class="hidden md:block">
-            <x-table :headers="[
-                ['key' => 'product_name', 'label' => '商品名稱'],
-                ['key' => 'quantity', 'label' => '原購買數量', 'class' => 'text-right'],
-                ['key' => 'unit_price', 'label' => '單價', 'class' => 'text-right'],
-                ['key' => 'subtotal', 'label' => '小計', 'class' => 'text-right'],
-                ['key' => 'action', 'label' => '操作', 'class' => 'text-center']
-            ]" :rows="$sale->items">
-                @scope('cell_product_name', $item)
-                    <div>
-                        <div class="font-medium">{{ $item->product->name ?? '未知商品' }}</div>
-                        <div class="text-xs text-gray-400">SKU: {{ $item->product->sku ?? '' }}</div>
-                    </div>
-                @endscope
-                @scope('cell_quantity', $item)
-                    <span class="font-mono">{{ number_format($item->quantity, 2) }}</span>
-                @endscope
-                @scope('cell_unit_price', $item)
-                    @php
-                        $price = $item->unit_price ?? $item->price ?? 0;
-                    @endphp
-                    <span class="font-mono">NT$ {{ number_format($price, 2) }}</span>
-                @endscope
-                @scope('cell_subtotal', $item)
-                    @php
-                        $price = $item->unit_price ?? $item->price ?? 0;
-                        $subtotal = $item->quantity * $price;
-                    @endphp
-                    <span class="font-mono font-bold">NT$ {{ number_format($subtotal, 2) }}</span>
-                @endscope
-                @scope('cell_action', $item)
-                    <x-button 
-                        label="退貨" 
-                        icon="o-arrow-path" 
-                        wire:click="addProductToReturn({{ $item->product_id }})"
-                        class="btn-xs btn-primary"
-                    />
-                @endscope
-            </x-table>
-        </div>
-        
-        {{-- 手機端顯示 --}}
-        <div class="md:hidden space-y-2">
-            @foreach($sale->items as $item)
-                @php
-                    $price = $item->unit_price ?? $item->price ?? 0;
-                    $subtotal = $item->quantity * $price;
-                @endphp
-                <div class="p-3 border rounded-lg bg-base-100" 
-                     wire:click="addProductToReturn({{ $item->product_id }})"
-                     style="cursor: pointer;">
-                    <div class="flex justify-between items-start mb-2">
-                        <div class="flex-1">
-                            <div class="font-bold text-sm">{{ $item->product->name ?? '未知商品' }}</div>
-                            <div class="text-xs text-gray-400">SKU: {{ $item->product->sku ?? '' }}</div>
-                        </div>
-                        <x-badge value="x{{ number_format($item->quantity, 0) }}" class="badge-neutral" />
-                    </div>
-                    <div class="flex justify-between text-xs">
-                        <span>單價: NT$ {{ number_format($price, 2) }}</span>
-                        <span class="font-bold">小計: NT$ {{ number_format($subtotal, 2) }}</span>
-                    </div>
-                </div>
-            @endforeach
-        </div>
-    @endif
+			<div class="py-10 text-center text-gray-400">
+				<x-icon name="o-shopping-cart" class="w-10 h-10 mb-2 opacity-20" />
+				<p>此訂單無商品</p>
+			</div>
+		@else
+			<div class="hidden md:block">
+				<x-table :headers="[
+					['key' => 'product_name', 'label' => '商品名稱'],
+					['key' => 'quantity', 'label' => '原購買數量', 'class' => 'text-right'],
+					['key' => 'unit_price', 'label' => '單價', 'class' => 'text-right'],
+					['key' => 'subtotal', 'label' => '小計', 'class' => 'text-right'],
+					['key' => 'action', 'label' => '操作', 'class' => 'text-center']
+				]" :rows="$sale->items">
+					@scope('cell_product_name', $item)
+						<div>
+							<div class="font-medium">{{ $item->product->name ?? '未知商品' }}</div>
+							<div class="text-xs text-gray-400">SKU: {{ $item->product->sku ?? '' }}</div>
+						</div>
+					@endscope
+					@scope('cell_quantity', $item)
+						<span class="font-mono">{{ number_format($item->quantity, 2) }}</span>
+					@endscope
+					@scope('cell_unit_price', $item)
+						@php
+							$price = $item->unit_price ?? $item->price ?? 0;
+						@endphp
+						<span class="font-mono">NT$ {{ number_format($price, 2) }}</span>
+					@endscope
+					@scope('cell_subtotal', $item)
+						@php
+							$price = $item->unit_price ?? $item->price ?? 0;
+							$subtotal = $item->quantity * $price;
+						@endphp
+						<span class="font-mono font-bold">NT$ {{ number_format($subtotal, 2) }}</span>
+					@endscope
+					@scope('cell_action', $item)
+						<x-button 
+							label="退貨" 
+							icon="o-arrow-path" 
+							wire:click="addProductToReturn({{ $item->product_id }})"
+							class="btn-xs btn-primary"
+						/>
+					@endscope
+				</x-table>
+			</div>
+			
+			{{-- 手機端顯示 --}}
+			<div class="md:hidden space-y-2">
+				@foreach($sale->items as $item)
+					@php
+						$price = $item->unit_price ?? $item->price ?? 0;
+						$subtotal = $item->quantity * $price;
+					@endphp
+					<div class="p-3 border rounded-lg bg-base-100" 
+						 wire:click="addProductToReturn({{ $item->product_id }})"
+						 style="cursor: pointer;">
+						<div class="flex justify-between items-start mb-2">
+							<div class="flex-1">
+								<div class="font-bold text-sm">{{ $item->product->name ?? '未知商品' }}</div>
+								<div class="text-xs text-gray-400">SKU: {{ $item->product->sku ?? '' }}</div>
+							</div>
+							<x-badge value="x{{ number_format($item->quantity, 0) }}" class="badge-neutral" />
+						</div>
+						<div class="flex justify-between text-xs">
+							<span>單價: NT$ {{ number_format($price, 2) }}</span>
+							<span class="font-bold">小計: NT$ {{ number_format($subtotal, 2) }}</span>
+						</div>
+					</div>
+				@endforeach
+			</div>
+		@endif
 	</x-card>
 
     {{-- 3. 底部結算列 (修正後的佈局) --}}
