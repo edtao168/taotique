@@ -48,7 +48,10 @@
                     <div class="flex justify-between items-center">
                         <div>
                             <p class="font-bold text-base">{{ $sale->customer?->name ?? '一般客戶' }}</p>
-                            <p class="text-xs text-gray-400">{{ strtoupper($sale->channel) }} / {{ $sale->payment_method }}</p>
+                            <p class="text-xs text-gray-400">
+								{{ strtoupper($sale->channel) }} / 
+								{{ collect(config('business.payment_methods'))->firstWhere('id', $sale->payment_method)['name'] ?? $sale->payment_method }}
+							</p>
                         </div>
                         <div class="text-right">
                             <p class="text-blue-700 font-black text-lg">NT$ {{ number_format($sale->customer_total, 0) }}</p>
@@ -85,12 +88,12 @@
 						<p class="font-medium text-blue-700">{{ $selectedSale->customer?->name ?? '一般客戶' }}</p>
 					</div>
 					<div>
-						<p class="text-[10px] text-gray-400">銷售通路</p>
-						<x-badge :value="strtoupper($selectedSale->channel)" class="badge-outline badge-sm" />
+						<p class="text-[10px] text-gray-400">銷售通路</p>						
+						<x-badge :value="$selectedSale->shop?->name ?? strtoupper($selectedSale->channel)" class="badge-outline badge-sm" />
 					</div>
 					<div>
 						<p class="text-[10px] text-gray-400">付款方式</p>
-						<x-badge :value="$selectedSale->payment_method" class="badge-ghost badge-sm font-bold" />
+						<x-badge :value="$selectedSale->payment_method_name" class="badge-ghost badge-sm font-bold" />
 					</div>					
 				</div>
 			</div>
@@ -168,7 +171,7 @@
 
 				{{-- PC 端表格 --}}
 				<div class="hidden lg:block">
-					<x-table :headers="[['key' => 'product.name', 'label' => '品名'], ['key' => 'warehouse_id', 'label' => '庫別', 'class' => 'text-right'], ['key' => 'quantity', 'label' => '數量', 'class' => 'text-right'], ['key' => 'subtotal', 'label' => '小計', 'class' => 'text-right font-mono']]" :rows="$selectedSale->items" no-hover>
+					<x-table :headers="[['key' => 'product.name', 'label' => '品名'], ['key' => 'warehouse.name', 'label' => '庫別', 'class' => 'text-right'], ['key' => 'quantity', 'label' => '數量', 'class' => 'text-right'], ['key' => 'subtotal', 'label' => '小計', 'class' => 'text-right font-mono']]" :rows="$selectedSale->items" no-hover>
 						@scope('cell_product.name', $item)
 							<div class="flex flex-col">
 								<span class="font-medium text-sm">{{ $item->product->full_display_name }}</span>

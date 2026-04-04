@@ -22,10 +22,11 @@ class Create extends Component
 	public Sale $sale; 
     public $sold_at;    
     public $invoice_number;
-    public array $items = []; // 強制轉為 array 確保與 Mary UI 表單兼容
+    public array $items = [];
 	public array $productOptions = [];
 	public bool $showScanner = false; // 手機掃碼開關
 	public $warehouse_id = null;
+	public $payment_note;
     
     // 費用欄位
     public $channel = 'shopee';
@@ -59,6 +60,7 @@ class Create extends Component
 			$this->shipping_fee_platform = $this->sale->shipping_fee_platform;
 			$this->order_adjustment = $this->sale->order_adjustment;
 			$this->shipping_fee_customer = $this->sale->shipping_fee_customer;
+			$this->payment_note = $this->sale->payment_note;
 
 			// 2. 關鍵：轉換明細為陣列，並確保數值為字串以利 bcmath 運算
 			$this->items = $this->sale->items->map(fn($item) => [
@@ -115,19 +117,18 @@ class Create extends Component
     }
 
     /**
-     * 修正：儲存邏輯
-     * 考慮到您在 Index.php 寫了帶有 Warehouse 的交易邏輯，
-     * 建議將核心扣庫存邏輯封裝在 Sale Model 的 createWithCalculations 中。
+     * 儲存邏輯
      */
     public function save()
     {
         $this->validate([
-            'customer_id' => 'required',
-            'sold_at'     => 'required|date',
-            'items.*.product_id' => 'required',
+            'customer_id' 		   => 'required',
+            'sold_at'     		   => 'required|date',
+			'payment_note'         => 'nullable|string',
+            'items.*.product_id'   => 'required',
             'items.*.warehouse_id' => 'required|exists:warehouses,id', // 驗證倉庫
-            'items.*.quantity'   => 'required|numeric|min:0.0001',
-            'items.*.price'      => 'required|numeric',
+            'items.*.quantity'     => 'required|numeric|min:0.0001',
+            'items.*.price'        => 'required|numeric',
         ]);
 
         $allData = [
@@ -146,12 +147,11 @@ class Create extends Component
             'customer_total'        => $this->customer_total,
             'final_net_amount'      => $this->final_net_amount,
             'sold_at'               => $this->sold_at,
-            //'shop_id'              => 1, // 多店預留
+			'payment_note'          => $this->payment_note,
+            //'shop_id'              => 1, // 多店預留，目前使用channel，作用一樣
         ];
 
-        try {
-            // 建議將 DB::transaction 與 lockForUpdate 實作在 Model 層
-            // 這裡呼叫 Model 方法
+        try {            
             if ($this->sale->exists) {
                 $this->sale->updateWithCalculations($allData, $this->items);
                 $this->success('訂單已更新', redirectTo: route('sales.index'));

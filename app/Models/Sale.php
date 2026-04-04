@@ -19,6 +19,15 @@ class Sale extends Model
         'sold_at' => 'datetime', // 確保日期格式正確
     ];
 
+	/**
+	 * 取得付款方式的中文名稱
+	 */
+	public function getPaymentMethodNameAttribute(): string
+	{
+		return collect(config('business.payment_methods'))
+			->firstWhere('id', $this->payment_method)['name'] ?? $this->payment_method;
+	}
+
 	public static function createWithCalculations(array $data, array $items)
 	{
 		return DB::transaction(function () use ($data, $items) {
@@ -32,6 +41,9 @@ class Sale extends Model
 		});
 	}
 
+	/**
+	 * 更新計算結果
+	 */
 	public function updateWithCalculations(array $data, array $items)
 	{
 		return DB::transaction(function () use ($data, $items) {
@@ -43,7 +55,15 @@ class Sale extends Model
 			$this->update($data);
 
 			// 3. 處理明細與庫存差額
-			foreach ($items as $item) {
+			foreach ($items as $item) {				
+				$this->items()->create([
+					'product_id'   => $item['product_id'],
+					'warehouse_id' => $item['warehouse_id'], // ← 新增這行
+					'price'        => $item['price'],
+					'quantity'     => $item['quantity'],
+					'subtotal'     => bcmul((string)$item['quantity'], (string)$item['price'], 2),
+				]);
+				
 				$productId = $item['product_id'];
 				$newQty = (float)$item['quantity'];
 				$oldQty = $oldItems->has($productId) ? (float)$oldItems[$productId]->quantity : 0;
@@ -66,6 +86,7 @@ class Sale extends Model
 			foreach ($items as $item) {
 				$this->items()->create([
 					'product_id' => $item['product_id'],
+					'warehouse_id' => $item['warehouse_id'],
 					'price'      => $item['price'],
 					'quantity'   => $item['quantity'],
 					'subtotal'   => bcmul((string)$item['quantity'], (string)$item['price'], 2),
@@ -85,14 +106,16 @@ class Sale extends Model
 			if (empty($item['product_id'])) continue;
 
 			$this->items()->create([
-				'product_id' => $item['product_id'],
-				'price'      => $item['price'],
-				'quantity'   => $item['quantity'],
-				'subtotal'   => bcmul((string)$item['quantity'], (string)$item['price'], 2),
+				'product_id'   => $item['product_id'],
+				'warehouse_id' => $item['warehouse_id'],
+				'price'        => $item['price'],
+				'quantity'     => $item['quantity'],
+				'subtotal'     => bcmul((string)$item['quantity'], (string)$item['price'], 2),
 			]);
 
 			$needed = $item['quantity'];
 			$stocks = Inventory::where('product_id', $item['product_id'])
+				->where('warehouse_id', $item['warehouse_id'])
 				->where('status', 'in_stock')
 				->where('quantity', '>', 0)
 				->orderBy('created_at', 'asc')
@@ -189,6 +212,7 @@ class Sale extends Model
 	{
 		$needed = $amount;
 		$stocks = Inventory::where('product_id', $productId)
+			->where('warehouse_id', $item['warehouse_id'])
 			->where('status', 'in_stock')
 			->where('quantity', '>', 0)
 			->orderBy('created_at', 'asc')

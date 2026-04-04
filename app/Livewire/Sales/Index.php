@@ -65,7 +65,7 @@ class Index extends Component
      */
     public function showDetail($id)
     {
-        $this->selectedSale = Sale::with(['customer', 'items.product', 'user'])->find($id);
+        $this->selectedSale = Sale::with(['customer', 'items.product', 'user', 'shop', 'warehouse'])->find($id);
         $this->drawer = true;
     }
 
@@ -95,7 +95,7 @@ class Index extends Component
         $monthProfit = Sale::whereBetween('sold_at', [$startOfMonth, $endOfMonth])->get()->sum('final_net_amount');
 
         // --- 2. 銷售清單查詢 (合併原 SalesIndex 邏輯) ---
-        $sales = Sale::with(['customer', 'user', 'shop'])
+        $sales = Sale::with(['customer', 'user', 'shop', 'warehouse'])
             ->when($this->search, function ($query) {
                 $query->where('invoice_number', 'like', "%{$this->search}%")
                       ->orWhereHas('customer', fn($q) => $q->where('name', 'like', "%{$this->search}%"));
