@@ -122,7 +122,8 @@ class Create extends Component
     public function save()
     {
         $this->validate([
-            'customer_id' 		   => 'required',
+            'invoice_number' 	   => 'required',
+			'customer_id' 		   => 'required',
             'sold_at'     		   => 'required|date',
 			'payment_note'         => 'nullable|string',
             'items.*.product_id'   => 'required',

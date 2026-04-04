@@ -19,6 +19,29 @@ class Sale extends Model
         'sold_at' => 'datetime', // 確保日期格式正確
     ];
 
+	protected static function booted()
+    {
+        static::creating(function ($sale) {
+            // 如果儲存時 invoice_number 是空的，則自動生成
+            if (empty($sale->invoice_number)) {
+                $sale->invoice_number = self::generateInvoiceNumber();
+            }
+        });
+    }
+
+    public static function generateInvoiceNumber(): string
+    {
+        // 建議結合 store_id 與時間戳，確保併發時的唯一傾向
+        // 務必配合資料庫鎖 lockForUpdate 確保流水號不重複
+        return DB::transaction(function () {
+            $prefix = 'SO' . now()->format('Ymd');
+            $count = self::where('invoice_number', 'like', "{$prefix}%")
+                        ->lockForUpdate()
+                        ->count();
+            return $prefix . str_pad($count + 1, 4, '0', STR_PAD_LEFT);
+        });
+    }
+	
 	/**
 	 * 取得付款方式的中文名稱
 	 */
