@@ -137,31 +137,34 @@
     @endif
 	</x-card>
 
-    {{-- 3. 底部結算列 (手機端固定在底部) --}}
-    <div class="fixed bottom-0 left-0 right-0 z-50 p-4 bg-base-100 border-t md:static md:border-none md:bg-transparent md:p-0">
-        <x-card shadow class="md:shadow-none bg-primary/5 border-primary/20 border md:bg-base-200">
-            <div class="flex flex-col md:flex-row justify-between items-center gap-4">
-                <div class="grid grid-cols-2 md:flex gap-4 w-full md:w-auto">
-                    <div class="text-center md:text-left">
-                        <div class="text-xs opacity-60">商品小計</div>
-                        <div class="font-mono font-bold">{{ number_format($this->itemsTotal, 2) }}</div>
-                    </div>
-                    <div class="text-center md:text-left border-l pl-4">
-                        <div class="text-xs opacity-60 text-error">費用扣除</div>
-                        <div class="font-mono font-bold text-error">-{{ number_format($this->feesTotal, 2) }}</div>
-                    </div>
-                </div>
+    {{-- 3. 底部結算列 (修正後的佈局) --}}
+	<div class="fixed bottom-0 left-0 right-0 z-[100] p-4 bg-base-100 border-t shadow-2xl md:static md:border-none md:bg-transparent md:p-0 md:shadow-none">
+		<x-card shadow class="md:shadow-none bg-primary/5 border-primary/20 border md:bg-base-200">
+			<div class="flex flex-col md:flex-row justify-between items-center gap-4">
+				
+				{{-- 調整手機端顯示：改為不限制欄寬的 flex --}}
+				<div class="flex justify-around md:justify-start gap-6 w-full md:w-auto px-2">
+					<div class="text-center md:text-left">
+						<div class="text-[10px] uppercase tracking-wider opacity-60">商品小計</div>
+						<div class="font-mono font-bold text-lg md:text-base">{{ number_format($this->itemsTotal, 2) }}</div>
+					</div>
+					<div class="text-center md:text-left border-l border-base-300 pl-6">
+						<div class="text-[10px] uppercase tracking-wider opacity-60 text-error">費用扣除</div>
+						<div class="font-mono font-bold text-lg md:text-base text-error">-{{ number_format($this->feesTotal, 2) }}</div>
+					</div>
+				</div>
 
-                <div class="flex items-center gap-4 w-full md:w-auto border-t md:border-none pt-2 md:pt-0">
-                    <div class="flex-1 text-right">
-                        <div class="text-xs opacity-60">預計退款總額</div>
-                        <div class="text-xl font-black text-primary font-mono">
-                            TWD {{ number_format($this->netRefundTotal, 2) }}
-                        </div>
-                    </div>
-                    <x-button label="建立退單" icon="o-check" class="btn-primary" wire:click="save" spinner />
-                </div>
-            </div>
-        </x-card>
-    </div>
+				<div class="flex items-center gap-4 w-full md:w-auto border-t border-base-200 md:border-none pt-3 md:pt-0">
+					<div class="flex-1 text-right">
+						<div class="text-[10px] opacity-60">預計退款總額</div>
+						<div class="text-xl font-black text-primary font-mono">
+							TWD {{ number_format($this->netRefundTotal, 2) }}
+						</div>
+					</div>
+					{{-- 確保按鈕在手機端夠大好點擊 --}}
+					<x-button label="建立退單" icon="o-check" class="btn-primary px-8" wire:click="save" spinner />
+				</div>
+			</div>
+		</x-card>
+	</div>
 </div>
