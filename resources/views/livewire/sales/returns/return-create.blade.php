@@ -1,6 +1,6 @@
 {{-- 檔案路徑：resources/views/livewire/sales/return-create.blade.php --}}
 
-<div class="pb-80 space-y-4">
+<div class="pb-4 space-y-4">
     {{-- 1. 原單資訊摘要 (手機端隱藏部分次要資訊) --}}
     <x-card shadow class="bg-base-200/50">
         <div class="flex justify-between items-center">
@@ -138,7 +138,7 @@
 	</x-card>
 
     {{-- 3. 底部結算列 (修正後的佈局) --}}
-	<div class="fixed bottom-0 left-0 right-0 z-[100] p-4 bg-base-100 border-t shadow-2xl md:static md:border-none md:bg-transparent md:p-0 md:shadow-none">
+	<div class="sticky bottom-4 z-50 p-4 bg-base-100 border-t shadow-2xl md:static md:border-none md:bg-transparent md:p-0 md:shadow-none">
 		<x-card shadow class="md:shadow-none bg-primary/5 border-primary/20 border md:bg-base-200">
 			<div class="flex flex-col md:flex-row justify-between items-center gap-4">
 				
