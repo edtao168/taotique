@@ -10,8 +10,11 @@
         </x-slot:actions>
     </x-header>
     <x-card>
-        <x-table :rows="$users" :headers="$headers">
-            @scope('cell_name', $user)
+        {{-- Mary UI Table 自動處理響應式，當螢幕過小時會觸發 @scope('mobile', ...) --}}
+        <x-table :rows="$users" :headers="$headers" with-pagination>
+            
+			{{-- === PC 端表格定義 === --}}
+			@scope('cell_name', $user)
                 <div class="flex items-center gap-3">
                     <x-avatar 
 						:placeholder="mb_substr($user->name, 0, 1)" 
@@ -61,6 +64,32 @@
             @scope('actions', $user)
                 <x-button icon="o-pencil" wire:click="edit({{ $user->id }})" class="btn-ghost btn-sm text-info" />
             @endscope
+			
+			{{-- === 手機端卡片定義 (Mobile View) === --}}
+            @scope('mobile', $user)
+                <div class="flex items-start justify-between p-2 border-b border-base-200">
+                    <div class="flex gap-3">
+                        <x-avatar :placeholder="mb_substr($user->name, 0, 1)" class="!w-12 bg-primary text-primary-content" />
+                        <div class="space-y-1">
+                            <div class="font-bold text-lg">{{ $user->name }}</div>
+                            <div class="text-sm opacity-60">{{ $user->email }}</div>
+                            <div class="flex flex-wrap gap-1 mt-1">
+                                <x-badge :value="$user->shop->name ?? '未分配據點'" class="badge-neutral badge-sm" />
+                                <x-badge :value="collect($this->roleOptions)->firstWhere('id', $user->role)['name'] ?? $user->role" class="badge-outline badge-sm" />
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex flex-col gap-2">
+                        <x-button icon="o-pencil" wire:click="edit({{ $user->id }})" class="btn-circle btn-ghost btn-sm text-info" />
+                        <x-checkbox 
+                            wire:click="toggleActive({{ $user->id }})" 
+                            :checked="$user->is_active" 
+                            :disabled="auth()->user()->role !== 'owner' || $user->id === auth()->id()"
+                        />
+                    </div>
+                </div>
+            @endscope
+			
         </x-table>
     </x-card>
 	

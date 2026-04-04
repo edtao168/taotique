@@ -2,17 +2,18 @@
 
 namespace App\Livewire\Settings\Users;
 
-use App\Models\User;
 use App\Models\Shop;
+use App\Models\User;
 use App\Models\Warehouse;
 use Livewire\Component;
+use Livewire\WithPagination;
 use Mary\Traits\Toast;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Hash;
 
 class UserManagement extends Component
 {
-    use Toast;
+    use Toast, WithPagination;
 	
     public bool $userDrawer = false;
     public ?User $selectedUser = null;
@@ -24,11 +25,13 @@ class UserManagement extends Component
     public ?string $role = 'staff';
     public ?int $shop_id = null;
     public ?int $warehouse_id = null;
+	public int $perPage = 10;
 
     public array $roleOptions = [
         ['id' => 'owner', 'name' => '店主 (Owner)'],
         ['id' => 'manager', 'name' => '經理 (Manager)'],
         ['id' => 'staff', 'name' => '店員 (Staff)'],
+		['id' => 'guest', 'name' => '來賓 (Guest)'],
     ];
 
     public function render()
@@ -47,12 +50,28 @@ class UserManagement extends Component
         ];
 
         return view('livewire.settings.users.user-management', [
-            'users' => User::with(['shop', 'warehouse'])->get(),
+            'users' => User::with(['shop', 'warehouse'])->paginate(10),
             'headers' => $headers,
             'shops' => Shop::all(), // 供 Select 使用
             'warehouses' => Warehouse::all(), // 供 Select 使用
         ]);
     }
+	
+	// 當搜尋關鍵字改變時，重置每頁數量與分頁狀態
+    public function updatedSearch()
+    {
+        $this->perPage = 10;
+        $this->resetPage();
+    }
+	
+	/**
+     * 手機端專用：加載更多商品
+     */
+    public function loadMore()
+    {
+        $this->perPage += 10;
+    }
+	
 
     public function create()
     {
