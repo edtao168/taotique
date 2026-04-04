@@ -118,6 +118,7 @@
 							<div class="grid grid-cols-2 gap-2 mt-2">
 								<x-input label="單價" wire:model.live.debounce.500ms="items.{{ $index }}.price" />
 								<x-select 
+									label="實際發貨倉庫"
 									wire:model.live="items.{{ $index }}.warehouse_id" 
 									:options="$warehouses"
 									placeholder="選擇倉庫"

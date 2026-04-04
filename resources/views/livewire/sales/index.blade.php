@@ -49,8 +49,8 @@
                         <div>
                             <p class="font-bold text-base">{{ $sale->customer?->name ?? '一般客戶' }}</p>
                             <p class="text-xs text-gray-400">
-								{{ strtoupper($sale->channel) }} / 
-								{{ collect(config('business.payment_methods'))->firstWhere('id', $sale->payment_method)['name'] ?? $sale->payment_method }}
+								{{ $selectedSale->shop?->name ?? strtoupper($selectedSale->channel) }} / 
+{{ collect(config('business.payment_methods'))->firstWhere('id', $selectedSale->payment_method)['name'] ?? $selectedSale->payment_method }}
 							</p>
                         </div>
                         <div class="text-right">
