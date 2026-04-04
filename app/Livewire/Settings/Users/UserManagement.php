@@ -44,7 +44,7 @@ class UserManagement extends Component
         $headers = [
             ['key' => 'id', 'label' => '#', 'class' => 'w-1'],
             ['key' => 'name', 'label' => '使用者名稱'],
-            ['key' => 'role', 'label' => '權限角色', 'class' => 'w-32'],
+            ['key' => 'role', 'label' => '權限角色', 'class' => 'w-50'],
             ['key' => 'shop.name', 'label' => '所屬營業點'], // 顯示關聯店鋪
             ['key' => 'is_active', 'label' => '啟用', 'class' => 'w-20'],
         ];

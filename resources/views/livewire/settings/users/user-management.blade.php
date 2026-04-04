@@ -1,100 +1,109 @@
 {{-- resources/views/livewire/settings/users/user-management.blade.php --}}
 <div>
     <x-header title="員工權限管理" subtitle="控管帳號、角色、據點、權限" separator>
-		<x-slot:actions>
-			<x-button label="回首頁" icon="o-home" :link="route('dashboard')" />
-			{{-- 只有 Owner 能看到新增按鈕 --}}
-			@if(auth()->user()->role === 'owner')
-				<x-button label="建立新帳號" wire:click="create" icon="o-plus" class="btn-primary" />
-			@endif
+        <x-slot:actions>
+            <x-button label="回首頁" icon="o-home" :link="route('dashboard')" />
+            @if(auth()->user()->role === 'owner')
+                <x-button label="建立新帳號" wire:click="create" icon="o-plus" class="btn-primary" />
+            @endif
         </x-slot:actions>
     </x-header>
-    <x-card>
-        {{-- Mary UI Table 自動處理響應式，當螢幕過小時會觸發 @scope('mobile', ...) --}}
-        <x-table :rows="$users" :headers="$headers" with-pagination>
-            
-			{{-- === PC 端表格定義 === --}}
-			@scope('cell_name', $user)
-                <div class="flex items-center gap-3">
-                    <x-avatar 
-						:placeholder="mb_substr($user->name, 0, 1)" 
-						class="!w-10 bg-primary text-primary-content" 
-					/>
-                        <div class="font-bold">{{ $user->name }}</div>
-                        <div class="text-xs opacity-50">{{ $user->email }}</div>
+
+    {{-- --- PC 端表格模式 (LG 以上顯示) --- --}}
+    <div class="hidden lg:block">
+        <x-card shadow>
+            <x-table :rows="$users" :headers="$headers" with-pagination>
+                @scope('cell_name', $user)
+                    <div class="flex items-center gap-3">
+                        <x-avatar 
+                            :placeholder="mb_substr($user->name, 0, 1)" 
+                            class="!w-10 bg-primary text-primary-content" 
+                        />
+                        <div>
+                            <div class="font-bold">{{ $user->name }}</div>
+                            <div class="text-xs opacity-50">{{ $user->email }}</div>
+                        </div>
                     </div>
-                </div>
-            @endscope
+                @endscope
 
-            @scope('cell_role', $user)
-                <x-select 
-					:options="$this->roleOptions" 
-					value="{{ $user->role }}" {{-- 直接給值，不使用 wire:model 避免屬性綁定錯誤 --}}
-					wire:change="updateRole({{ $user->id }}, $event.target.value)"
-					inline
-					class="select-sm"
-				/>
-            @endscope
+                @scope('cell_role', $user)
+                    <x-badge :value="collect($this->roleOptions)->firstWhere('id', $user->role)['name'] ?? $user->role" class="badge-outline" />
+                @endscope
 
-            @scope('cell_is_active', $user)
-                <x-checkbox wire:click="toggleActive({{ $user->id }})" :checked="$user->is_active" tight />
-            @endscope
+                @scope('cell_is_active', $user)
+                    <x-checkbox 
+                        wire:click="toggleActive({{ $user->id }})" 
+                        :checked="$user->is_active" 
+                        :disabled="auth()->user()->role !== 'owner' || $user->id === auth()->id()"
+                        tight 
+                    />
+                @endscope
 
-            @scope('actions', $user)
-                {{-- 預留多店分配按鈕 --}}
-                <x-button icon="o-home" class="btn-ghost btn-sm" tooltip="分配店鋪/倉庫" />
-            @endscope
-			
-			@scope('actions', $user)
-                <div class="flex gap-2">
-                    <x-button icon="o-pencil" wire:click="edit({{ $user->id }})" class="btn-ghost btn-sm text-info" />
-                    <x-button icon="o-home" class="btn-ghost btn-sm" tooltip="分配據點" />
-                </div>
-            @endscope
-			
-			@scope('cell_role', $user)
-                <x-badge :value="$user->role" class="badge-outline" />
-            @endscope
+                @scope('actions', $user)
+                    <div class="flex gap-2">
+                        <x-button icon="o-pencil" wire:click="edit({{ $user->id }})" class="btn-ghost btn-sm text-info" />
+                    </div>
+                @endscope
+            </x-table>
+        </x-card>
+    </div>
 
-            @scope('cell_is_active', $user)
-                <x-checkbox wire:click="toggleActive({{ $user->id }})" :checked="$user->is_active" tight 
-                    :disabled="auth()->user()->role !== 'owner'" />
-            @endscope
+    {{-- --- 手機端卡片模式 (LG 以下顯示) --- --}}
+    <div class="block lg:hidden space-y-3">
+        @foreach($users as $user)
+            <x-card class="shadow-sm border border-base-200" @click="$wire.edit({{ $user->id }})">
+                <div class="flex gap-4">
+                    {{-- 左側：頭像與狀態 --}}
+                    <div class="relative shrink-0">
+                        <x-avatar 
+                            :placeholder="mb_substr($user->name, 0, 1)" 
+                            class="!w-14 bg-primary text-primary-content rounded-xl" 
+                        />
+                        @if(!$user->is_active)
+                            <span class="absolute -top-1 -left-1 badge badge-error badge-xs p-1"></span>
+                        @endif
+                    </div>
 
-            @scope('actions', $user)
-                <x-button icon="o-pencil" wire:click="edit({{ $user->id }})" class="btn-ghost btn-sm text-info" />
-            @endscope
-			
-			{{-- === 手機端卡片定義 (Mobile View) === --}}
-            @scope('mobile', $user)
-                <div class="flex items-start justify-between p-2 border-b border-base-200">
-                    <div class="flex gap-3">
-                        <x-avatar :placeholder="mb_substr($user->name, 0, 1)" class="!w-12 bg-primary text-primary-content" />
-                        <div class="space-y-1">
-                            <div class="font-bold text-lg">{{ $user->name }}</div>
-                            <div class="text-sm opacity-60">{{ $user->email }}</div>
-                            <div class="flex flex-wrap gap-1 mt-1">
-                                <x-badge :value="$user->shop->name ?? '未分配據點'" class="badge-neutral badge-sm" />
-                                <x-badge :value="collect($this->roleOptions)->firstWhere('id', $user->role)['name'] ?? $user->role" class="badge-outline badge-sm" />
+                    {{-- 右側：資訊 --}}
+                    <div class="flex-1 min-w-0">
+                        <div class="flex justify-between items-start">
+                            <x-badge :value="collect($this->roleOptions)->firstWhere('id', $user->role)['name'] ?? $user->role" class="badge-neutral badge-xs opacity-70" />
+                            <div class="flex gap-1" onclick="event.stopPropagation();">
+                                <x-button icon="o-pencil" wire:click="edit({{ $user->id }})" class="btn-ghost btn-xs text-blue-500" />
+                            </div>
+                        </div>
+                        
+                        <h3 class="font-bold truncate text-base mt-1 {{ !$user->is_active ? 'text-gray-400 line-through' : '' }}">
+                            {{ $user->name }}
+                        </h3>
+                        <p class="text-xs text-gray-500 truncate mb-2">{{ $user->email }}</p>
+
+                        <div class="flex justify-between items-end border-t border-base-100 pt-2">
+                            <div class="flex flex-wrap gap-1">
+                                <x-badge :value="$user->shop->name ?? '未分配據點'" icon="o-map-pin" class="badge-ghost badge-sm text-[10px]" />
+                            </div>
+                            <div onclick="event.stopPropagation();">
+                                <x-checkbox 
+                                    wire:click="toggleActive({{ $user->id }})" 
+                                    :checked="$user->is_active" 
+                                    :disabled="auth()->user()->role !== 'owner' || $user->id === auth()->id()"
+                                    tight 
+                                />
                             </div>
                         </div>
                     </div>
-                    <div class="flex flex-col gap-2">
-                        <x-button icon="o-pencil" wire:click="edit({{ $user->id }})" class="btn-circle btn-ghost btn-sm text-info" />
-                        <x-checkbox 
-                            wire:click="toggleActive({{ $user->id }})" 
-                            :checked="$user->is_active" 
-                            :disabled="auth()->user()->role !== 'owner' || $user->id === auth()->id()"
-                        />
-                    </div>
                 </div>
-            @endscope
-			
-        </x-table>
-    </x-card>
+            </x-card>
+        @endforeach
+
+        {{-- 分頁器 (手機端顯示) --}}
+        <div class="mt-4">
+            {{ $users->links(data: ['scrollTo' => false]) }}
+        </div>
+    </div>
 	
 	{{-- 編輯用 Drawer --}}
-    <x-drawer wire:model="userDrawer" title="{{ $selectedUser ? '編輯帳號' : '新建帳號' }}" right separator with-close-button class="w-1/3">
+    <x-drawer wire:model="userDrawer" title="{{ $selectedUser ? '編輯帳號' : '新建帳號' }}" right separator with-close-button class="w-full lg:w-1/3">
         <x-form wire:submit="save">
             <x-input label="顯示名稱" wire:model="name" icon="o-user" />
             <x-input label="Email (登入帳號)" wire:model="email" icon="o-envelope" />
@@ -102,7 +111,7 @@
             
             <x-select label="角色權限" :options="$roleOptions" wire:model="role" icon="o-shield-check" />
             
-            <div class="grid grid-cols-2 gap-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <x-select label="所屬營業點" :options="$shops" wire:model="shop_id" icon="o-map-pin" placeholder="請選擇營業點" />
                 <x-select label="預設出貨倉庫" :options="$warehouses" wire:model="warehouse_id" icon="o-building-office" placeholder="請選擇倉庫" />
             </div>
