@@ -49,4 +49,12 @@ class PurchaseItem extends Model
     {
         return $this->belongsTo(Product::class);
     }
+	
+	/**
+     * 關聯：對應倉庫
+     */
+	 public function warehouse()
+	{
+		return $this->belongsTo(Warehouse::class);
+	}
 }

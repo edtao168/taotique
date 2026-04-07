@@ -99,6 +99,10 @@
                                     <span>外幣: {{ number_format($item->foreign_price, 2) }}</span>
                                     <span class="text-blue-600 font-bold">NT$ {{ number_format($item->subtotal_twd, 0) }}</span>
                                 </div>
+								<div class="flex justify-between mt-2 text-[10px] text-gray-400 border-t pt-1">
+									<span>倉庫：{{ $item->warehouse?->name ?? '未指定' }}</span>
+									<span>入庫單價：{{ number_format($item->unit_price, 2) }}</span>
+								</div>
                             </div>
                         @endforeach
                     </div>
@@ -109,12 +113,11 @@
                 <div class="flex gap-3 w-full border-t pt-4 bg-base-100">
                     <x-button label="刪除" icon="o-trash" wire:click="confirmDelete({{ $selectedPurchase->id }})" class="btn-error btn-outline flex-1" />
                     <x-button label="修改" icon="o-pencil" :link="route('purchases.edit', $selectedPurchase->id)" class="btn-primary flex-1 text-white" />
-                    <x-button label="退貨" icon="o-arrow-path" class="btn-outline flex-1" />
+                    <x-button label="退貨" icon="o-arrow-path" :link="route('purchases.returns.create', ['purchase' => $selectedPurchase->id])" class="btn-outline flex-1" />
                 </div>
             </x-slot:actions>
         @endif
-    </x-drawer>
-	{{-- <x-button label="退貨" icon="o-arrow-path" :link="route('purchases.returns.create', ['purchase' => $selectedPurchase->id])" class="btn-outline flex-1" /> --}}
+    </x-drawer>	
 
     {{-- 刪除確認 Modal --}}
     <x-modal wire:model="deleteModal" title="確認刪除採購單？" separator>
@@ -130,8 +133,14 @@
             />
         </div>
         <x-slot:actions>
-            <x-button label="取消" @click="$wire.deleteModal = false" />
-            <x-button label="確認刪除" icon="o-trash" class="btn-error" wire:click="delete" spinner />
-        </x-slot:actions>
+        {{-- Modal 只放刪除相關操作 --}}
+			<x-button label="取消" wire:click="$set('deleteModal', false)" class="btn-ghost" />
+			<x-button 
+				label="確認刪除" 
+				wire:click="delete" 
+				class="btn-error" 
+				spinner="delete"
+			/>
+		</x-slot:actions>
     </x-modal>
 </div>

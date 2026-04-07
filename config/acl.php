@@ -19,5 +19,8 @@ return [
             'view_inventory',  // 只能看庫存數量
             // 'view_cost' => 不給予
         ],
+		'guest' => [            
+            'view_inventory',            
+        ],
     ],
 ];

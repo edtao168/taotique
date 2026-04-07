@@ -54,6 +54,7 @@
 				<x-menu-sub title="採購進貨系統" icon="o-shopping-bag">
 					<x-menu-item title="新增採購入庫" icon="o-plus-circle" :link="route('purchases.create')" />
 					<x-menu-item title="採購進貨紀錄" icon="o-clipboard-document-list" :link="route('purchases.index')" />
+					<x-menu-item title="採購退回紀錄" icon="o-arrow-path" :link="route('purchases.returns.index')" />
 					<x-menu-item title="供應商管理" icon="o-user-group" :link="route('purchases.suppliers.index')" />
 					{{-- 業務報表嵌入 --}}
 					<x-menu-item title="採購統計報表" icon="o-chart-bar" link="#" class="text-sm opacity-80" />

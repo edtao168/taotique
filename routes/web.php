@@ -10,6 +10,8 @@ use App\Livewire\Dashboard\Overview;
 use App\Livewire\Suppliers\Index as SupplierIndex;
 use App\Livewire\Purchases\Index as PurchaseIndex;
 use App\Livewire\Purchases\Create as PurchaseCreate;
+use App\Livewire\Purchases\Returns\ReturnCreate as PurchaseReturnCreate;
+use App\Livewire\Purchases\Returns\ReturnIndex as PurchaseReturnIndex;
 
 // 銷售模組
 use App\Livewire\Customers\Index as CustomerIndex;
@@ -54,6 +56,10 @@ Route::middleware(['auth'])->group(function () {
 		Route::get('/', PurchaseIndex::class)->name('index');
 		Route::get('/create', PurchaseCreate::class)->name('create');
 		Route::get('/{purchase}/edit', PurchaseCreate::class)->name('edit');
+		Route::prefix('returns')->name('returns.')->group(function () {
+			Route::get('/', PurchaseReturnIndex::class)->name('index');
+			Route::get('/create/{purchase}', PurchaseReturnCreate::class)->name('create');
+		});
     });
 
     // --- 銷售模組 (Sales) ---

@@ -13,15 +13,11 @@ trait HasBarcodeScanner
     public string $scannedBarcode = '';
     public ?int $currentScanIndex = null;
     public string $scanMode = 'single'; // 'single' | 'continuous' 單次掃描或連續掃描
-    
-    // 掃描結果回調（由使用此 Trait 的類別實現）
+        
+	/**
+     * 掃描結果回調
+     */
     abstract public function onBarcodeScanned(string $barcode, ?int $index = null): void;
-    
-    // 驗證條碼是否有效（可覆寫）
-    public function validateBarcode(string $barcode): bool
-    {
-        return strlen($barcode) >= 3;
-    }
     
     // 根據條碼查找商品（可覆寫）
     public function findProductByBarcode(string $barcode): ?Product
@@ -80,7 +76,7 @@ trait HasBarcodeScanner
             return;
         }
         
-        if (!$this->validateBarcode($barcode)) {
+        if (strlen($barcode) < 3) {
             $this->dispatch('notify', type: 'error', message: '條碼格式無效');
             $this->scannedBarcode = '';
             return;
@@ -91,12 +87,25 @@ trait HasBarcodeScanner
         $this->scannedBarcode = '';
     }
 
+	/**
+     * 手持掃描槍直接輸入的入口
+     * 通常掃碼槍模擬鍵盤輸入後會帶入 Enter，可透過 wire:keydown.enter 呼叫此方法
+     */
+    public function handleScannedBarcode(?string $barcode = null): void
+    {
+        $code = $barcode ?? $this->scannedBarcode;
+        if (empty($code)) return;
+        
+        $this->processScannedBarcode($code);
+        $this->scannedBarcode = ''; // 清空輸入框供下次掃描
+    }
+	
     /**
      * 統一處理條碼邏輯
      */
     protected function processScannedBarcode(string $barcode): void
     {
-        if (!$this->validateBarcode($barcode)) {
+        if (strlen($barcode) < 3) {
             $this->dispatch('notify', type: 'error', message: '條碼格式無效: ' . $barcode);
             return;
         }
