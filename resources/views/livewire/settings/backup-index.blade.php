@@ -2,7 +2,13 @@
     <x-header title="系統備份設定" subtitle="管理雲端同步之資料庫備份檔" separator progress-indicator>
         <x-slot:actions>
             {{-- 這裡可以串接你原本產出備份的 Logic --}}
-            <x-button label="立即備份" icon="o-cpu-chip" class="btn-primary" />
+            <x-button 
+				label="立即備份" 
+				icon="o-cpu-chip" 
+				class="btn-primary" 
+				wire:click="runBackup" 
+				spinner="runBackup"
+			/>
         </x-slot:actions>
     </x-header>
 

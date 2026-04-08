@@ -16,4 +16,9 @@ return [
         ['id' => 'payment_processing', 'name' => '金流服務費'],
         ['id' => 'other_service_fee', 'name' => '其它服務費'],
     ],
+	
+	'backup' => [
+        'disk' => env('BACKUP_DISK', 'local'),
+        'path' => env('BACKUP_PATH', 'taotique-backup/taotique-backup/'),
+    ],
 ];
