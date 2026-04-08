@@ -20,7 +20,7 @@ class BackupIndex extends Component
     {
         // 統一由 config 讀取真相來源
         $this->disk = config('business.backup.disk', 'local');
-        $this->storagePath = config('business.backup.path', 'taotique-backup/taotique-backup/');
+        $this->storagePath = config('business.backup.path');
     }
 
 	// 如果備份資料夾需要根據店鋪隔離，手動獲取 shop_id
@@ -34,19 +34,12 @@ class BackupIndex extends Component
      * 執行備份指令
      */
     public function runBackup()
-    {
-        $this->disk = config('business.backup.disk');
-		$this->storagePath = config('business.backup.path');
-		
+    {        
 		try {
-            // 執行指令，這會觸發 spatie/laravel-backup (或其他備份套件)
-            // --only-db 參數通常用於只備份資料庫，視你的需求調整
             Artisan::call('backup:run');
-
-            // 清除 computed property 快取，讓列表即時更新
+            // 強制 Livewire 重新計算 backups 屬性
             unset($this->backups);
-
-            $this->success('備份完成', '新的備份檔已成功產生並儲存。');
+            $this->success('備份完成', '新的備份檔已產生。');
         } catch (\Exception $e) {
             $this->error('備份失敗', $e->getMessage());
         }
@@ -61,9 +54,11 @@ class BackupIndex extends Component
             return [];
         }
 
+        // 使用 files() 獲取檔案
         $files = Storage::disk($this->disk)->files($this->storagePath);
         
         return collect($files)
+            ->filter(fn($path) => str_ends_with($path, '.zip')) // 只顯示壓縮檔
             ->map(fn($path) => [
                 'name' => basename($path),
                 'size' => round(Storage::disk($this->disk)->size($path) / 1024 / 1024, 2) . ' MB',
@@ -78,7 +73,8 @@ class BackupIndex extends Component
         $path = $this->storagePath . $fileName;
 
         if (!Storage::disk($this->disk)->exists($path)) {
-            abort(404, "檔案不存在");
+            $this->error('下載失敗', '找不到檔案：' . $path);
+            abort(404);
         }
 
         return Storage::disk($this->disk)->download($path);
