@@ -98,6 +98,7 @@
 					@endcan
 					<x-menu-separator />
 					<x-menu-item title="系統參數設定" icon="o-adjustments-horizontal" link="/settings" />
+					<x-menu-item title="系統備份" icon="o-cloud-arrow-up" link="{{ route('settings.backup') }}" />
 				</x-menu-sub>
 
 				<x-menu-separator />

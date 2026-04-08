@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Storage;
 
 // Dashboard
 use App\Livewire\Dashboard\Overview;
@@ -42,6 +43,7 @@ use App\Livewire\Settings\Users\UserManagement;
 use App\Livewire\Settings\Categories\Index as CategoryIndex;
 use App\Livewire\Settings\Materials\Index as MaterialIndex;
 use App\Livewire\Settings\SystemSettings;
+use App\Livewire\Settings\BackupIndex;
 
 Route::middleware(['auth'])->group(function () {
     
@@ -104,5 +106,8 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/users', UserManagement::class)->name('users.index');
         // 直接將 Route 指向 Livewire Component，完全跳過 Controller
 		Route::get('/', SystemSettings::class)->name('settings.system')->middleware(['auth']);
-    });	
+    });
+	
+	// [本地操作] routes/web.php
+	Route::get('/settings/backup', BackupIndex::class)->name('settings.backup')->middleware('auth');
 });
