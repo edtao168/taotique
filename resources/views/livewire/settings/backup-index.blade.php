@@ -26,7 +26,8 @@
                         icon="o-arrow-down-tray" 
                         wire:click="download('{{ $file['name'] }}')" 
                         class="btn-ghost btn-sm text-info" 
-                        spinner 
+                        spinner
+						tooltip="點擊開始下載"
                     />
                 @endscope
             </x-table>

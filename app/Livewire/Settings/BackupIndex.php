@@ -20,7 +20,7 @@ class BackupIndex extends Component
     {
         // 統一由 config 讀取真相來源
         $this->disk = config('business.backup.disk', 'local');
-        $this->storagePath = config('business.backup.path');
+        $this->storagePath = rtrim(config('business.backup.path'), '/') . '/';
     }
 
 	// 如果備份資料夾需要根據店鋪隔離，手動獲取 shop_id
@@ -77,7 +77,7 @@ class BackupIndex extends Component
             abort(404);
         }
 
-        return Storage::disk($this->disk)->download($path);
+        return Storage::disk($this->disk)->download($path, $fileName);
     }
 
     public function render()
