@@ -27,7 +27,7 @@
                         wire:click="download('{{ $file['name'] }}')" 
                         class="btn-ghost btn-sm text-info" 
                         spinner
-						tooltip="點擊開始下載"
+						tooltip="下載到本地"
                     />
                 @endscope
             </x-table>
