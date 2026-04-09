@@ -19,6 +19,6 @@ return [
 	
 	'backup' => [
         'disk' => env('BACKUP_DISK', 'local'),
-        'path' => env('BACKUP_PATH', 'taotique-backup/taotique-backup/'),
+        'path' => env('BACKUP_PATH', 'app/private/taotique-backup'),
     ],
 ];
