@@ -1,11 +1,23 @@
 {{-- 檔案路徑：resources/views/livewire/sales/create.blade.php --}}
 <div>
     <x-header title="{{ $sale->exists ? '編輯銷售單' : '建立銷售單' }}" separator progress-indicator>
+		<x-slot:middle class="hidden md:flex">
+            <div class="flex gap-2 px-4 py-2 bg-base-200 rounded-lg">
+                <span class="text-sm opacity-70">預計單號:</span>
+                <span class="font-mono font-bold text-primary">{{ $invoice_number }}</span>
+            </div>
+        </x-slot:middle>
         <x-slot:actions>
             <x-button label="取消" icon="o-x-mark" link="/sales" />
             <x-button label="確認過帳" icon="o-paper-airplane" class="btn-primary" wire:click="save" spinner />
         </x-slot:actions>
     </x-header>
+	
+	{{-- 手機端專用的單號顯示 (因為 header middle 在手機端通常會隱藏) --}}
+    <div class="md:hidden mb-4 p-3 bg-base-200 rounded-lg flex justify-between items-center">
+        <span class="text-sm font-bold">預計單號</span>
+        <span class="font-mono text-primary font-bold">{{ $invoice_number }}</span>
+    </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
         

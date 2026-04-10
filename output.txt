@@ -1,0 +1,16 @@
+key	value	type	group	description	created_at	updated_at
+allow_negative_stock	false	boolean	core	允許負庫存出貨	2026-02-27 14:13:27	2026-02-27 14:13:27
+enable_audit_log	true	boolean	security	記錄操作日誌	2026-02-27 14:13:27	2026-02-27 14:13:27
+force_vendor_on_po	true	boolean	core	採購必須綁定供應商	2026-02-27 14:13:27	2026-02-27 14:13:27
+ic_prefix	["IC-"]	string	numbering	拆裝組合單前綴	2026-04-09 22:20:06	2026-04-09 22:20:06
+number_digits	5	number	numbering	流水號位數	2026-02-27 14:13:27	2026-02-27 14:13:27
+per_page	25	number	display	每頁顯示筆數	2026-02-27 14:13:28	2026-02-27 14:13:28
+po_auto_stock_in	["1"]	boolean	core	預設採購即入庫	2026-04-09 22:20:06	2026-04-09 22:20:06
+po_prefix	"PO-"	string	numbering	採購單前綴	2026-02-27 14:13:27	2026-02-27 14:13:27
+pr_prefix	["PR-"]	string	numbering	採購退回單前綴	2026-04-09 22:20:06	2026-04-09 22:20:06
+session_timeout	30	number	security	閒置登出時間(分)	2026-02-27 14:13:27	2026-02-27 14:13:27
+show_cost_fields	false	boolean	display	顯示庫存成本	2026-02-27 14:13:28	2026-02-27 14:13:28
+so_auto_stock_out	["1"]	boolean	core	預設銷貨即出庫	2026-04-09 22:20:06	2026-04-09 22:20:06
+so_prefix	["SO-"]	string	numbering	銷貨單前綴	2026-04-09 22:20:06	2026-04-09 22:20:06
+sr_prefix	["SR-"]	string	numbering	銷貨退回單前綴	2026-04-09 22:20:06	2026-04-09 22:20:06
+stock_alert_enabled	true	boolean	integration	啟用庫存低於安全量警報	2026-02-27 14:13:28	2026-02-27 14:13:28

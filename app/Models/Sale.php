@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Models\Customer;
 use App\Models\SaleItem;
+use App\Models\Setting;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -28,17 +29,34 @@ class Sale extends Model
             }
         });
     }
-
+    
+	/**
+     * 產生訂單號碼 (使用統一的 Setting 方法)
+     */
     public static function generateInvoiceNumber(): string
     {
-        // 建議結合 store_id 與時間戳，確保併發時的唯一傾向
-        // 務必配合資料庫鎖 lockForUpdate 確保流水號不重複
         return DB::transaction(function () {
-            $prefix = 'SO' . now()->format('Ymd');
-            $count = self::where('invoice_number', 'like', "{$prefix}%")
+            // 使用統一的 Setting::get() 方法，自動處理解碼
+            $prefix = Setting::get('so_prefix', 'SO-');
+            $digits = (int) Setting::get('number_digits', 5);
+            
+            $datePart = now()->format('Ymd');
+            $fullPrefix = $prefix . $datePart;
+
+            // 鎖定資料表取得最新流水號
+            $lastOrder = self::where('invoice_number', 'like', "{$fullPrefix}%")
                         ->lockForUpdate()
-                        ->count();
-            return $prefix . str_pad($count + 1, 4, '0', STR_PAD_LEFT);
+                        ->orderBy('invoice_number', 'desc')
+                        ->first();
+
+            if ($lastOrder) {
+                $lastNumber = (int) substr($lastOrder->invoice_number, -$digits);
+                $nextNumber = $lastNumber + 1;
+            } else {
+                $nextNumber = 1;
+            }
+
+            return $fullPrefix . str_pad($nextNumber, $digits, '0', STR_PAD_LEFT);
         });
     }
 	
