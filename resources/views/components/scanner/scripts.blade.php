@@ -31,9 +31,9 @@
                 }
                 
                 // 檢查是否為 HTTPS 或 localhost
-                if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
-                    throw new Error('相機功能需要 HTTPS 安全連線');
-                }
+                //if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+                //    throw new Error('相機功能需要 HTTPS 安全連線');
+                //}
                 
                 this.codeReader = new ZXing.BrowserMultiFormatReader();
                 

@@ -23,7 +23,7 @@
             </div>
             
             <div id="interactive" class="viewport" wire:ignore>
-				<video id="video" style="width: 100%; height: auto;"></video>
+				<video id="camera-video" style="width: 100%; height: auto;"></video>
 				<canvas id="camera-canvas" class="hidden"></canvas>
 			</div>
             
