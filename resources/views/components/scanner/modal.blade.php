@@ -22,8 +22,10 @@
                 <span class="ml-2">啟動相機中...</span>
             </div>
             
-            <video id="camera-video" class="w-full h-auto relative z-10" playsinline></video>
-            <canvas id="camera-canvas" class="hidden"></canvas>
+            <div id="interactive" class="viewport" wire:ignore>
+				<video id="video" style="width: 100%; height: auto;"></video>
+				<canvas id="camera-canvas" class="hidden"></canvas>
+			</div>
             
             {{-- 掃描框 --}}
             <div class="absolute inset-0 flex items-center justify-center pointer-events-none z-20">

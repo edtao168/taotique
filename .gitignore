@@ -29,7 +29,7 @@ yarn-error.log
 *.bak
 *.swp
 *~
-New *.txt
+*.txt
 *待刪*
 *複製*
 停止待用*
