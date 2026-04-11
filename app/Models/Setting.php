@@ -166,21 +166,26 @@ class Setting extends Model
      * 更新設定值（自動處理編碼）
      */
     public static function updateValue(string $key, $value)
-    {
-        // 如果 value 是純字串且不是 JSON，讓 Laravel 的 JSON cast 自動處理
-        // 但為了保持一致性，確保布林和數字的正確儲存
-        $normalizedValue = self::normalizeForStorage($value);
-        
-        $setting = self::updateOrCreate(['key' => $key], ['value' => $normalizedValue]);
-        
-        // 清除所有相關快取
-        Cache::forget("sys_setting_{$key}");
-        if ($setting->group) {
-            Cache::forget("setting.{$setting->group}.{$key}");
-        }
-        
-        return $setting;
-    }
+	{
+		return \DB::transaction(function () use ($key, $value) {
+			// 使用 lockForUpdate 確保更新時的數據一致性
+			$setting = self::where('key', $key)->lockForUpdate()->first();
+			
+			if ($setting) {
+				$setting->value = $value; // 觸發 Mutator
+				$setting->save();
+			} else {
+				$setting = self::create(['key' => $key, 'value' => $value]);
+			}
+
+			Cache::forget("sys_setting_{$key}");
+			if ($setting->group) {
+				Cache::forget("setting.{$setting->group}.{$key}");
+			}
+
+			return $setting;
+		});
+	}
     
     /**
      * 準備儲存的值（確保 JSON 編碼正確）
@@ -233,13 +238,16 @@ class Setting extends Model
     {
         // 如果是布林值，轉為字串形式
         if (is_bool($value)) {
-            $this->attributes['value'] = $value ? 'true' : 'false';
-        } elseif (is_numeric($value)) {
-            $this->attributes['value'] = (string) $value;
-        } elseif (is_array($value)) {
-            $this->attributes['value'] = json_encode($value);
-        } else {
-            $this->attributes['value'] = $value;
-        }
+			$data = $value ? 'true' : 'false';
+		} elseif (is_numeric($value)) {
+			$data = (string) $value;
+		} elseif (is_array($value)) {
+			$data = $value;
+		} else {
+			$data = $value;
+		}
+
+		// 關鍵：將處理後的結果轉換為 JSON 字串存入		
+		$this->attributes['value'] = json_encode($data);
     }
 }
