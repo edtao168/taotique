@@ -1,12 +1,6 @@
 {{-- 檔案路徑：resources/views/livewire/sales/create.blade.php --}}
 <div>
-    <x-header title="{{ $sale->exists ? '編輯銷售單' : '建立銷售單' }}" separator progress-indicator>
-		<x-slot:middle class="hidden md:flex">
-            <div class="flex gap-2 px-4 py-2 bg-base-200 rounded-lg">
-                <span class="text-sm opacity-70">預計單號:</span>
-                <span class="font-mono font-bold text-primary">{{ $invoice_number }}</span>
-            </div>
-        </x-slot:middle>
+    <x-header :title="$isEdit ? '修改銷售單 - ' . $sale->invoice_number: '建立銷售單 - ' . $invoice_number" separator progress-indicator>            
         <x-slot:actions>
             <x-button label="取消" icon="o-x-mark" link="/sales" />
             <x-button label="確認過帳" icon="o-paper-airplane" class="btn-primary" wire:click="save" spinner />

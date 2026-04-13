@@ -20,6 +20,7 @@ class Create extends Component
     use HasBarcodeScanner, HasProductSearch, Toast;
 
 	public Sale $sale;
+	public bool $isEdit = false;
 	public array $items = [];
 	public array $productOptions = [];
 	public bool $showScanner = false;
@@ -48,19 +49,49 @@ class Create extends Component
     /**
      * 元件建構函式，負責初始化資料和狀態，且只執行一次
      */	
-    public function mount(Sale $sale = null)
+    public function mount(Sale $sale = null) // 修改：允許 null
     {
-        // 修正：初始化 $sale 模型，避免 exists 報錯
+        // 初始化預設值（無論新增或編輯都會執行）
+        $this->defaultWarehouseId = Warehouse::where('is_active', true)->first()?->id ?? 1;
+        
+        // 重置 Sale Model 實例
         $this->sale = new Sale();
-        
-        // 初始化預計單號與時間
-        $this->invoice_number = Sale::generateInvoiceNumber();
-        $this->form['customer_id'] = Customer::first()->id ?? null;
-		$this->form['sold_at'] = now()->format('Y-m-d\TH:i');
-        
-        // 預設倉庫
-        $this->defaultWarehouseId = Warehouse::where('is_active', true)->first()?->id ?? 1;        
-        $this->form['warehouse_id'] = $this->defaultWarehouseId;
+
+        // 👇 2. 核心邏輯：判斷是否為編輯模式
+        if ($sale && $sale->exists) {
+            $this->isEdit = true;
+            $this->sale = $sale; // 將傳入的 Model 賦值給組件屬性
+
+            // 填充表單資料
+            $this->form = $sale->toArray(); // 或者手動賦值，例如 $this->form['customer_id'] = $sale->customer_id;
+            
+            // 填充商品明細 (Items)
+            // 注意：這裡需要將 Collection 轉為純陣列供前端雙向綁定
+            $this->items = $sale->items->map(function ($item) {
+                return [
+                    'product_id' => $item->product_id,
+                    'warehouse_id' => $item->warehouse_id,
+                    'quantity' => (string)$item->quantity,
+                    'price' => (string)$item->price,
+                ];
+            })->toArray();
+
+            // 編輯時不需要生成新單號，直接顯示資料庫中的單號
+            $this->invoice_number = $sale->invoice_number;
+            
+        } else {
+            // 👇 3. 處於「新增」模式
+            $this->isEdit = false;
+            
+            // 初始化新單據的預設值
+            $this->invoice_number = Sale::generateInvoiceNumber();
+            $this->form['customer_id'] = Customer::first()->id ?? null;
+            $this->form['sold_at'] = now()->format('Y-m-d\TH:i');
+            $this->form['warehouse_id'] = $this->defaultWarehouseId;
+            
+            // 新增時預設加一列
+            $this->addRow();
+        }
     }
     
     // 元件渲染器，負責將資料傳遞給視圖並在每次更新時重新執行。
