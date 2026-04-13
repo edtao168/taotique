@@ -1,7 +1,7 @@
 {{-- 檔案路徑：resources/views/livewire/purchases/create.blade.php --}}
 <div>
-    <x-header :title="$isEdit ? '修改採購單 - ' . $purchase->purchase_number : '新增採購單'" separator progress-indicator>
-        <x-slot:actions>
+    <x-header :title="$isEdit ? '修改採購單 - ' . $purchase->purchase_number : '新增採購單 - ' . $purchase_number" separator progress-indicator>        
+		<x-slot:actions>
             <x-button label="返回列表" icon="o-arrow-left" :link="route('purchases.index')" />
             {{-- 上方也加入動作按鈕 --}}
             @if($isEdit)
@@ -25,6 +25,15 @@
         {{-- 右側：採購明細 --}}
         <div class="lg:col-span-3 pb-24 lg:pb-0">
             <x-card title="商品明細" shadow separator>
+				<x-slot:title>
+					<div class="flex justify-between items-center w-full">
+						<span class="font-bold">商品明細</span>
+						<div class="flex items-center gap-2">
+							<span class="text-xs opacity-50">連續掃描模式</span>
+							<x-scanner.button mode="continuous" class="btn-xs btn-outline flex flex-row items-center gap-1" />
+						</div>
+					</div>
+				</x-slot:title>
                 <div class="hidden lg:grid grid-cols-12 gap-4 mb-2 px-4 text-sm font-bold opacity-60">
                     <div class="col-span-6">商品選擇與確認</div>
                     <div class="col-span-2">數量</div>
@@ -51,11 +60,7 @@
                                         single
                                         debounce="300ms"
                                         placeholder="輸入 SKU 或 商品名稱 搜尋..."
-                                    >
-                                        <x-slot:append>
-                                            {{-- 🔧 使用共用元件 --}}
-                                            <x-scanner.button :index="$index" mode="single" />
-                                        </x-slot:append>
+									>
                                     </x-choices>
                                     
                                     @if($items[$index]['product_id'])

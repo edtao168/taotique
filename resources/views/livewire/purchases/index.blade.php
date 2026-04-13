@@ -54,11 +54,13 @@
     </div>
 
     {{-- 採購詳情 Drawer --}}
-    <x-drawer wire:model="drawer" title="採購單據詳情" right separator with-close-button class="w-11/12 lg:w-1/3">
+    <x-drawer wire:model="drawer" title="採購單據詳情" right separator with-close-button class="w-11/12 lg:w-1/3">  
         @if($selectedPurchase)
-            <div class="space-y-6 pb-20">
-                {{-- 基本資訊 --}}
-                <div class="bg-base-100 border rounded-xl p-4 shadow-sm">
+			
+			<p>採購單號：{{ $selectedPurchase->purchase_number }}</p>
+				
+			<div class="space-y-6 pb-20">				
+				<div class="bg-base-100 border rounded-xl p-4 shadow-sm">
                     <div class="grid grid-cols-2 gap-y-4 text-sm">
                         <div>
                             <p class="text-[10px] text-gray-400 font-bold">採購日期</p>

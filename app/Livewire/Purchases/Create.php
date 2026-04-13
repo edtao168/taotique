@@ -21,6 +21,7 @@ class Create extends Component
     public bool $isEdit = false;
 	
 	public $supplier_id;
+	public $purchase_number;
     public $purchased_at;
     public $currency = 'CNY';
     public $exchange_rate = '4.5';
@@ -49,7 +50,8 @@ class Create extends Component
                 'foreign_price' => (float)$item->foreign_price,
             ])->toArray();
         } else {
-            $this->purchased_at = now()->format('Y-m-d');
+            $this->purchase_number = Purchase::generatePurchaseNumber();
+			$this->purchased_at = now()->format('Y-m-d');
             $this->addRow();
         }
     }
