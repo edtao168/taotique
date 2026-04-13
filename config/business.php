@@ -10,18 +10,48 @@ return [
 		['id' => 'line_pay', 'name' => 'Line Pay', 'icon' => 'o-wallet'],
         
     ],
-    
-    'return_fee_types' => [
-    // 買家=(Subtotal + shipping_fee_customer - Discount - platform_coupon)
-    ['id' => 'shipping_fee_customer', 'name' => '買家支付運費',	'type' => 'addition', 	 'target' => 'customer', 'is_seller_cost' => false],
-    ['id' => 'shop_discount',		  'name' => '賣家折扣',		'type' => 'subtraction', 'target' => 'customer', 'is_seller_cost' => true],
-    ['id' => 'platform_coupon', 	  'name' => '平台優惠券',		'type' => 'subtraction', 'target' => 'customer', 'is_seller_cost' => false],
-    
-    // 賣家=(Subtotal - Platform_Fee - Shipping_Platform - Discount)
-    ['id' => 'shipping_fee_platform', 'name' => '平台代付運費',	'type' => 'subtraction', 'target' => 'platform', 'is_seller_cost' => true],
-	['id' => 'platform_fee', 		  'name' => '平台成交手續費',	'type' => 'subtraction', 'target' => 'platform', 'is_seller_cost' => true],    
-    ['id' => 'payment_processing', 	  'name' => '金流服務費',		'type' => 'subtraction', 'target' => 'platform', 'is_seller_cost' => true],
-],
+        
+	'fee_types' => [
+		// --- 影響「買家支付總額 (customer_total)」的項目 ---
+		'shipping_fee_customer' => [
+			'name'     => '買家支付運費',
+			'target'   => 'customer', // 影響買家
+			'operator' => 'add',      // 加項：小計 + 運費
+			'icon'     => 'o-truck',
+		],
+		'discount' => [
+			'name'     => '賣場折扣',
+			'target'   => 'customer', // 影響買家
+			'operator' => 'sub',      // 減項：小計 - 折扣
+			'icon'     => 'o-tag',
+		],
+		'platform_coupon' => [
+			'name'     => '平台優惠券',
+			'target'   => 'customer', 
+			'operator' => 'sub',      
+			'icon'     => 'o-ticket',
+		],
+
+		// --- 影響「賣家淨進帳 (final_net_amount)」的項目 ---
+		'platform_fee' => [
+			'name'     => '平台成交手續費',
+			'target'   => 'seller',   // 影響賣家收到的錢
+			'operator' => 'sub',      // 減項：從收入中扣除
+			'icon'     => 'o-calculator',
+		],
+		'shipping_fee_platform' => [
+			'name'     => '平台代付運費',
+			'target'   => 'seller',
+			'operator' => 'sub',      
+			'icon'     => 'o-paper-airplane',
+		],
+		'order_adjustment' => [
+			'name'     => '帳款調整',
+			'target'   => 'seller',
+			'operator' => 'add',      // 加項：補償款或調整增加
+			'icon'     => 'o-adjustments-horizontal',
+		],
+	],
 	
 	'currencies' => [
         'TWD' => ['symbol' => 'NT$', 'name' => '新台幣', 'precision' => 0],

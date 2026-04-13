@@ -34,7 +34,7 @@ class Customer extends Model
 	public static function getOptions(): array
 	{
 		return self::where('is_active', true) // 僅抓取啟用的客戶
-			->orderBy('name', 'asc')
+			->orderBy('id')
 			->get(['id', 'name'])
 			->map(fn($c) => [
 				'id'   => $c->id,

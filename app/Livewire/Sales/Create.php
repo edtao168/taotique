@@ -19,81 +19,48 @@ class Create extends Component
 {
     use HasBarcodeScanner, HasProductSearch, Toast;
 
-    public $customer_id = 1;
-    public Sale $sale; 
-    public $sold_at;    
-    public $invoice_number;
-    public array $items = [];
-    public array $productOptions = [];
-    public bool $showScanner = false;
-    public $warehouse_id = null;
-    public $payment_note;
-    
-    // 費用欄位
-    public $channel = 'shopee';
-    public $payment_method = 'shopee-';
-    public $subtotal = '0.0000';
-    public $discount = '0.0000';
-    public $shipping_fee_customer = '0.0000';
-    public $platform_coupon = 0;    
-    public $shipping_fee_platform = 0;
-    public $platform_fee = 0;
-    public $order_adjustment = 0;
-    public $customer_total = '0.0000';
-    public $final_net_amount = '0.0000';
+	public Sale $sale;
+	public array $items = [];
+	public array $productOptions = [];
+	public bool $showScanner = false;
+	public string $invoice_number = '';
+	public $defaultWarehouseId;
+	
+    public array $form = [
+		'customer_id' => 1,
+        'sold_at' => null,    
+        'invoice_number' => '',
+        'warehouse_id' => null,
+        'payment_note' => '',
+        'channel' => 'shopee',
+        'payment_method' => 'shopee-',
+        'subtotal' => '0.0000',
+        'discount' => '0.0000',
+        'shipping_fee_customer' => '0.0000',
+        'platform_coupon' => '0.0000',    
+        'shipping_fee_platform' => '0.0000',
+        'platform_fee' => '0.0000',
+        'order_adjustment' => '0.0000',
+        'customer_total' => '0.0000',
+        'final_net_amount' => '0.0000',
+	];
 
     /**
      * 元件建構函式，負責初始化資料和狀態，且只執行一次
      */	
     public function mount(Sale $sale = null)
     {
-        $this->sale = ($sale && $sale->exists) ? $sale : new Sale();		
-
-        if ($this->sale->exists) {
-            // 1. 填充單據基本資訊
-            $this->invoice_number = $this->sale->invoice_number;
-            $this->customer_id = $this->sale->customer_id;
-            $this->sold_at = $this->sale->sold_at->format('Y-m-d');
-            $this->channel = $this->sale->channel;
-            $this->warehouse_id = $this->sale->warehouse_id; 
-            $this->payment_method = $this->sale->payment_method;
-            $this->platform_fee = $this->sale->platform_fee;
-            $this->shipping_fee_platform = $this->sale->shipping_fee_platform;
-            $this->order_adjustment = $this->sale->order_adjustment;
-            $this->shipping_fee_customer = $this->sale->shipping_fee_customer;
-            $this->payment_note = $this->sale->payment_note;
-
-            // 2. 關鍵：轉換明細為陣列，並確保數值為字串以利 bcmath 運算
-            $this->items = $this->sale->items->map(fn($item) => [
-                'product_id' => $item->product_id,
-                'warehouse_id' => $item->warehouse_id,
-                'price' => (string)$item->price,
-                'quantity' => (string)$item->quantity,
-            ])->toArray();
-
-            // 3. 預載商品下拉選單需要的「名稱」
-            $productIds = collect($this->items)->pluck('product_id')->filter()->toArray();
-            $this->productOptions = Product::whereIn('id', $productIds)
-                ->get()
-                ->map(fn($p) => [
-                    'id'   => $p->id,
-                    'name' => $p->full_display_name,
-                ])->toArray();
-
-            // 4. 執行初次計算，確保 $final_net_amount 不是 0
-            $this->calculateAll();
-        } else {
-            // 直接使用 Sale Model 的 generateInvoiceNumber 方法（它已經會讀取設定）
-            $this->invoice_number = Sale::generateInvoiceNumber();
-            $this->sold_at = now()->format('Y-m-d');
-            
-            $defaultWarehouse = Warehouse::where('is_active', true)->first();
-            $this->warehouse_id = $defaultWarehouse?->id;
-            
-            if (empty($this->items)) {
-                $this->addRow();
-            }
-        }
+        // 修正：初始化 $sale 模型，避免 exists 報錯
+        $this->sale = new Sale();
+        
+        // 初始化預計單號與時間
+        $this->invoice_number = Sale::generateInvoiceNumber();
+        $this->form['customer_id'] = Customer::first()->id ?? null;
+		$this->form['sold_at'] = now()->format('Y-m-d\TH:i');
+        
+        // 預設倉庫
+        $this->defaultWarehouseId = Warehouse::where('is_active', true)->first()?->id ?? 1;        
+        $this->form['warehouse_id'] = $this->defaultWarehouseId;
     }
     
     // 元件渲染器，負責將資料傳遞給視圖並在每次更新時重新執行。
@@ -102,7 +69,7 @@ class Create extends Component
         return view('livewire.sales.create', [
             'channels'   => \App\Models\Shop::getOptions(),
             'warehouses' => \App\Models\Warehouse::getOptions(),
-            'customers'  => \App\Models\Customer::getOptions(),            
+            'customers'  => \App\Models\Customer::getOptions(),
         ]);
     }	
 	
@@ -110,17 +77,58 @@ class Create extends Component
      * 修正：手動新增行時，預設帶入第一個有效倉庫
      */
     public function addRow()
-    {
-        $defaultWarehouseId = Warehouse::where('is_active', true)->first()?->id ?? 1;
-        
+    {        
         $this->items[] = [
             'product_id' => null,
-            'warehouse_id' => $defaultWarehouseId,
+            'warehouse_id' => $this->defaultWarehouseId,
             'quantity' => '1.0000',
             'price' => '0.0000'
         ];
     }
 
+    /**
+     * 監聽所有影響金額的屬性異動
+     */
+    public function updated($property)
+    {
+        if (str_contains($property, 'form') || $property === 'items') {
+            $this->calculateAll();
+        }
+    }
+    
+	/**
+	 * 計算所有金額 (買家支付與賣家淨收益)
+	 */
+	public function calculateAll()
+    {
+        // 1. 小計
+        $this->form['subtotal'] = array_reduce($this->items, function ($carry, $item) {
+            $line = bcmul((string)($item['price'] ?? 0), (string)($item['quantity'] ?? 0), 4);
+            return bcadd($carry, $line, 4);
+        }, '0.0000');
+
+        $this->form['customer_total'] = $this->form['subtotal'];
+        $this->form['final_net_amount'] = $this->form['subtotal'];
+
+        // 2. 動態費用計算 (從 config 讀取)
+        $feeConfigs = config('business.fee_types', []);
+        foreach ($feeConfigs as $key => $config) {
+            $val = (string)($this->form[$key] ?? '0');
+            
+            if ($config['target'] === 'customer') {
+                $this->form['customer_total'] = ($config['operator'] === 'add') 
+                    ? bcadd($this->form['customer_total'], $val, 4) 
+                    : bcsub($this->form['customer_total'], $val, 4);
+            }
+
+            if ($config['target'] === 'seller') {
+                $this->form['final_net_amount'] = ($config['operator'] === 'add') 
+                    ? bcadd($this->form['final_net_amount'], $val, 4) 
+                    : bcsub($this->form['final_net_amount'], $val, 4);
+            }
+        }
+    }
+	
     /**
      * 儲存邏輯
      */
@@ -138,22 +146,22 @@ class Create extends Component
 
         // 將當前組件的所有屬性打包，對應到 Sale 模型需要的欄位
         $data = [
-            'customer_id'           => $this->customer_id,
-            'invoice_number'        => $this->invoice_number,
-            'channel'               => $this->channel,
-            'warehouse_id'          => $this->warehouse_id,
-            'payment_method'        => $this->payment_method,
-            'subtotal'              => $this->subtotal,
-            'discount'              => $this->discount,
-            'platform_coupon'       => $this->platform_coupon,
-            'shipping_fee_customer' => $this->shipping_fee_customer,
-            'shipping_fee_platform' => $this->shipping_fee_platform,
-            'platform_fee'          => $this->platform_fee,
-            'order_adjustment'      => $this->order_adjustment,
-            'customer_total'        => $this->customer_total,
-            'final_net_amount'      => $this->final_net_amount,
-            'sold_at'               => $this->sold_at,
-            'payment_note'          => $this->payment_note,
+            'customer_id'           => $this->form['customer_id'],  // 從 form 拿
+			'invoice_number'        => $this->invoice_number,
+			'channel'               => $this->form['channel'],  // 也要從 form 拿
+			'warehouse_id'          => $this->form['warehouse_id'],
+			'payment_method'        => $this->form['payment_method'],
+			'subtotal'              => $this->form['subtotal'],
+			'discount'              => $this->form['discount'],
+			'platform_coupon'       => $this->form['platform_coupon'],
+			'shipping_fee_customer' => $this->form['shipping_fee_customer'],
+			'shipping_fee_platform' => $this->form['shipping_fee_platform'],
+			'platform_fee'          => $this->form['platform_fee'],
+			'order_adjustment'      => $this->form['order_adjustment'],
+			'customer_total'        => $this->form['customer_total'],
+			'final_net_amount'      => $this->form['final_net_amount'],
+			'sold_at'               => $this->form['sold_at'],
+			'payment_note'          => $this->form['payment_note'],
         ];
 
         try {
@@ -171,67 +179,6 @@ class Create extends Component
         }
     }	
 	
-    /**
-     * 監聽所有影響金額的屬性異動
-     */
-    public function updated($property, $value)
-    {
-        // 商品與庫存邏輯
-        if (str_contains($property, 'product_id') && $value) {
-            $parts = explode('.', $property);
-            $index = $parts[1];
-            $product = Product::find($value);
-            if ($product) {
-                $this->items[$index]['price'] = (string)$product->price;
-            }
-        }
-
-        // 觸發重新計算的欄位清單
-        $calcFields = [
-            'items', 'discount', 'platform_coupon', 'shipping_fee_customer', 
-            'platform_fee', 'shipping_fee_platform', 'order_adjustment'
-        ];
-
-        if (collect($calcFields)->contains(fn($field) => str_contains($property, $field))) {
-            $this->calculateAll();
-        }
-    }
-
-    /**
-     * 核心計算邏輯 (BC Math)
-     */
-    public function calculateAll()
-    {
-        // 1. 計算商品小計 (Subtotal)
-        $newSubtotal = '0.0000';
-        foreach ($this->items as $item) {
-            $rowTotal = bcmul((string)($item['price'] ?? 0), (string)($item['quantity'] ?? 0), 4);
-            $newSubtotal = bcadd($newSubtotal, $rowTotal, 4);
-        }
-        $this->subtotal = $newSubtotal;
-
-        // 2. 計算買家實付 (Customer Total)
-        // 公式：小計 + 買家運費 - 賣場折扣 - 平台優惠券
-        $customerTotal = bcadd($this->subtotal, (string)($this->shipping_fee_customer ?: 0), 4);
-        $customerTotal = bcsub($customerTotal, (string)($this->discount ?: 0), 4);
-        $customerTotal = bcsub($customerTotal, (string)($this->platform_coupon ?: 0), 4);
-        $this->customer_total = $customerTotal;
-
-        // 3. 計算賣家實收 (Final Net Amount)
-        // 公式：買家實付 - 平台手續費 - 平台代付運費 + 帳款調整
-        $net = bcsub($this->customer_total, (string)($this->platform_fee ?: 0), 4);
-        $net = bcsub($net, (string)($this->shipping_fee_platform ?: 0), 4);
-        $net = bcadd($net, (string)($this->order_adjustment ?: 0), 4);
-        $this->final_net_amount = $net;
-    }
-    
-    public function removeRow($index)
-    {
-        unset($this->items[$index]);
-        $this->items = array_values($this->items);
-        $this->calculateAll();
-    }
-    
     /**
      * 實現 Trait 要求的抽象方法
      * 這裡處理銷貨單專用的掃碼邏輯

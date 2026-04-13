@@ -3,9 +3,10 @@
 namespace App\Livewire\Purchases;
 
 use App\Models\Product;
+use App\Models\Purchase;
+use App\Models\Setting;
 use App\Models\Supplier;
 use App\Models\Warehouse;
-use App\Models\Purchase;
 use App\Traits\HasBarcodeScanner;
 use App\Traits\HasProductSearch;
 use Illuminate\Support\Facades\DB;
@@ -27,7 +28,10 @@ class Create extends Component
     public array $items = [];
     public array $productOptions = [];
 
-    public function mount(?Purchase $purchase = null)
+    /**
+     * 
+     */
+	public function mount(?Purchase $purchase = null)
     {
         if ($purchase && $purchase->exists) {
             $this->isEdit = true;
@@ -49,14 +53,103 @@ class Create extends Component
             $this->addRow();
         }
     }
+	
+	/**
+     * 
+     */
+	public function render()
+    {
+        return view('livewire.purchases.create', [
+            'suppliers' => Supplier::all(),
+            'warehouses' => Warehouse::all(),
+        ]);
+    }
+	
+	/**
+     * 
+     */
+	public function addRow()
+    {
+        $this->items[] = [
+            'product_id' => null,
+            'selected_product_id' => null,
+            'name' => '',
+            'warehouse_id' => Warehouse::first()?->id ?? 1,
+            'quantity' => 1,
+            'foreign_price' => 0,
+        ];
+    }
+	
+	/**
+     * 
+     */
+	public function save()
+    {
+        $this->validate([
+            'supplier_id' => 'required',
+            'purchased_at' => 'required|date',
+            'items.*.product_id' => 'required',
+            'items.*.quantity' => 'required|numeric|min:0.01',
+        ]);
+
+        DB::transaction(function () {
+            if ($this->isEdit) {
+                // 1. 修改模式：精確沖銷舊明細對應的庫存
+                foreach ($this->purchase->items as $oldItem) {
+                    Inventory::where('product_id', $oldItem->product_id)
+                        ->where('warehouse_id', $oldItem->warehouse_id)
+                        ->where('purchase_item_id', $oldItem->id)
+                        ->delete();
+                }
+                $this->purchase->items()->delete();
+                
+                $this->purchase->update([
+                    'supplier_id' => $this->supplier_id,
+                    'exchange_rate' => $this->exchange_rate,
+                    'purchased_at' => $this->purchased_at,
+                    'remark' => $this->remark,
+                ]);
+                $target = $this->purchase;
+            } else {
+                // 2. 新增模式
+                $target = Purchase::create([                  
+                    'supplier_id' => $this->supplier_id,
+                    'user_id' => auth()->id(),
+                    'currency' => $this->currency,
+                    'exchange_rate' => $this->exchange_rate,
+                    'purchased_at' => $this->purchased_at,
+                    'remark' => $this->remark,
+                    'store_id' => 1,
+                ]);
+            }
+
+            // 3. 呼叫 Model 層的進貨處理程序 (處理加權平均成本與新庫存寫入)
+            $target->processInbound($this->items);
+        });
+
+        $this->success($this->isEdit ? '採購單修改完成' : '採購入庫成功', redirectTo: route('purchases.index'));
+    }
+	
     
-    public function updated($property, $value)
+    /**
+     * 
+     */
+	public function updated($property, $value)
     {
         if (str_contains($property, 'product_id') && $value) {
             $parts = explode('.', $property);
             $index = $parts[1];
             $this->fillProductData($index, $value, 'items');
         }
+    }
+
+	/**
+     * 
+     */
+	public function removeRow($index)
+    {
+        unset($this->items[$index]);
+        $this->items = array_values($this->items);
     }
 
     /**
@@ -100,79 +193,5 @@ class Create extends Component
         ];
 
         $this->success("已加入商品：{$product->name}");
-    }
-
-    public function save()
-    {
-        $this->validate([
-            'supplier_id' => 'required',
-            'purchased_at' => 'required|date',
-            'items.*.product_id' => 'required',
-            'items.*.quantity' => 'required|numeric|min:0.01',
-        ]);
-
-        DB::transaction(function () {
-            if ($this->isEdit) {
-                // 1. 修改模式：精確沖銷舊明細對應的庫存
-                foreach ($this->purchase->items as $oldItem) {
-                    Inventory::where('product_id', $oldItem->product_id)
-                        ->where('warehouse_id', $oldItem->warehouse_id)
-                        ->where('purchase_item_id', $oldItem->id)
-                        ->delete();
-                }
-                $this->purchase->items()->delete();
-                
-                $this->purchase->update([
-                    'supplier_id' => $this->supplier_id,
-                    'exchange_rate' => $this->exchange_rate,
-                    'purchased_at' => $this->purchased_at,
-                    'remark' => $this->remark,
-                ]);
-                $target = $this->purchase;
-            } else {
-                // 2. 新增模式
-                $target = Purchase::create([
-                    'purchase_number' => 'PO' . now()->format('YmdHis'),
-                    'supplier_id' => $this->supplier_id,
-                    'user_id' => auth()->id(),
-                    'currency' => $this->currency,
-                    'exchange_rate' => $this->exchange_rate,
-                    'purchased_at' => $this->purchased_at,
-                    'remark' => $this->remark,
-                    'store_id' => 1,
-                ]);
-            }
-
-            // 3. 呼叫 Model 層的進貨處理程序 (處理加權平均成本與新庫存寫入)
-            $target->processInbound($this->items);
-        });
-
-        $this->success($this->isEdit ? '採購單修改完成' : '採購入庫成功', redirectTo: route('purchases.index'));
-    }
-    
-    public function addRow()
-    {
-        $this->items[] = [
-            'product_id' => null,
-            'selected_product_id' => null,
-            'name' => '',
-            'warehouse_id' => Warehouse::first()?->id ?? 1,
-            'quantity' => 1,
-            'foreign_price' => 0,
-        ];
-    }
-
-    public function removeRow($index)
-    {
-        unset($this->items[$index]);
-        $this->items = array_values($this->items);
-    }
-
-    public function render()
-    {
-        return view('livewire.purchases.create', [
-            'suppliers' => Supplier::all(),
-            'warehouses' => Warehouse::all(),
-        ]);
     }
 }

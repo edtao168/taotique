@@ -25,13 +25,13 @@
         <div class="lg:col-span-3 space-y-4">
             <x-card title="單據資訊" shadow separator>
                 <div class="space-y-4">
-                    <x-choices label="客戶" wire:model="customer_id" :options="$customers" single />
-                    <x-datetime label="銷售日期" wire:model="sold_at" icon="o-calendar" />
-                    <x-select label="管道" wire:model="channel" :options="$channels" />
-                    <x-select label="付款方式" wire:model="payment_method" :options="config('business.payment_methods')" />
-					<x-select label="業務歸屬倉庫" wire:model="warehouse_id" :options="$warehouses" placeholder="請選擇倉庫" />
+                    <x-choices label="客戶" wire:model="form.customer_id" :options="$customers" single />
+                    <x-datetime label="銷售日期" wire:model="form.sold_at" type="datetime-local" icon="o-calendar" />
+                    <x-select label="管道" wire:model="form.channel" :options="$channels" />
+                    <x-select label="付款方式" wire:model="form.payment_method" :options="config('business.payment_methods')" />
+					<x-select label="業務歸屬倉庫" wire:model="form.warehouse_id" :options="$warehouses" placeholder="請選擇倉庫" />
 
-                    <x-textarea label="備註" wire:model="remark" rows="2" />
+                    <x-textarea label="備註" wire:model="form.remark" rows="2" />
                 </div>
             </x-card>
         </div>
@@ -155,28 +155,58 @@
                     {{-- 第一列：小計 --}}
                     <div class="flex justify-between items-center p-2 bg-base-200/50 rounded-lg">
                         <span class="font-bold opacity-70">小計</span>
-                        <span class="font-mono text-right">NT$ {{ number_format($subtotal, 0) }}</span>
+                        <span class="font-mono text-right">NT$ {{ number_format($form['subtotal'], 0) }}</span>
                     </div>
 
-                    {{-- 第二列：雙欄對照 --}}
-                    <div class="grid grid-cols-2 gap-4 text-xs">
-                        <div class="space-y-3">
-                            <div class="badge badge-info badge-outline font-bold px-4 py-3">買家</div>
-                            <x-input label="買家運費" wire:model.live.debounce.500ms="shipping_fee_customer" prefix="+" class="input-sm text-right font-mono" />
-                            <x-input label="賣場折扣" wire:model.live.debounce.500ms="discount" prefix="-" class="input-sm text-right font-mono text-error" />
-                            <x-input label="平台優惠" wire:model.live.debounce.500ms="platform_coupon" prefix="-" class="input-sm text-right font-mono text-error" />
-                            <div class="pt-2 border-t border-dashed">
-                                <div class="text-[10px] opacity-50">買家實付</div>
-                                <div class="text-lg font-bold text-blue-600 font-mono">NT$ {{ number_format($customer_total, 0) }}</div>
-                            </div>
-                        </div>
-                        <div class="space-y-3">
-                            <div class="badge badge-success badge-outline font-bold px-4 py-3">賣家</div>
-                            <x-input label="平台手續費" wire:model.live.debounce.500ms="platform_fee" prefix="-" class="input-sm text-right font-mono text-warning" />
-                            <x-input label="平台代付運費" wire:model.live.debounce.500ms="shipping_fee_platform" prefix="-" class="input-sm text-right font-mono text-warning" />
-                            <x-input label="帳款調整" wire:model.live.debounce.500ms="order_adjustment" prefix="±" class="input-sm text-right font-mono" />
-                        </div>
-                    </div>
+                    {{-- 第二列：雙欄對照 --}}                  
+					<div class="grid grid-cols-2 gap-4 text-xs">
+						{{-- 左側：買家區塊 --}}
+						<div class="space-y-3">
+							<div class="badge badge-info badge-outline font-bold px-4 py-3">買家</div>
+							
+							@foreach(collect(config('business.fee_types'))->where('target', 'customer') as $field => $config)
+								<x-input 
+									label="{{ $config['name'] }}" 
+									wire:model.live.debounce.500ms="form.{{ $field }}" 
+									prefix="{{ $config['operator'] === 'add' ? '+' : '-' }}"
+									icon="{{ $config['icon'] ?? '' }}"
+									class="input-sm text-right font-mono {{ $config['operator'] === 'sub' ? 'text-error' : '' }}"
+									type="number"
+									step="0.01"
+								/>
+							@endforeach
+
+							<div class="pt-2 border-t border-dashed">
+								<div class="text-[10px] opacity-50">買家實付</div>
+								<div class="text-lg font-bold text-blue-600 font-mono">
+									NT$ {{ number_format($form['customer_total'], 2) }}
+								</div>
+							</div>
+						</div>
+
+						{{-- 右側：賣家區塊 --}}
+						<div class="space-y-3">
+							<div class="badge badge-success badge-outline font-bold px-4 py-3">賣家</div>
+							
+							@foreach(collect(config('business.fee_types'))->where('target', 'seller') as $field => $config)
+								<x-input 
+									label="{{ $config['name'] }}" 
+									wire:model.live.debounce.500ms="form.{{ $field }}" 
+									prefix="{{ $config['operator'] === 'add' ? '+' : '-' }}"
+									icon="{{ $config['icon'] ?? '' }}"
+									{{-- 針對賣家支出（sub）標註警告顏色 --}}
+									class="input-sm text-right font-mono {{ $config['operator'] === 'sub' ? 'text-warning' : '' }}"
+									type="number"
+									step="0.01"
+								/>
+							@endforeach
+							
+							{{-- 如果有特殊的 order_adjustment 欄位不在 config 中，可手動加回 --}}
+							@if(!isset(config('business.fee_types')['order_adjustment']))
+								<x-input label="帳款調整" wire:model.live.debounce.500ms="form.order_adjustment" prefix="±" class="input-sm text-right font-mono" />
+							@endif
+						</div>
+					</div>
 
                     <div class="divider my-0"></div>
 
@@ -184,7 +214,7 @@
                     <div class="p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl border border-emerald-100">
                         <div class="text-[15px] text-emerald-600 font-bold tracking-widest uppercase mb-1">最終訂單進帳</div>
                         <div class="text-4xl font-black text-emerald-600 font-mono">
-                            NT$ {{ number_format($final_net_amount, 0) }}
+                            NT$ {{ number_format($form['final_net_amount'], 0) }}
                         </div>
                     </div>
 

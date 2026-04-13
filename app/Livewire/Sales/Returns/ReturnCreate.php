@@ -162,6 +162,29 @@ class ReturnCreate extends Component
     {
         return bcsub($this->itemsTotal, $this->feesTotal, 4);
     }
+		
+	/**
+	 * 計算所有金額
+	 */
+	public function calculateTotals()
+	{
+		// 1. 取得商品退款小計
+		$this->form['items_total_amount'] = array_reduce($this->selectedItems, function ($carry, $item) {
+			return bcadd($carry, (string)($item['subtotal'] ?? 0), 4);
+		}, '0.0000');
+
+		// 2. 彙整所有退貨費用 (fees 陣列)
+		$this->form['fees_total_amount'] = array_reduce($this->fees, function ($carry, $fee) {
+			return bcadd($carry, (string)($fee['amount'] ?? 0), 4);
+		}, '0.0000');
+
+		// 3. 計算最終退款金額 (商品總計 - 費用總計)
+		$this->form['total_refund_amount'] = bcsub(
+			$this->form['items_total_amount'], 
+			$this->form['fees_total_amount'], 
+			4
+		);
+	}
 	
 	/**
      * 儲存邏輯
