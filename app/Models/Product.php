@@ -29,7 +29,7 @@ class Product extends Model
 		'is_unique' => 'boolean',
         'is_active' => 'boolean',
     ];
-	
+		
 	public function getFullDisplayNameAttribute()
     {
         return "[{$this->sku}] {$this->name}";

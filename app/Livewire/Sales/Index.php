@@ -92,10 +92,10 @@ class Index extends Component
         $lastMonthSales = Sale::whereBetween('sold_at', [$startOfLastMonth, $endOfLastMonth])->sum('subtotal');
         $salesGrowth = $lastMonthSales > 0 ? (($monthSales - $lastMonthSales) / $lastMonthSales) * 100 : ($monthSales > 0 ? 100 : 0);
         $yearSales = Sale::whereYear('sold_at', date('Y'))->sum('subtotal');
-        $monthProfit = Sale::whereBetween('sold_at', [$startOfMonth, $endOfMonth])->get()->sum('final_net_amount');
+        $monthProfit = Sale::whereBetween('sold_at', [$startOfMonth, $endOfMonth])->sum('final_net_amount');
 
         // --- 2. 銷售清單查詢 (合併原 SalesIndex 邏輯) ---
-        $sales = Sale::with(['customer', 'user', 'shop', 'warehouse'])
+        $sales = Sale::with(['customer', 'user', 'shop', 'warehouse', 'fees'])
             ->when($this->search, function ($query) {
                 $query->where('invoice_number', 'like', "%{$this->search}%")
                       ->orWhereHas('customer', fn($q) => $q->where('name', 'like', "%{$this->search}%"));

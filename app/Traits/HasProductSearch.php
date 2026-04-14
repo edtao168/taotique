@@ -25,7 +25,7 @@ trait HasProductSearch
             ->get()
             ->map(fn($p) => [
                 'id'   => $p->id,
-                'name' => $p->full_display_name, 
+                'name' => $p->full_display_name,			
             ])
             ->toArray();
 
@@ -40,10 +40,12 @@ trait HasProductSearch
         $product = Product::find($productId);
         if ($product) {
             $this->{$targetArray}[$index]['product_id'] = $product->id;
+			$this->{$targetArray}[$index]['name'] = $product->name;
             // 僅填充金額，不再顯示多餘的名稱輸入框
-            if (isset($this->{$targetArray}[$index]['foreign_price']) && empty($this->{$targetArray}[$index]['foreign_price'])) {
-                $this->{$targetArray}[$index]['foreign_price'] = $product->last_purchase_price ?? 0;
-            }
+            $currentPrice = $this->{$targetArray}[$index]['price'] ?? 0;
+			if (empty($currentPrice) || $currentPrice == 0) {
+				$this->{$targetArray}[$index]['price'] = $product->price ?? 0;
+			}
         }
     }
 }

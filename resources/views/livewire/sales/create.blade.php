@@ -20,8 +20,8 @@
             <x-card title="單據資訊" shadow separator>
                 <div class="space-y-4">
                     <x-choices label="客戶" wire:model="form.customer_id" :options="$customers" single />
-                    <x-datetime label="銷售日期" wire:model="form.sold_at" type="datetime-local" icon="o-calendar" />
-                    <x-select label="管道" wire:model="form.channel" :options="$channels" />
+                    <x-datetime label="銷售日期" wire:model="form.sold_at" icon="o-calendar" />
+                    <x-select label="管道" wire:model="form.channel" :options="$shops" option-value="id" option-label="name"/>
                     <x-select label="付款方式" wire:model="form.payment_method" :options="config('business.payment_methods')" />
 					<x-select label="業務歸屬倉庫" wire:model="form.warehouse_id" :options="$warehouses" placeholder="請選擇倉庫" />
 
@@ -30,12 +30,12 @@
             </x-card>
         </div>
 
-        {{-- 2. 中間：商品明細 (2/4) --}}
-		<div class="lg:col-span-6">
-			<x-card shadow separator>
+        {{-- 2. 中間 商品明細 (2/4) --}}
+		<div class="lg:col-span-6 pb-24 lg:pb-0">
+			<x-card title="商品明細" shadow separator>
 				<x-slot:title>
 					<div class="flex justify-between items-center w-full">
-						<span class="font-bold">商品明細</span>
+						<span class="font-bold text-xl text-base-content">商品明細</span>
 						<div class="flex items-center gap-2">
 							<span class="text-xs opacity-50">連續掃描模式</span>
 							<x-scanner.button mode="continuous" class="btn-xs btn-outline flex flex-row items-center gap-1" />
@@ -43,23 +43,45 @@
 					</div>
 				</x-slot:title>
 
-				{{-- PC 端表格 - 調整寬度分配 --}}
-				<div class="hidden md:block overflow-x-auto">
-					<table class="table table-compact w-full min-w-[800px]">
-						<thead>
-							<tr class="bg-base-200">
-								<th class="w-2/5">商品名稱(搜尋或掃描)</th>
-								<th class="w-1/6 text-right">單價</th>
-								<th class="w-1/6">實際發貨倉庫</th>
-								<th class="w-1/6 text-right">數量</th>
-								<th class="w-1/6 text-right">小計</th>
-								<th class="w-12 text-center">操作</th>
-							</tr>
-						</thead>
-						<tbody>
-							@foreach($items as $index => $item)
-								<tr wire:key="pc-item-{{ $index }}">
-									<td class="min-w-[200px]">
+				{{-- PC 端標頭：僅在 lg (1024px) 以上顯示，對齊下方的 Grid 比例 --}}
+				<div class="hidden lg:grid grid-cols-12 gap-4 mb-2 px-4 text-sm font-bold opacity-60">
+					<div class="col-span-5">商品名稱 (搜尋或掃描)</div>
+					<div class="col-span-2 text-right">單價</div>
+					<div class="col-span-2">發貨倉庫</div>
+					<div class="col-span-1 text-center">數量</div>
+					<div class="col-span-2 text-right text-primary">小計</div>
+				</div>
+
+				<div class="space-y-3">
+					@forelse($items as $index => $item)
+						<div wire:key="sale-row-v1-{{ $index }}-{{ $item['product_id'] ?? 'new' }}" class="group relative p-4 lg:px-4 lg:py-3 hover:bg-base-200/40 transition-colors">
+							
+							{{-- 刪除按鈕：手機端常駐顯示，PC端則在懸停時於右側浮現，保持視覺潔淨 --}}
+							<div class="absolute right-2 top-2 lg:top-1/2 lg:-translate-y-1/2 z-10">
+								<x-button 
+									icon="o-trash" 
+									class="btn-error btn-xs lg:btn-ghost lg:opacity-0 lg:group-hover:opacity-100 transition-all" 
+									wire:click="removeRow({{ $index }})" 
+								/>
+							</div>
+
+							{{-- 核心 Grid 佈局 --}}
+							<div class="grid grid-cols-1 lg:grid-cols-12 gap-3 lg:gap-4 items-center">
+								
+								{{-- 商品選擇 (占 5 格) --}}
+								<div class="col-span-1 lg:col-span-5">
+									@if(isset($items[$index]['product_id']) && $items[$index]['product_id'] > 0)
+										{{-- 選定後的「靜態顯示」狀態 --}}
+										<div class="flex items-center justify-between p-2 border rounded-lg bg-base-200/50">
+											<div class="flex flex-col">                
+												<span class="font-bold">{{ $item['name'] }}</span>
+												{{-- 或者如果你想用 Model 的格式： --}}
+												{{-- <span class="font-bold">{{ $item['name'] }}</span> --}}
+											</div>
+											<x-button icon="o-pencil" class="btn-ghost btn-xs" wire:click="$set('items.{{ $index }}.product_id', null)" />
+										</div>
+									@else
+										{{-- 尚未選擇時的「搜尋」狀態 --}}
 										<x-choices 
 											wire:model.live="items.{{ $index }}.product_id" 
 											:options="$productOptions"
@@ -67,77 +89,64 @@
 											option-label="name"
 											searchable 
 											single
+											debounce="300ms"
 										/>
-									</td>
-									<td class="text-right">
-										<x-input 
-											wire:model.live.debounce.500ms="items.{{ $index }}.price" 
-											class="font-mono text-right w-28"
-											placeholder="0"
-										/>
-									</td>
-									<td>
-										<x-select 
-											wire:model.live="items.{{ $index }}.warehouse_id" 
-											:options="$warehouses"
-											placeholder="選擇"
-											class="w-32"
-										/>
-									</td>
-									<td class="text-right">
-										<x-input 
-											type="number" 
-											wire:model.live.debounce.500ms="items.{{ $index }}.quantity" 
-											class="font-mono text-right w-24"
-											step="0.0001"
-											placeholder="1"
-										/>
-									</td>
-									<td class="font-mono text-right whitespace-nowrap">
-										<span class="font-bold">
-											NT$ {{ number_format(bcmul($item['price'] ?? 0, $item['quantity'] ?? 0, 4), 0) }}
-										</span>
-									</td>
-									<td class="text-center">
-										<x-button icon="o-trash" class="btn-ghost btn-xs text-error" wire:click="removeRow({{ $index }})" />
-									</td>
-								</tr>
-							@endforeach
-						</tbody>
-					</table>
-				</div>
+									@endif
+								</div>
 
-				{{-- 手機端同步移除單行掃描按鈕 --}}
-				<div class="md:hidden space-y-3">
-					@foreach($items as $index => $item)
-						<div wire:key="mobile-item-{{ $index }}" class="p-3 border rounded-lg bg-base-100 relative">
-							<x-button icon="o-trash" class="btn-error btn-xs absolute top-1 right-1 rounded-full" wire:click="removeRow({{ $index }})" />
-							<x-choices 
-								label="商品" 
-								wire:model.live="items.{{ $index }}.product_id" 
-								:options="$productOptions" 
-								search-function="search"
-								option-label="name"
-								searchable 
-								single 
-							/>
-							<div class="grid grid-cols-2 gap-2 mt-2">
-								<x-input label="單價" wire:model.live.debounce.500ms="items.{{ $index }}.price" />
-								<x-select 
-									label="實際發貨倉庫"
-									wire:model.live="items.{{ $index }}.warehouse_id" 
-									:options="$warehouses"
-									placeholder="選擇倉庫"
-									class="font-mono"
-								/>
-								<x-input label="數量" type="number" wire:model.live.debounce.500ms="items.{{ $index }}.quantity" />
+								{{-- 單價 (占 2 格) --}}
+								<div class="col-span-1 lg:col-span-2">
+									<div class="lg:hidden text-xs font-bold opacity-50 mb-1">單價</div>
+									<x-input 
+										wire:model.live.debounce.500ms="items.{{ $index }}.price" 
+										class="font-mono text-right focus:bg-primary/5"
+										placeholder="0"
+									/>
+								</div>
+
+								{{-- 發貨倉庫 (占 2 格) --}}
+								<div class="col-span-1 lg:col-span-2">
+									<div class="lg:hidden text-xs font-bold opacity-50 mb-1">發貨倉庫</div>
+									<x-select 
+										wire:model.live="items.{{ $index }}.warehouse_id" 
+										:options="$warehouses"
+										placeholder="請選擇"
+									/>
+								</div>
+
+								{{-- 數量 (占 1 格) --}}
+								<div class="col-span-1 lg:col-span-1">
+									<div class="lg:hidden text-xs font-bold opacity-50 mb-1 text-center">數量</div>
+									<x-input 
+										type="number" 
+										wire:model.live.debounce.500ms="items.{{ $index }}.quantity" 
+										class="font-mono text-center px-1"
+										step="0.0001"
+									/>
+								</div>
+
+								{{-- 小計 (占 2 格) --}}
+								<div class="col-span-1 lg:col-span-2 text-right">
+									<div class="lg:hidden text-xs font-bold opacity-50 mb-1">小計</div>
+									<div class="flex flex-col">
+										<span class="font-mono font-black text-primary text-lg lg:text-base">
+											{{ number_format(bcmul($item['price'] ?? 0, $item['quantity'] ?? 0, 4), 0) }}
+										</span>
+										<span class="text-[10px] opacity-40 lg:hidden">TWD</span>
+									</div>
+								</div>
 							</div>
 						</div>
-					@endforeach
+					@empty
+						<div class="p-12 text-center bg-base-200/20 rounded-b-lg border-dashed border-2">
+							<x-icon name="o-shopping-cart" class="w-12 h-12 mx-auto opacity-20" />
+							<p class="mt-2 opacity-50 italic text-sm">尚未加入任何銷售商品，請開始掃描或搜尋</p>
+						</div>
+					@endforelse
 				</div>
 
 				<x-slot:actions>
-					<x-button label="手動新增行" icon="o-plus" class="btn-ghost btn-sm w-full border-dashed border-2" wire:click="addRow" />
+					<x-button label="手動新增一行商品" icon="o-plus-circle" class="btn-ghost btn-sm w-full border-dashed border-2 hover:border-primary hover:text-primary" wire:click="addRow" />
 				</x-slot:actions>
 			</x-card>
 		</div>
@@ -161,7 +170,8 @@
 							@foreach(collect(config('business.fee_types'))->where('target', 'customer') as $field => $config)
 								<x-input 
 									label="{{ $config['name'] }}" 
-									wire:model.live.debounce.500ms="form.{{ $field }}" 
+									wire:model.live.debounce.500ms="form.{{ $field }}"
+									wire:change="calculateAll"
 									prefix="{{ $config['operator'] === 'add' ? '+' : '-' }}"
 									icon="{{ $config['icon'] ?? '' }}"
 									class="input-sm text-right font-mono {{ $config['operator'] === 'sub' ? 'text-error' : '' }}"

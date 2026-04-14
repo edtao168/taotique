@@ -89,15 +89,14 @@
                     @endforeach
                 </div>
 
-                <x-slot:actions>
-                    <x-button label="追加商品列" icon="o-plus" class="btn-outline btn-sm w-full" wire:click="addRow" />
-                </x-slot:actions>
+                
 				
 				<x-slot:actions>
-                    <div class="flex flex-col w-full gap-2">
-                        <x-button label="追加商品列" icon="o-plus" class="btn-outline btn-sm w-full" wire:click="addRow" />
-                        
-                        {{-- 底部動作列 (手機端特別有用) --}}
+                    <div class="flex flex-col w-full gap-2">                        
+                        <x-slot:actions>
+							<x-button label="手動新增一行商品" icon="o-plus-circle" class="btn-ghost btn-sm w-full border-dashed border-2 hover:border-primary hover:text-primary" wire:click="addRow" />
+						</x-slot:actions>
+				{{-- 底部動作列 (手機端特別有用) --}}
                         @if($isEdit)
                         <div class="grid grid-cols-2 gap-2 mt-4 lg:hidden">
                              <x-button label="退貨" icon="o-arrow-path" :link="route('purchases.returns.create', $purchase->id)" class="btn-outline" />

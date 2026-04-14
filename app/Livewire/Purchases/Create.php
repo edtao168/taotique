@@ -68,18 +68,17 @@ class Create extends Component
     }
 	
 	/**
-     * 
+     * 增加空的一行
      */
 	public function addRow()
     {
         $this->items[] = [
-            'product_id' => null,
-            'selected_product_id' => null,
-            'name' => '',
+            'product_id' => null,            
             'warehouse_id' => Warehouse::first()?->id ?? 1,
             'quantity' => 1,
             'foreign_price' => 0,
         ];
+		$this->search('');
     }
 	
 	/**
