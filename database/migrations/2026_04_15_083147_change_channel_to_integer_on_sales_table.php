@@ -11,20 +11,20 @@ return new class extends Migration
     public function up(): void
 {
     // 再次確保萬一還有殘留字串，用字串比對
-    DB::table('sales')->where('channel', 'shopee')->update(['channel' => 1]);
+    /* DB::table('sales')->where('channel', 'shopee')->update(['channel' => 1]);
     DB::table('sales')->where('channel', 'facebook')->update(['channel' => 2]);
-    DB::table('sales')->where('channel', 'line')->update(['channel' => 3]);
+    DB::table('sales')->where('channel', 'line')->update(['channel' => 3]); */
 
-    Schema::table('sales', function (Blueprint $table) {
+    /* Schema::table('sales', function (Blueprint $table) {
         // 修改欄位定義為無符號大整數
         $table->unsignedBigInteger('channel')->change();
-    });
+    }); */
 }
 
     public function down(): void
     {
-        Schema::table('sales', function (Blueprint $table) {
+        /* Schema::table('sales', function (Blueprint $table) {
             $table->string('channel')->change();
-        });
+        }); */
     }
 };

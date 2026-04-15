@@ -6,12 +6,6 @@
             <x-button label="確認過帳" icon="o-paper-airplane" class="btn-primary" wire:click="save" spinner />
         </x-slot:actions>
     </x-header>
-	
-	{{-- 手機端專用的單號顯示 (因為 header middle 在手機端通常會隱藏) --}}
-    <div class="md:hidden mb-4 p-3 bg-base-200 rounded-lg flex justify-between items-center">
-        <span class="text-sm font-bold">預計單號</span>
-        <span class="font-mono text-primary font-bold">{{ $invoice_number }}</span>
-    </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
         
@@ -48,7 +42,7 @@
 					<div class="col-span-5">商品名稱 (搜尋或掃描)</div>
 					<div class="col-span-2 text-right">單價</div>
 					<div class="col-span-2">發貨倉庫</div>
-					<div class="col-span-1 text-center">數量</div>
+					<div class="col-span-1 text-right">數量</div>
 					<div class="col-span-2 text-right text-primary">小計</div>
 				</div>
 
@@ -116,11 +110,11 @@
 
 								{{-- 數量 (占 1 格) --}}
 								<div class="col-span-1 lg:col-span-1">
-									<div class="lg:hidden text-xs font-bold opacity-50 mb-1 text-center">數量</div>
+									<div class="lg:hidden text-xs font-bold opacity-50 mb-1 text-right">數量</div>
 									<x-input 
 										type="number" 
 										wire:model.live.debounce.500ms="items.{{ $index }}.quantity" 
-										class="font-mono text-center px-1"
+										class="font-mono text-right px-1"
 										step="0.0001"
 									/>
 								</div>
