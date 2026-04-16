@@ -24,4 +24,27 @@
     svg {
         @apply w-5 h-5 inline-block; /* 強制限制 Mary UI 圖標預設大小 */
     }
+	
+	/* 1. 統一所有輸入框的對齊基準 */
+    input.text-right {
+        @apply font-mono; /* 金額建議使用等寬字型 */
+        display: inline-flex !important;
+        align-items: center !important; /* 強制 Flex 置中 */
+        line-height: 1 !important;      /* 移除多餘行高 */
+        padding-top: 0 !important;
+        padding-bottom: 0 !important;
+        height: 2.5rem;                 /* 確保高度固定 */
+    }
+
+    /* 2. 修正 Mary UI 的 Input 容器內距 */
+    .mary-input-wrapper input {
+        vertical-align: middle;
+    }
+
+    /* 3. 針對 Chrome 的數字控制按鈕進行移除，避免空間擠壓 */
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+    }
 }

@@ -19,7 +19,7 @@ class Purchase extends Model
         'user_id',
         'currency',
         'exchange_rate',
-        'total_foreign',
+        'total_amount',
         'total_twd',
         'purchased_at',
         'remark'
@@ -31,7 +31,7 @@ class Purchase extends Model
             'purchased_at' => 'datetime',
             'exchange_rate' => 'decimal:4',
             'total_twd' => 'decimal:4',
-            'total_foreign' => 'decimal:4',
+            'total_amount' => 'decimal:4',
         ];
     }
 
@@ -46,35 +46,37 @@ class Purchase extends Model
         });
     }
 
+	/**
+	 * 嚴謹的金額運算邏輯
+	 */
+	public function calculateAndSetTotals()
+	{
+		// 1. 計算原始幣別總額：(小計 + 運費) - 折扣
+		$total = bcadd($this->subtotal_amount, $this->shipping_fee, 4);
+		$this->total_amount = bcsub($total, $this->discount, 4);
+
+		// 2. 換算本幣：total_amount * exchange_rate
+		$this->total_twd = bcmul($this->total_amount, $this->exchange_rate, 4);
+	}
+
     /**
      * 產生採購單號碼 (使用統一的 Setting 方法)
      */
     public static function generatePurchaseNumber(): string
     {
-        return DB::transaction(function () {
-            // 使用統一的 Setting::get() 方法
-            $prefix = Setting::get('po_prefix', 'PO-'); // 讀取採購前綴，默認為 PO-
-            $digits = (int) Setting::get('number_digits', 5);
-            $datePart = now()->format('Ymd');
-            $fullPrefix = $prefix . $datePart;
-
-            // 鎖定資料表取得最新流水號 (防止並發衝突)
-            $lastOrder = self::where('purchase_number', 'like', "{$fullPrefix}%")
-                ->lockForUpdate()
-                ->orderBy('purchase_number', 'desc')
-                ->first();
-
-            if ($lastOrder) {
-                // 從最後一筆單號中截取流水號部分並遞增
-                $lastNumberStr = substr($lastOrder->purchase_number, strlen($fullPrefix));
-                $lastNumber = (int) $lastNumberStr;
-                $nextNumber = $lastNumber + 1;
-            } else {
-                $nextNumber = 1;
-            }
-
-            return $fullPrefix . str_pad($nextNumber, $digits, '0', STR_PAD_LEFT);
-        });
+        // 從 settings 表抓取前綴，預設 PO-
+		$prefix = Setting::get('po_prefix', 'PO-'); 
+		$date = now()->format('Ymd');
+		
+		// 取得當日最後一筆序號
+		$lastOrder = self::whereDate('created_at', now()->toDateString())
+			->orderBy('id', 'desc')
+			->first();
+			
+		$sequence = $lastOrder ? (int)substr($lastOrder->purchase_number, -4) + 1 : 1;
+		$digits = Setting::get('number_digits', 4); // 根據設定檔決定流水號位數
+		
+		return $prefix . $date . str_pad($sequence, $digits, '0', STR_PAD_LEFT);
     }    
 
     /**
@@ -123,7 +125,7 @@ class Purchase extends Model
             // 更新主表總額
             $this->update([
                 'total_twd' => $grandTotalTWD,
-                'total_foreign' => $grandTotalForeign
+                'total_amount' => $grandTotalForeign
             ]);
         });
     }

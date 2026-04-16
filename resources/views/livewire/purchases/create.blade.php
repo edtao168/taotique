@@ -1,5 +1,14 @@
 {{-- 檔案路徑：resources/views/livewire/purchases/create.blade.php --}}
-<div>
+<div x-data="{ 
+        atBottom: false,
+        checkScroll() {
+            // 判斷是否滾動到接近底部 (留 150px 緩衝)
+            this.atBottom = (window.innerHeight + window.scrollY) >= (document.body.offsetHeight - 100);
+        }
+     }" 
+     x-init="checkScroll()"
+     @scroll.window="checkScroll()">
+	 
     <x-header :title="$isEdit ? '修改採購單 - ' . $purchase->purchase_number : '新增採購單 - ' . $purchase_number" separator progress-indicator>        
 		<x-slot:actions>
             <x-button label="返回列表" icon="o-arrow-left" :link="route('purchases.index')" />
@@ -13,15 +22,72 @@
 
     <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {{-- 左側：主表資訊 --}}
-        <div class="lg:col-span-1">
-            <x-card title="基本資訊" shadow separator>
-                <x-select label="供應商" icon="o-user" :options="$suppliers" wire:model="supplier_id" placeholder="請選擇" />
-                <x-datetime label="採購日期" wire:model="purchased_at" icon="o-calendar" class="mt-4" />
-                <x-input label="匯率 (TWD)" wire:model.live="exchange_rate" icon="o-currency-dollar" class="mt-4" />
-                <x-input label="備註" wire:model.live="remark" icon="o-pencil-square" class="mt-4" />
-            </x-card>
-        </div>
+        <div class="lg:col-span-1 space-y-4">
+			<x-card title="採購設定" shadow separator>
+				<div class="space-y-4">
+					<x-select label="供應商" icon="o-user" :options="$suppliers" wire:model="supplier_id" placeholder="請選擇" />
+					
+					<div class="grid grid-cols-2 gap-4">
+						<x-datetime label="採購日期" wire:model="purchased_at" icon="o-calendar" />
+						<x-select label="幣別" :options="[['id'=>'CNY', 'name'=>'人民幣'], ['id'=>'TWD', 'name'=>'台幣']]" wire:model.live="currency" />
+					</div>
+				</div>
+			</x-card>
 
+			<x-card title="費用與合計" shadow separator class="bg-white border-2 border-primary/5">
+				<div class="space-y-4">
+					{{-- 動態顯示幣別的 Prefix --}}
+					<x-input label="運費" wire:model.live="shipping_fee" prefix="{{ $currency }}" class="text-right font-mono" />
+					<x-input label="折扣" wire:model.live="discount" prefix="{{ $currency }}" class="text-right font-mono text-error" />
+
+					<div class="divider my-1 text-xs opacity-50 uppercase tracking-widest">結算資訊</div>
+
+					{{-- 匯率：若為 TWD 則鎖定為 1 --}}
+					<x-input 
+						label="當前匯率 (對 TWD)" 
+						wire:model.live="exchange_rate" 
+						icon="o-arrows-right-left" 
+						class="text-right font-mono {{ $currency === 'TWD' ? 'bg-gray-100' : '' }}" 
+						:readonly="$currency === 'TWD'"
+					/>
+
+					{{-- 最終統計區塊：使用淺橘色背景，深色文字確保可讀性 --}}
+					<div class="p-4 bg-amber-50 border border-amber-200 rounded-2xl shadow-sm flex items-center justify-between mt-4">
+						<div>
+							<p class="text-[10px] text-amber-700 font-black uppercase tracking-tighter">預估本幣支出 (TWD)</p>
+							<p class="text-2xl font-black text-slate-800 font-mono">
+								NT$ {{ number_format($this->totalTwd, 0) }}
+							</p>
+						</div>
+						<div class="bg-amber-100 p-2 rounded-full">
+							<x-icon name="o-currency-dollar" class="w-8 h-8 text-amber-600" />
+						</div>
+					</div>
+				</div>
+			</x-card>
+
+			<div id="remark-section">
+				<x-card title="備註" shadow>
+					<x-textarea wire:model.live="remark" rows="3" placeholder="輸入採購備註..." />
+				</x-card>
+			</div>
+		</div>	
+
+		<div x-show="!atBottom" 
+			 x-transition:enter="transition ease-out duration-300"
+			 x-transition:enter-start="opacity-0 transform translate-y-4"
+			 x-transition:leave="transition ease-in duration-300"
+			 x-transition:leave-end="opacity-0 transform translate-y-4"
+			 class="fixed bottom-6 right-6 z-50 pointer-events-none">
+			
+			<div class="flex flex-col items-center">
+				<span class="text-xs font-bold text-orange-600 bg-orange-50 px-2 py-1 rounded-full shadow-sm mb-1">下面還有</span>
+				<div class="bg-orange-500 text-white p-3 rounded-full shadow-lg animate-bounce">
+					<x-icon name="o-chevron-double-down" class="w-6 h-6" />
+				</div>
+			</div>
+		</div>
+	
         {{-- 右側：採購明細 --}}
         <div class="lg:col-span-3 pb-24 lg:pb-0">
             <x-card title="商品明細" shadow separator>
@@ -72,18 +138,20 @@
                                 </div>
 
                                 <div class="lg:col-span-2">
-                                    <x-input type="number" wire:model.live="items.{{ $index }}.quantity" class="text-center" />
+                                    <x-input type="number" wire:model.live="items.{{ $index }}.quantity" class="text-right" />
                                 </div>
 
                                 <div class="lg:col-span-2">
                                     <x-input wire:model.live="items.{{ $index }}.foreign_price" class="text-right" />
                                 </div>
 
-                                <div class="lg:col-span-2 text-right">
-                                    <span class="font-mono font-bold text-blue-600">
-                                        {{ number_format(bcmul($items[$index]['foreign_price'] ?? 0, $exchange_rate ?? 0, 4), 2) }}
-                                    </span>
-                                </div>
+                                <div class="lg:col-span-2">
+									<x-input 
+										type="text"
+										wire:model.live="items.{{ $index }}.foreign_price" 
+										class="text-right h-10"
+									/>
+								</div>
                             </div>
                         </div>
                     @endforeach

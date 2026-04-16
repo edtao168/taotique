@@ -52,13 +52,13 @@ return [
 			'icon'     => 'o-adjustments-horizontal',
 		],
 	],
-	
+
 	'currencies' => [
-        'TWD' => ['symbol' => 'NT$', 'name' => '新台幣', 'precision' => 0],
-        'CNY' => ['symbol' => '¥', 'name' => '人民幣', 'precision' => 2],		
-        'HKD' => ['symbol' => 'HK$', 'name' => '港幣', 'precision' => 2],
-		'USD' => ['symbol' => '$', 'name' => '美元', 'precision' => 2],
-    ],
+		'TWD' => ['symbol' => 'NT$', 'name' => '新台幣', 'precision' => 0, 'default_rate' => '1.0000'],
+		'CNY' => ['symbol' => '¥', 'name' => '人民幣', 'precision' => 2, 'default_rate' => '4.5200'],
+		'HKD' => ['symbol' => 'HK$', 'name' => '港幣', 'precision' => 2, 'default_rate' => '4.1500'],
+		'USD' => ['symbol' => '$', 'name' => '美元', 'precision' => 4, 'base_rate' => '32.1500'],
+	],
 	
 	'backup' => [
         'disk' => env('BACKUP_DISK', 'local'),

@@ -10,6 +10,7 @@ use App\Models\Warehouse;
 use App\Traits\HasBarcodeScanner;
 use App\Traits\HasProductSearch;
 use Illuminate\Support\Facades\DB;
+use Livewire\Attributes\Computed;
 use Livewire\Component;
 use Mary\Traits\Toast;
 
@@ -24,7 +25,9 @@ class Create extends Component
 	public $purchase_number;
     public $purchased_at;
     public $currency = 'CNY';
-    public $exchange_rate = '4.5';
+    public $exchange_rate;
+	public $shipping_fee = 0;
+	public $discount = 0;
     public $remark;
     public array $items = [];
     public array $productOptions = [];
@@ -41,39 +44,62 @@ class Create extends Component
             $this->purchased_at = $purchase->purchased_at->format('Y-m-d');
             $this->currency = $purchase->currency;
             $this->exchange_rate = $purchase->exchange_rate;
+			$this->shipping_fee = $purchase->shipping_fee;
+            $this->discount = $purchase->discount;
             $this->remark = $purchase->remark;
             
             $this->items = $purchase->items->map(fn($item) => [
                 'product_id' => $item->product_id,
+				'name' => $item->product->name,
                 'warehouse_id' => $item->warehouse_id,
-                'quantity' => (float)$item->quantity,
-                'foreign_price' => (float)$item->foreign_price,
+                'quantity' => $item->quantity,
+                'foreign_price' => $item->foreign_price,
             ])->toArray();
         } else {
             $this->purchase_number = Purchase::generatePurchaseNumber();
-			$this->purchased_at = now()->format('Y-m-d');
+			$this->purchased_at = now()->format('Y-m-d');	
+			$this->updateExchangeRate();
             $this->addRow();
         }
     }
 	
 	/**
-     * 
-     */
-	public function render()
-    {
-        return view('livewire.purchases.create', [
-            'suppliers' => Supplier::all(),
-            'warehouses' => Warehouse::all(),
-        ]);
-    }
+	 * 監聽幣別切換
+	 */
+	public function updatedCurrency($value)
+	{		
+		$baseCurrency = Setting::get('base_currency', 'TWD');
+		
+		if ($value === $baseCurrency) {
+			$this->exchange_rate = '1.0000';
+			return;
+		}
+		
+		$rates = Setting::get('currency_rates', []);
 	
+		if (isset($rates[$value])) {
+            $this->exchange_rate = $rates[$value];
+        } else {
+            $this->updateExchangeRate();
+        }
+	}
+
+	/**
+	 * 從配置檔抓取基準匯率
+	 */
+	protected function updateExchangeRate()
+	{
+		$this->exchange_rate = config("business.currencies.{$this->currency}.default_rate", '1.0000');
+	}
+
 	/**
      * 增加空的一行
      */
 	public function addRow()
     {
         $this->items[] = [
-            'product_id' => null,            
+            'product_id' => null,
+			'name' => '',
             'warehouse_id' => Warehouse::first()?->id ?? 1,
             'quantity' => 1,
             'foreign_price' => 0,
@@ -81,6 +107,20 @@ class Create extends Component
 		$this->search('');
     }
 	
+	/**
+	 * 計算最終應付總額 (外幣)
+	 * 公式：(商品小計 + 運費) - 折扣
+	 */
+	public function calculateTotal(): string
+	{
+		$subtotal = array_reduce($this->items, function($carry, $item) {
+			return bcadd($carry, bcmul($item['quantity'], $item['foreign_price'], 4), 4);
+		}, '0.0000');
+
+		$total = bcadd($subtotal, $this->shipping_fee, 4);
+		return bcsub($total, $this->discount, 4);
+	}
+
 	/**
      * 
      */
@@ -94,6 +134,8 @@ class Create extends Component
         ]);
 
         DB::transaction(function () {
+			$totalForeign = $this->calculateTotal();	
+			$totalTwd = bcmul($totalForeign, $this->exchange_rate, 4);
             if ($this->isEdit) {
                 // 1. 修改模式：精確沖銷舊明細對應的庫存
                 foreach ($this->purchase->items as $oldItem) {
@@ -114,13 +156,17 @@ class Create extends Component
             } else {
                 // 2. 新增模式
                 $target = Purchase::create([                  
-                    'supplier_id' => $this->supplier_id,
-                    'user_id' => auth()->id(),
-                    'currency' => $this->currency,
-                    'exchange_rate' => $this->exchange_rate,
-                    'purchased_at' => $this->purchased_at,
-                    'remark' => $this->remark,
-                    'store_id' => 1,
+                    'purchase_number' => $this->purchase_number,
+					'supplier_id' => $this->supplier_id,
+					'user_id' => auth()->id(),
+					'currency' => $this->currency,
+					'exchange_rate' => $this->exchange_rate,
+					'total_amount' => $totalForeign,
+					'total_twd' => $totalTwd,
+					'shipping_fee' => $this->shipping_fee,
+					'discount' => $this->discount,
+					'purchased_at' => $this->purchased_at,
+					'shop_id' => 1,
                 ]);
             }
 
@@ -194,5 +240,49 @@ class Create extends Component
         ];
 
         $this->success("已加入商品：{$product->name}");
+    }
+	
+	/**
+	 * 即時計算商品純小計 (原始幣別)
+	 */
+	#[Computed]
+	public function subTotal(): string
+	{
+		return array_reduce($this->items, function($carry, $item) {
+			$itemSum = bcmul($item['quantity'] ?? 0, $item['foreign_price'] ?? 0, 4);
+			return bcadd($carry, $itemSum, 4);
+		}, '0.0000');
+	}
+
+	/**
+	 * 即時計算最終應付總額 (原始幣別)
+	 */
+	#[Computed]
+	public function totalAmount(): string
+	{
+		// (小計 + 運費) - 折扣
+		$sum = bcadd($this->subTotal, $this->shipping_fee ?: 0, 4);
+		return bcsub($sum, $this->discount ?: 0, 4);
+	}
+
+	/**
+	 * 即時計算本幣總額 (TWD)
+	 */
+	#[Computed]
+	public function totalTwd(): string
+	{
+		// totalAmount * exchange_rate
+		return bcmul($this->totalAmount, $this->exchange_rate ?: 0, 4);
+	}
+	
+	/**
+     * 
+     */
+	public function render()
+    {
+        return view('livewire.purchases.create', [
+            'suppliers' => Supplier::all(),
+            'warehouses' => Warehouse::all(),
+        ]);
     }
 }

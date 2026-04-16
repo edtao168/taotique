@@ -139,11 +139,23 @@ class Setting extends Model
      */
     public static function get(string $key, $default = null)
     {
-        $setting = self::where('key', $key)->first();
-        if (!$setting) {
-            return $default;
-        }
-        return $setting->getNormalizedValue($default);
+        return Cache::remember("setting_{$key}", 3600, function () use ($key, $default) {
+			$setting = self::find($key);
+			if (!$setting) return $default;
+
+			$val = $setting->value;
+
+			// 如果 type 是 json，確保回傳的是 array 方便 bcmath 使用
+			if ($setting->type === 'json') {
+				return is_array($val) ? $val : json_decode($val, true);
+			}
+
+			return match ($setting->type) {
+				'boolean' => filter_var($val, FILTER_VALIDATE_BOOLEAN),
+				'number', 'float' => (string) $val, // 財務運算建議保持 string 給 bcmath
+				default => $val,
+			};
+		});
     }
     
     /**
