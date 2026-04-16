@@ -1,11 +1,36 @@
 {{-- 檔案路徑：resources/views/livewire/sales/create.blade.php --}}
-<div>
-    <x-header :title="$isEdit ? '修改銷售單 - ' . $sale->invoice_number: '建立銷售單 - ' . $invoice_number" separator progress-indicator>            
-        <x-slot:actions>
-            <x-button label="取消" icon="o-x-mark" link="/sales" />
-            <x-button label="確認過帳" icon="o-paper-airplane" class="btn-primary" wire:click="save" spinner />
-        </x-slot:actions>
-    </x-header>
+<div x-data="{ 
+        atBottom: false,
+        checkScroll() {
+            // 判斷是否滾動到接近底部 (留 150px 緩衝)
+            this.atBottom = (window.innerHeight + window.scrollY) >= (document.body.offsetHeight - 100);
+        }
+     }" 
+     x-init="checkScroll()"
+     @scroll.window="checkScroll()">
+	 
+    <x-header separator progress-indicator>
+		<x-slot:title>
+			<div class="flex items-center gap-4">
+				<div class="p-3 bg-primary/10 rounded-2xl text-primary">
+					<x-icon name="o-shopping-cart" class="w-8 h-8" />
+				</div>
+				<div>
+					<h1 class="text-2xl font-bold tracking-tight text-base-content">
+						{{ $isEdit ? '修改銷售單' : '銷售出庫作業' }}
+					</h1>
+					<div class="flex items-center gap-2 mt-1">
+						<span class="badge badge-outline badge-sm font-mono opacity-70">{{ $isEdit ? $sales->invoice_number : $invoice_number }}</span>
+						<span class="badge badge-ghost badge-sm uppercase tracking-tighter">Sales Order & Inventory Outbound</span>
+					</div>
+				</div>
+			</div>
+		</x-slot:title>
+		<x-slot:actions>
+			<x-button label="返回列表" icon="o-arrow-left" link="/sales" class="btn-ghost" />
+			<x-button label="確認過帳" icon="o-check" class="btn-primary shadow-md hover:shadow-lg transition-all px-8" wire:click="save" spinner />
+		</x-slot:actions>
+	</x-header>
 
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
         
@@ -13,16 +38,31 @@
         <div class="lg:col-span-3 space-y-4">
             <x-card title="單據資訊" shadow separator>
                 <div class="space-y-4">
-                    <x-choices label="客戶" wire:model="form.customer_id" :options="$customers" single />
+                    <x-choices label="客戶" wire:model="form.customer_id" :options="$customers" single icon="o-users" />
                     <x-datetime label="銷售日期" wire:model="form.sold_at" icon="o-calendar" />
-                    <x-select label="管道" wire:model="form.channel" :options="$shops" option-value="id" option-label="name"/>
-                    <x-select label="付款方式" wire:model="form.payment_method" :options="config('business.payment_methods')" />
-					<x-select label="業務歸屬倉庫" wire:model="form.warehouse_id" :options="$warehouses" placeholder="請選擇倉庫" />
+                    <x-select label="管道" wire:model="form.channel" :options="$shops" option-value="id" option-label="name" icon="o-building-storefront" />
+                    <x-select label="付款方式" wire:model="form.payment_method" :options="config('business.payment_methods')" icon="o-banknotes" />
+					<x-select label="業務歸屬倉庫" wire:model="form.warehouse_id" :options="$warehouses" placeholder="請選擇倉庫"  icon="o-home-modern" />
 
                     <x-textarea label="備註" wire:model="form.remark" rows="2" />
                 </div>
             </x-card>
         </div>
+		
+		<div x-show="!atBottom" 
+			 x-transition:enter="transition ease-out duration-300"
+			 x-transition:enter-start="opacity-0 transform translate-y-4"
+			 x-transition:leave="transition ease-in duration-300"
+			 x-transition:leave-end="opacity-0 transform translate-y-4"
+			 class="fixed bottom-6 right-6 z-50 pointer-events-none">
+			
+			<div class="flex flex-col items-center">
+				<span class="text-xs font-bold text-orange-600 bg-orange-50 px-2 py-1 rounded-full shadow-sm mb-1">下面還有</span>
+				<div class="bg-orange-500 text-white p-3 rounded-full shadow-lg animate-bounce">
+					<x-icon name="o-chevron-double-down" class="w-6 h-6" />
+				</div>
+			</div>
+		</div>
 
         {{-- 2. 中間 商品明細 (2/4) --}}
 		<div class="lg:col-span-6 pb-24 lg:pb-0">
@@ -169,7 +209,7 @@
 									prefix="{{ $config['operator'] === 'add' ? '+' : '-' }}"
 									icon="{{ $config['icon'] ?? '' }}"
 									class="input-sm text-right font-mono {{ $config['operator'] === 'sub' ? 'text-error' : '' }}"
-									type="number"
+									inputmode="decimal"
 									step="0.01"
 								/>
 							@endforeach
@@ -194,7 +234,7 @@
 									icon="{{ $config['icon'] ?? '' }}"
 									{{-- 針對賣家支出（sub）標註警告顏色 --}}
 									class="input-sm text-right font-mono {{ $config['operator'] === 'sub' ? 'text-warning' : '' }}"
-									type="number"
+									inputmode="decimal"
 									step="0.01"
 								/>
 							@endforeach
