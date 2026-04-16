@@ -22,12 +22,15 @@ class Create extends Component
     public bool $isEdit = false;
 	
 	public $supplier_id;
+	public $warehouse_id = 1;
 	public $purchase_number;
     public $purchased_at;
     public $currency = 'CNY';
     public $exchange_rate;
-	public $shipping_fee = 0;
+	public $shipping_fee = 0;	
 	public $discount = 0;
+	public $tax = 0;
+	public $other_fees = 0;	
     public $remark;
     public array $items = [];
     public array $productOptions = [];
@@ -41,11 +44,14 @@ class Create extends Component
             $this->isEdit = true;
             $this->purchase = $purchase;
             $this->supplier_id = $purchase->supplier_id;
+			$this->warehouse_id = $purchase->warehouse_id;
             $this->purchased_at = $purchase->purchased_at->format('Y-m-d');
             $this->currency = $purchase->currency;
             $this->exchange_rate = $purchase->exchange_rate;
 			$this->shipping_fee = $purchase->shipping_fee;
             $this->discount = $purchase->discount;
+			$this->tax = $purchase->tax_amount;
+			$this->other_fees = $purchase->other_fees;
             $this->remark = $purchase->remark;
             
             $this->items = $purchase->items->map(fn($item) => [
@@ -57,6 +63,7 @@ class Create extends Component
             ])->toArray();
         } else {
             $this->purchase_number = Purchase::generatePurchaseNumber();
+			$this->warehouse_id = Warehouse::first()?->id ?? 1;
 			$this->purchased_at = now()->format('Y-m-d');	
 			$this->updateExchangeRate();
             $this->addRow();
@@ -148,6 +155,7 @@ class Create extends Component
                 
                 $this->purchase->update([
                     'supplier_id' => $this->supplier_id,
+					'warehouse_id' => $this->warehouse_id,
                     'exchange_rate' => $this->exchange_rate,
                     'purchased_at' => $this->purchased_at,
                     'remark' => $this->remark,
@@ -158,6 +166,7 @@ class Create extends Component
                 $target = Purchase::create([                  
                     'purchase_number' => $this->purchase_number,
 					'supplier_id' => $this->supplier_id,
+					'warehouse_id' => $this->warehouse_id,
 					'user_id' => auth()->id(),
 					'currency' => $this->currency,
 					'exchange_rate' => $this->exchange_rate,
@@ -200,7 +209,7 @@ class Create extends Component
     }
 
     /**
-     * 🔧 實現掃描回調（必須實現抽象方法）
+     * 實現掃描回調（必須實現抽象方法）
      */
     public function onBarcodeScanned(string $barcode, ?int $index = null): void
     {
@@ -260,8 +269,10 @@ class Create extends Component
 	#[Computed]
 	public function totalAmount(): string
 	{
-		// (小計 + 運費) - 折扣
+		// 公式：小計 + 運費 + 稅金 + 雜費 - 折扣
 		$sum = bcadd($this->subTotal, $this->shipping_fee ?: 0, 4);
+		$sum = bcadd($sum, $this->tax ?: 0, 4);
+		$sum = bcadd($sum, $this->other_fees ?: 0, 4);		
 		return bcsub($sum, $this->discount ?: 0, 4);
 	}
 
