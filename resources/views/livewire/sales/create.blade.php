@@ -13,7 +13,7 @@
 		<x-slot:title>
 			<div class="flex items-center gap-4">
 				<div class="p-3 bg-primary/10 rounded-2xl text-primary">
-					<x-icon name="o-shopping-cart" class="w-8 h-8" />
+					<x-icon name="o-cube" class="w-8 h-8" />
 				</div>
 				<div>
 					<h1 class="text-2xl font-bold tracking-tight text-base-content">
@@ -21,7 +21,7 @@
 					</h1>
 					<div class="flex items-center gap-2 mt-1">
 						<span class="badge badge-outline badge-sm font-mono opacity-70">{{ $isEdit ? $sales->invoice_number : $invoice_number }}</span>
-						<span class="badge badge-ghost badge-sm uppercase tracking-tighter">Sales Order & Inventory Outbound</span>
+						<span class="badge badge-ghost badge-sm uppercase tracking-tighter">Inventory Outbound</span>
 					</div>
 				</div>
 			</div>
@@ -35,8 +35,8 @@
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
         
         {{-- 1. 左側：單據屬性 (1/4) --}}
-        <div class="lg:col-span-3 space-y-4">
-            <x-card title="單據資訊" shadow separator>
+        <div class="col-span-12 lg:col-span-3 space-y-6">
+            <x-card title="單據資訊" shadow class="border-t-4 border-primary">
                 <div class="space-y-4">
                     <x-choices label="客戶" wire:model="form.customer_id" :options="$customers" single icon="o-users" />
                     <x-datetime label="銷售日期" wire:model="form.sold_at" icon="o-calendar" />

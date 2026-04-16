@@ -35,8 +35,8 @@ return [
 		// --- 影響「賣家淨進帳 (final_net_amount)」的項目 ---
 		'platform_fee' => [
 			'name'     => '平台成交手續費',
-			'target'   => 'seller',   // 影響賣家收到的錢
-			'operator' => 'sub',      // 減項：從收入中扣除
+			'target'   => 'seller',
+			'operator' => 'sub',
 			'icon'     => 'o-calculator',
 		],
 		'shipping_fee_platform' => [
@@ -48,8 +48,14 @@ return [
 		'order_adjustment' => [
 			'name'     => '帳款調整',
 			'target'   => 'seller',
-			'operator' => 'add',      // 加項：補償款或調整增加
+			'operator' => 'add',
 			'icon'     => 'o-adjustments-horizontal',
+		],
+		'commission' => [
+			'name'     => '佣金',
+			'target'   => 'seller',
+			'operator' => 'sub',
+			'icon'     => 'o-banknotes',
 		],
 	],
 
