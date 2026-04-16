@@ -20,7 +20,7 @@
 						{{ $isEdit ? '修改銷售單' : '銷售出庫作業' }}
 					</h1>
 					<div class="flex items-center gap-2 mt-1">
-						<span class="badge badge-outline badge-sm font-mono opacity-70">{{ $isEdit ? $sales->invoice_number : $invoice_number }}</span>
+						<span class="badge badge-outline badge-sm font-mono opacity-70">{{ $isEdit ? $sale->invoice_number : $invoice_number }}</span>
 						<span class="badge badge-ghost badge-sm uppercase tracking-tighter">Inventory Outbound</span>
 					</div>
 				</div>
