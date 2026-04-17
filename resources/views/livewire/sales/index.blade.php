@@ -42,9 +42,13 @@
             @foreach($sales as $sale)
                 <div class="border rounded-xl p-4 bg-base-50 active:bg-base-200 transition-colors" @click="$wire.showDetail({{ $sale->id }})">
                     <div class="flex justify-between items-start mb-2">
-                        <x-badge :value="$sale->invoice_number" class="badge-neutral badge-sm font-mono" />
-                        <span class="text-[10px] text-gray-500">{{ $sale->sold_at->format('m/d H:i') }}</span>
-                    </div>
+						<div class="flex flex-col gap-1">
+							<x-badge :value="$sale->invoice_number" class="badge-neutral badge-sm font-mono" />
+							{{-- 新增：顯示出庫倉庫 --}}
+							<span class="text-[10px] opacity-60"><x-icon name="o-home-modern" class="w-3 h-3" /> {{ $sale->warehouse?->name ?? '未指定倉庫' }}</span>
+						</div>
+						<span class="text-[10px] text-gray-500">{{ $sale->sold_at->format('m/d H:i') }}</span>
+					</div>
                     <div class="flex justify-between items-center">
                         <div>
                             <p class="font-bold text-base">{{ $sale->customer?->name ?? '一般客戶' }}</p>
@@ -53,9 +57,10 @@
 							</p>
                         </div>
                         <div class="text-right">
-                            <p class="text-blue-700 font-black text-lg">NT$ {{ number_format($sale->customer_total, 0) }}</p>
-                            <p class="text-[10px] text-emerald-600 font-bold">利潤: {{ number_format($sale->final_net_amount, 0) }}</p>
-                        </div>
+							<p class="text-blue-700 font-black text-lg">NT$ {{ number_format($sale->customer_total, 0) }}</p>
+							{{-- 這裡會自動反映計算後的利潤 --}}
+							<p class="text-[10px] text-emerald-600 font-bold">淨利: {{ number_format($sale->final_net_amount, 0) }}</p>
+						</div>
                     </div>
                 </div>
             @endforeach
@@ -65,18 +70,17 @@
         </div>
     </x-card>
 
-    {{-- 詳情抽屜 (與之前邏輯一致) --}}
+	{{-- 詳情抽屜 --}}
 	<x-drawer wire:model="drawer" title="銷貨單據詳情" right separator with-close-button class="w-11/12 lg:w-1/3" >
 		
 		@if($selectedSale)		
-		
-			<p>銷售單號：{{ $selectedSale->invoice_number }}</p>	
 			<div class="space-y-6 pb-20">		
+				{{-- 基礎單據資訊 --}}
 				<div class="bg-base-100 border rounded-xl p-4 shadow-sm">					
 					<div class="grid grid-cols-2 gap-y-4 text-sm">
 						<div>
-							<p class="text-[10px] text-gray-400">銷售日期</p>
-							<p class="font-medium text-gray-700">{{ $selectedSale->sold_at->format('Y-m-d') }}</p>
+							<p class="text-[10px] text-gray-400">銷售單號</p>
+							<p class="font-mono font-medium text-gray-700">{{ $selectedSale->invoice_number }}</p>
 						</div>
 						<div>
 							<p class="text-[10px] text-gray-400">客戶名稱</p>
@@ -87,8 +91,9 @@
 							<x-badge :value="$selectedSale->shop?->name ?? strtoupper($selectedSale->channel)" class="badge-outline badge-sm" />
 						</div>
 						<div>
-							<p class="text-[10px] text-gray-400">付款方式</p>
-							<x-badge :value="$selectedSale->payment_method_name" class="badge-ghost badge-sm font-bold" />
+							<p class="text-[10px] text-gray-400">出庫倉庫</p>
+							{{-- 修正：顯示該單據對應的倉庫名稱 --}}
+							<x-badge :value="$selectedSale->warehouse?->name ?? '未指定'" class="badge-ghost badge-sm font-bold" />
 						</div>					
 					</div>
 				</div>
@@ -100,50 +105,54 @@
 						<p class="text-xl font-black text-blue-800 font-mono">NT$ {{ number_format($selectedSale->customer_total, 0) }}</p>
 					</div>
 					<div class="p-3 border rounded-xl bg-emerald-50/50">
-						<p class="text-[10px] text-emerald-600 mb-1 font-bold">預計單據淨利</p>
+						<p class="text-[10px] text-emerald-600 mb-1 font-bold">最終單據進帳</p>
 						<p class="text-xl font-black text-emerald-800 font-mono">NT$ {{ number_format($selectedSale->final_net_amount, 0) }}</p>
 					</div>
 				</div>			
 
-				{{-- 3. 買家細目與賣家支出 (並排顯示) --}}
+				{{-- 2. 動態顯示 JSON 費用細目 --}}
 				<div class="grid grid-cols-2 gap-3">
-					{{-- 買家側 --}}
+					{{-- 左側：買家側項目 (如運費、折扣、優惠券) --}}
 					<div class="space-y-3 p-3 border rounded-lg bg-base-100 shadow-sm">
-						<div class="badge badge-info badge-outline badge-sm font-bold text-[10px]">買家</div>
-						<div class="space-y-1">
-							<p class="text-[10px] text-gray-400">買家付運費</p>
-							<p class="text-sm font-mono font-bold text-gray-700">NT$ {{ number_format($selectedSale->shipping_fee_customer, 0) }}</p>
-							<p class="text-[10px] text-gray-400">賣場折扣</p>
-							<p class="text-sm font-mono font-bold text-success">NT$ {{ number_format($selectedSale->discount, 0) }}</p>
-							<p class="text-[10px] text-gray-400">平台優惠券</p>
-							<p class="text-sm font-mono font-bold text-success">NT$ {{ number_format($selectedSale->platform_coupon, 0) }}</p>
+						<div class="badge badge-info badge-outline badge-sm font-bold text-[10px]">買家細目</div>
+						<div class="space-y-2">
+							@foreach(collect(config('business.fee_types'))->where('target', 'customer') as $key => $fee)
+								<div>
+									<p class="text-[10px] text-gray-400">{{ $fee['name'] }}</p>
+									<p class="text-sm font-mono font-bold {{ $fee['operator'] === 'sub' ? 'text-success' : 'text-gray-700' }}">
+										{{ $fee['operator'] === 'sub' ? '-' : '+' }} NT$ {{ number_format($selectedSale->$key ?? 0, 0) }}
+									</p>
+								</div>
+							@endforeach
 						</div>
 					</div>
 
-					{{-- 賣家側 --}}
+					{{-- 右側：賣家側項目 (如手續費、佣金、帳款調整) --}}
 					<div class="space-y-3 p-3 border rounded-lg bg-base-100 shadow-sm">
-						<div class="badge badge-error badge-outline badge-sm font-bold text-[10px]">賣家</div>
-						<div class="space-y-1">
-							<p class="text-[10px] text-gray-400">成交手續費</p>
-							<p class="text-sm font-mono font-bold text-gray-700">NT$ {{ number_format($selectedSale->platform_fee, 0) }}</p>                    
-							<p class="text-[10px] text-gray-400">平台代付運費</p>
-							<p class="text-sm font-mono font-bold text-gray-700">NT$ {{ number_format($selectedSale->shipping_fee_platform, 0) }}</p>
-							<p class="text-[10px] text-gray-400">帳款調整</p>
-							<p class="text-sm font-mono font-bold {{ $selectedSale->order_adjustment >= 0 ? 'text-success' : 'text-error' }}">
-								NT$ {{ number_format($selectedSale->order_adjustment, 0) }}
-							</p>
+						<div class="badge badge-error badge-outline badge-sm font-bold text-[10px]">賣家支出 / 調整</div>
+						<div class="space-y-2">
+							@foreach(collect(config('business.fee_types'))->where('target', 'seller') as $key => $fee)
+								<div>
+									<p class="text-[10px] text-gray-400">{{ $fee['name'] }}</p>
+									{{-- 針對帳款調整顯示正負號，其餘顯示支出符號 --}}
+									<p class="text-sm font-mono font-bold {{ ($selectedSale->$key ?? 0) < 0 ? 'text-error' : 'text-gray-700' }}">
+										{{ $key === 'order_adjustment' && ($selectedSale->$key ?? 0) > 0 ? '+' : '' }}
+										NT$ {{ number_format($selectedSale->$key ?? 0, 0) }}
+									</p>
+								</div>
+							@endforeach
 						</div>
 					</div>
 				</div>
 
-				{{-- 4. 商品明細 (保持手機卡片/PC表格分流) --}}
+				{{-- 3. 商品明細 --}}
 				<div>
 					<div class="flex justify-between items-center mb-4 px-1">
 						<p class="text-sm font-bold border-l-4 border-primary pl-2">商品明細</p>
 						<span class="text-xs text-gray-400 font-mono">共 {{ $selectedSale->items->count() }} 項</span>
 					</div>
 					
-					{{-- 手機端卡片 --}}
+					{{-- 手機端商品卡片 --}}
 					<div class="lg:hidden space-y-3">
 						@foreach($selectedSale->items as $item)
 							<div class="p-4 border rounded-xl bg-base-50 shadow-sm">
@@ -153,7 +162,7 @@
 								</div>
 								<div class="flex justify-between items-end">
 									<div class="flex flex-col">
-										<span class="text-[10px] text-gray-400 font-mono">成本: {{ number_format($item->cost_snapshot, 0) }}</span>
+										<span class="text-[10px] text-gray-400 font-mono">庫別: {{ $item->warehouse?->name ?? '預設' }}</span>
 										<span class="text-xs text-gray-500 italic font-mono">單價: {{ number_format($item->price, 0) }}</span>
 									</div>
 									<div class="text-right">
@@ -164,13 +173,13 @@
 						@endforeach
 					</div>
 
-					{{-- PC 端表格 --}}
+					{{-- PC 端商品表格 --}}
 					<div class="hidden lg:block">
 						<x-table :headers="[['key' => 'product.name', 'label' => '品名'], ['key' => 'warehouse.name', 'label' => '庫別', 'class' => 'text-right'], ['key' => 'quantity', 'label' => '數量', 'class' => 'text-right'], ['key' => 'subtotal', 'label' => '小計', 'class' => 'text-right font-mono']]" :rows="$selectedSale->items" no-hover>
 							@scope('cell_product.name', $item)
 								<div class="flex flex-col">
 									<span class="font-medium text-sm">{{ $item->product->full_display_name }}</span>
-									<span class="text-[10px] text-gray-400 font-mono">成本: {{ number_format($item->cost_snapshot, 0) }}</span>
+									<span class="text-[10px] text-gray-400 font-mono">條碼: {{ $item->product->barcode }}</span>
 								</div>
 							@endscope
 							@scope('cell_subtotal', $item)
@@ -180,28 +189,12 @@
 					</div>
 				</div>
 			</div>
-			{{-- 底部固定動作欄：刪除與修改 --}}
+
+			{{-- 底部固定動作欄 --}}
 			<x-slot:actions>
 				<div class="flex gap-3 w-full border-t pt-4 bg-base-100">
-					<x-button 
-						label="刪除" 
-						icon="o-trash" 
-						wire:click="delete({{ $selectedSale->id }})" 
-						wire:confirm="警告：刪除銷售單將自動回補庫存。確定執行？" 
-						class="btn-error btn-outline flex-1" 
-					/>
-					<x-button 
-						label="修改" 
-						icon="o-pencil" 
-						:link="route('sales.edit', $selectedSale->id)" 
-						class="btn-primary flex-1 text-white" 
-					/>
-					<x-button 
-						label="退貨" 
-						icon="o-arrow-path" 
-						:link="route('sales.returns.create', ['sale' => $selectedSale->id])"
-						class="btn-outline-dark flex-1"	
-					/>
+					<x-button label="刪除" icon="o-trash" wire:click="delete({{ $selectedSale->id }})" wire:confirm="確定要刪除此單據並回補庫存嗎？" class="btn-error btn-outline flex-1" />
+					<x-button label="修改" icon="o-pencil" :link="route('sales.edit', $selectedSale->id)" class="btn-primary flex-1 text-white" />
 				</div>
 			</x-slot:actions>
 		@endif
