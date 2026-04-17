@@ -108,6 +108,7 @@ class Index extends Component
             ['key' => 'shop.name', 'label' => '通路', 'class' => 'w-40'],
             ['key' => 'customer.name', 'label' => '客戶'],
             ['key' => 'customer_total', 'label' => '應收總額', 'textAlign' => 'text-right'],
+			['key' => 'final_net_amount', 'label' => '最終進帳', 'textAlign' => 'text-right'],
             ['key' => 'sold_at', 'label' => '日期', 'class' => 'w-32'],
         ];
 

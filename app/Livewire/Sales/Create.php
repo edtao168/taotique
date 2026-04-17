@@ -125,6 +125,7 @@ class Create extends Component
 
         foreach ($feeConfigs as $key => $config) {
             $val = (string)($this->form[$key] ?? '0');
+			if ($val === '') $val = '0';
             
             // 處理買家支付總額
             if ($config['target'] === 'customer') {
@@ -143,6 +144,21 @@ class Create extends Component
         $this->form['customer_total'] = $customer_total;
         $this->form['final_net_amount'] = $final_net_amount;
     }
+
+	/**
+	 * 當 form 陣列中的任何數值改變時（例如輸入佣金、手續費、折讓）
+	 * 自動觸發重新計算
+	 */
+	public function updatedForm($value, $key)
+	{
+		// 檢查更新的 key 是否屬於 fee_types 中定義的費用項目
+		$fees = array_keys(config('business.fee_types'));
+		
+		// 如果變動的是費用項目、小計相關欄位，就重新計算
+		if (in_array($key, $fees) || $key === 'subtotal') {
+			$this->calculateAll();
+		}
+	}
 
 	/**
 	 * 當 items 陣列中的數據更新時觸發
@@ -174,6 +190,9 @@ class Create extends Component
 					$this->calculateAll();
 				}
 			}
+		}
+		if (str_contains($key, '.price') || str_contains($key, '.quantity')) {
+			$this->calculateAll();
 		}
 	}
 

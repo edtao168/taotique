@@ -32,7 +32,10 @@
                     <x-badge :value="$sale->invoice_number" class="badge-neutral font-mono" />
                 @endscope
                 @scope('cell_customer_total', $sale)
-                    <span class="font-bold text-blue-700">NT$ {{ number_format($sale->customer_total, 0) }}</span>
+                    <span class="font-bold text-info">NT$ {{ number_format($sale->customer_total, 0) }}</span>
+                @endscope
+				@scope('cell_final_net_amount', $sale)
+                    <span class="font-bold text-success">NT$ {{ number_format($sale->final_net_amount, 0) }}</span>
                 @endscope
             </x-table>
         </div>
@@ -101,11 +104,11 @@
 				{{-- 1. 核心指標：買家支付 vs 單據淨利 --}}
 				<div class="grid grid-cols-2 gap-4">
 					<div class="p-3 border rounded-xl bg-blue-50/50">
-						<p class="text-[10px] text-blue-600 mb-1 font-bold">買家支付總額</p>
+						<p class="text-[10px] text-info mb-1 font-bold">買家支付總額</p>
 						<p class="text-xl font-black text-blue-800 font-mono">NT$ {{ number_format($selectedSale->customer_total, 0) }}</p>
 					</div>
 					<div class="p-3 border rounded-xl bg-emerald-50/50">
-						<p class="text-[10px] text-emerald-600 mb-1 font-bold">最終單據進帳</p>
+						<p class="text-[10px] text-success mb-1 font-bold">最終單據進帳</p>
 						<p class="text-xl font-black text-emerald-800 font-mono">NT$ {{ number_format($selectedSale->final_net_amount, 0) }}</p>
 					</div>
 				</div>			
@@ -129,7 +132,7 @@
 
 					{{-- 右側：賣家側項目 (如手續費、佣金、帳款調整) --}}
 					<div class="space-y-3 p-3 border rounded-lg bg-base-100 shadow-sm">
-						<div class="badge badge-error badge-outline badge-sm font-bold text-[10px]">賣家支出 / 調整</div>
+						<div class="badge badge-success badge-outline badge-sm font-bold text-[10px]">賣家支出 / 調整</div>
 						<div class="space-y-2">
 							@foreach(collect(config('business.fee_types'))->where('target', 'seller') as $key => $fee)
 								<div>
@@ -178,8 +181,7 @@
 						<x-table :headers="[['key' => 'product.name', 'label' => '品名'], ['key' => 'warehouse.name', 'label' => '庫別', 'class' => 'text-right'], ['key' => 'quantity', 'label' => '數量', 'class' => 'text-right'], ['key' => 'subtotal', 'label' => '小計', 'class' => 'text-right font-mono']]" :rows="$selectedSale->items" no-hover>
 							@scope('cell_product.name', $item)
 								<div class="flex flex-col">
-									<span class="font-medium text-sm">{{ $item->product->full_display_name }}</span>
-									<span class="text-[10px] text-gray-400 font-mono">條碼: {{ $item->product->barcode }}</span>
+									<span class="font-medium text-sm">{{ $item->product->full_display_name }}</span>		
 								</div>
 							@endscope
 							@scope('cell_subtotal', $item)
@@ -195,6 +197,12 @@
 				<div class="flex gap-3 w-full border-t pt-4 bg-base-100">
 					<x-button label="刪除" icon="o-trash" wire:click="delete({{ $selectedSale->id }})" wire:confirm="確定要刪除此單據並回補庫存嗎？" class="btn-error btn-outline flex-1" />
 					<x-button label="修改" icon="o-pencil" :link="route('sales.edit', $selectedSale->id)" class="btn-primary flex-1 text-white" />
+					<x-button 
+						label="退貨" 
+						icon="o-arrow-path" 
+						:link="route('sales.returns.create', ['sale' => $selectedSale->id])"
+						class="btn-outline-dark flex-1"	
+					/>
 				</div>
 			</x-slot:actions>
 		@endif
