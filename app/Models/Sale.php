@@ -84,7 +84,32 @@ class Sale extends Model
     public static function createWithCalculations(array $data, array $items)
     {
         return DB::transaction(function () use ($data, $items) {
-            // 分離費用資料與主表資料
+            $allowNegative = Setting::get('allow_negative_stock', false);
+
+			foreach ($items as $item) {
+				// 鎖定庫存紀錄
+				$inventory = Inventory::where('product_id', $item['product_id'])
+					->where('warehouse_id', $formData['warehouse_id'])
+					->lockForUpdate()
+					->first();
+
+				$currentQty = $inventory ? $inventory->quantity : 0;
+
+				// 如果不允許負庫存且數量不足，拋出異常觸發 Transaction 回滾
+				if (!$allowNegative && $currentQty < $item['quantity']) {
+					throw new \Exception("商品 ID {$item['product_id']} 庫存不足，無法出庫。");
+				}
+
+				// 執行扣除 (即使結果是負數，bcsub 也能處理)
+				$newQty = bcsub($currentQty, $item['quantity'], 4);
+
+				Inventory::updateOrCreate(
+					['product_id' => $item['product_id'], 'warehouse_id' => $formData['warehouse_id']],
+					['quantity' => $newQty]
+				);
+			}
+		
+			// 分離費用資料與主表資料
             $feeConfigs = config('business.fee_types');
             $saleData = array_diff_key($data, $feeConfigs);
             

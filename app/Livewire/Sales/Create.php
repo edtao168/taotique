@@ -227,6 +227,23 @@ class Create extends Component
     {
         // 1. 執行 rules() 中定義的動態驗證
         $this->validate();
+		
+		// 取得系統設定：是否允許負庫存
+		$allowNegative = Setting::get('allow_negative_stock', false);
+		
+		if (!$allowNegative) {
+			foreach ($this->items as $item) {
+				// 檢查該倉庫目前的庫存
+				$currentStock = Inventory::where('product_id', $item['product_id'])
+					->where('warehouse_id', $this->form['warehouse_id'])
+					->value('quantity') ?? 0;
+
+				if ($currentStock < $item['quantity']) {
+					$this->error("商品 [{$item['name']}] 庫存不足 (現有: {$currentStock})");
+					return;
+				}
+			}
+		}
 
         try {
             DB::transaction(function () {

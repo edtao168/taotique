@@ -62,7 +62,7 @@
                         <div class="text-right">
 							<p class="text-blue-700 font-black text-lg">NT$ {{ number_format($sale->customer_total, 0) }}</p>
 							{{-- 這裡會自動反映計算後的利潤 --}}
-							<p class="text-[10px] text-emerald-600 font-bold">淨利: {{ number_format($sale->final_net_amount, 0) }}</p>
+							<p class="text-[10px] text-emerald-600 font-bold">最終訂單進帳 : {{ number_format($sale->final_net_amount, 0) }}</p>
 						</div>
                     </div>
                 </div>
