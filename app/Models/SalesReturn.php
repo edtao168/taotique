@@ -38,7 +38,7 @@ class SalesReturn extends Model
     // 關聯費用明細
     public function fees(): HasMany
     {
-        return $this->hasMany(SalesReturnFee::class);
+        return $this->hasMany(SalesReturnFee::class, 'sales_return_id');
     }
 	
 	// 關聯客戶
@@ -77,6 +77,23 @@ class SalesReturn extends Model
 	 public function user(): BelongsTo
 	{
 		return $this->belongsTo(User::class);
+	}
+
+	/**
+	 * 動態攔截退貨費用屬性
+	 */
+	public function getAttribute($key)
+	{
+		$returnFeeConfigs = config('business.return_fee_types', []);
+		
+		if (isset($returnFeeConfigs[$key])) {
+			if ($this->relationLoaded('fees')) {
+				return (string) $this->fees->where('fee_type', $key)->sum('amount');
+			}
+			return (string) $this->fees()->where('fee_type', $key)->sum('amount');
+		}
+		
+		return parent::getAttribute($key);
 	}
 
     /**

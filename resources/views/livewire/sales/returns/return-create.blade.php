@@ -14,12 +14,12 @@
             <div class="text-right">
                 <div class="text-sm opacity-70">客戶</div>
                 <div class="font-bold">{{ $sale->customer->name ?? '零售客戶' }}</div>
-            </div>
+            </div>			
         </div>
     </x-card>
 
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {{-- 左側：可退回商品清單 (佔 2/3) --}}
+    <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
+        {{-- 左側：可退回商品清單 (佔 1/2) --}}
         <div class="lg:col-span-2 space-y-4">
             <x-card title="可退回商品清單" separator shadow progress-indicator="addItemToReturn">
                 @if($sale->items->isEmpty())
@@ -84,8 +84,8 @@
             </x-card>
         </div>
 
-        {{-- 右側：退回明細 + 費用 (佔 1/3) --}}
-        <div class="lg:col-span-1 space-y-4">
+        {{-- 右側：退回明細 + 費用 (佔 1/2) --}}
+        <div class="lg:col-span-2 space-y-4">
             {{-- 退回明細卡片 --}}
             <x-card title="退回明細" separator shadow class="sticky top-4">
                 @if(empty($return_items))
@@ -93,80 +93,90 @@
                         <x-icon name="o-archive-box-x-mark" class="w-12 h-12 mx-auto opacity-20" />
                         <p class="text-sm opacity-50 mt-2">尚未選擇退回商品</p>
                     </div>
-                @else
-                    <div class="space-y-3 mb-6 max-h-[40vh] overflow-y-auto pr-2">
-                        @foreach($return_items as $index => $item)
-                            <div class="group flex justify-between items-start border-b border-base-200 pb-3">
-                                <div class="flex-1">
-                                    <div class="text-sm font-bold truncate">{{ $item['product_name'] }}</div>
-                                    <div class="flex items-center gap-2 mt-1">
-                                        <span class="text-xs font-mono bg-base-200 px-1.5 py-0.5 rounded">
-                                            {{ number_format($item['quantity'], 2) }}
-                                        </span>
-                                        <span class="text-[10px] opacity-40">x</span>
-                                        <span class="text-xs font-mono opacity-70">NT$ {{ number_format($item['unit_price'], 2) }}</span>
-                                    </div>
-                                </div>
-                                <div class="text-right ml-2">
-                                    <div class="text-sm font-mono font-black text-error">
-                                        NT$ {{ number_format($item['subtotal'], 2) }}
-                                    </div>
-                                    <x-button 
-                                        icon="o-trash" 
-                                        class="btn-ghost btn-xs text-error opacity-0 group-hover:opacity-100 transition-opacity" 
-                                        wire:click="removeReturnItem({{ $index }})" 
-                                    />
-                                </div>
-                            </div>
-                        @endforeach
-                    </div>
+                @else					   
+					<div class="space-y-3">
+						@foreach($return_items as $index => $item)
+							<div class="bg-base-100 border border-base-300 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow">
+								<div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+									
+									{{-- 左側：商品核心資訊 --}}
+									<div class="flex items-center gap-4 flex-1">
+										<div class="w-12 h-12 bg-base-200 rounded-lg flex items-center justify-center">
+											<x-icon name="o-arrow-right-end-on-rectangle" class="w-6 h-6 text-gray-400" />
+										</div>
+										<div>        
+											<div class="font-bold text-base-content">{{ $item['name'] }}</div>
+											<div class="flex items-center gap-2 text-xs font-mono text-gray-500">
+												<span class="badge badge-ghost badge-sm uppercase">{{ $item['barcode'] }}</span>
+												<span>庫存單位：ea</span>
+											</div>
+										</div>
+									</div>
+
+									{{-- 右側：數值輸入與計算 --}}
+									<div class="grid grid-cols-2 md:flex md:items-center gap-4 md:gap-8">
+										{{-- 單價顯示 (唯讀) --}}
+										<div class="flex flex-col md:items-end">
+											<span class="text-xs text-gray-400">原售價</span>
+											<span class="font-mono font-medium text-base-content">
+												{{ number_format($item['price'], 2) }}
+											</span>
+										</div>
+
+										{{-- 數量輸入 --}}
+										<div class="flex flex-col">
+											<span class="text-xs text-gray-400 mb-1">退回數量</span>
+											<div class="w-28">
+												<x-input 
+													type="number" 
+													wire:model.live="return_items.{{ $index }}.quantity" 
+													class="input-sm text-center font-bold"
+												/>
+											</div>
+										</div>
+
+										{{-- 小計 (自動計算) --}}
+										<div class="flex flex-col items-end col-span-2 md:col-span-1">
+											<span class="text-xs text-primary font-medium">退款小計</span>
+											<span class="font-mono text-lg font-black text-primary">
+												{{ number_format(bcmul((string)$item['price'], (string)$item['quantity'], 4), 2) }}
+											</span>
+										</div>
+									</div>
+								</div>
+							</div>
+						@endforeach
+					</div>
+					 
                 @endif
 
                 {{-- 費用區塊 --}}
-                <div class="border-t pt-4 mt-2">
-                    <div class="flex justify-between items-center mb-3">
-                        <span class="text-sm font-bold">費用與扣除額</span>
-                        <x-button label="新增費用" icon="o-plus" wire:click="addFee" class="btn-xs btn-outline" />
-                    </div>
-                    
-                    @if(empty($fees))
-                        <div class="py-4 text-center text-xs opacity-50">無額外扣除費用</div>
-                    @else
-                        <div class="space-y-3">
-                            @foreach($fees as $index => $fee)
-                                <div class="p-2 border rounded-lg text-sm">
-                                    <div class="flex justify-between items-start">
-                                        <div class="flex-1">
-                                            <x-select 
-                                                :options="$feeTypes" 
-                                                wire:model.live="fees.{{ $index }}.fee_type"
-                                                class="select-xs select-bordered"
-                                            />
-                                            <x-input 
-                                                type="number" 
-                                                step="0.0001" 
-                                                prefix="TWD" 
-                                                wire:model.live.debounce.500ms="fees.{{ $index }}.amount"
-                                                class="input-xs mt-1"
-                                                placeholder="金額"
-                                            />
-                                            <x-input 
-                                                wire:model="fees.{{ $index }}.note" 
-                                                placeholder="備註"
-                                                class="input-xs mt-1"
-                                            />
-                                        </div>
-                                        <x-button 
-                                            icon="o-trash" 
-                                            class="btn-ghost btn-xs text-error ml-2" 
-                                            wire:click="removeFee({{ $index }})" 
-                                        />
-                                    </div>
-                                </div>
-                            @endforeach
-                        </div>
-                    @endif
-                </div>
+                <div class="hidden lg:block">
+					<x-card shadow separator class="text-sm font-bold">
+						<p>退回原因</p>
+						<x-textarea wire:model="return_reason" placeholder="請輸入退貨原因或特殊說明..." rows="4" />
+										
+						@foreach($feeTypes as $key => $config)
+						<div class="py-1">
+							<div>{{ $config['name'] }}</div>
+							<div>
+								<x-input type="number" wire:model.live="fees.{{ $key }}.amount" />
+							</div>
+						</div>
+						@endforeach					
+					</x-card>
+				</div>
+
+				<div class="block lg:hidden">
+					<p>退回原因</p>
+					<x-textarea wire:model="return_reason" placeholder="請輸入退貨原因或特殊說明..." rows="4" />
+					@foreach($feeTypes as $key => $config)
+					<div class="mb-4 p-4 border rounded">
+						<div class="font-bold">{{ $config['name'] }}</div>
+						<x-input type="number" wire:model.live="fees.{{ $key }}.amount" />
+					</div>
+					@endforeach
+				</div>
 
                 <x-slot:actions>
                     <div class="w-full space-y-4">
@@ -174,12 +184,12 @@
                             <span class="text-xs opacity-60 uppercase tracking-widest">預計退款總額</span>
                             <div class="text-right">
                                 <div class="text-2xl font-black font-mono text-primary leading-none">
-                                    NT$ {{ number_format($this->netRefundTotal, 2) }}
-                                </div>
-                                <div class="text-[10px] text-gray-400">
-                                    商品小計: {{ number_format($this->itemsTotal, 2) }} 
-                                    費用: -{{ number_format($this->feesTotal, 2) }}
-                                </div>
+									NT$ {{ number_format($this->netRefundTotal, 2) }}
+								</div>
+								<div class="text-[10px] text-gray-400">
+									商品小計: {{ number_format($this->itemsTotal, 2) }} 
+									費用: -{{ number_format($this->feesTotal, 2) }}
+								</div>
                             </div>
                         </div>
 

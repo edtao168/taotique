@@ -36,7 +36,16 @@ class ReturnCreate extends Component
         // 載入費用類型設定
         $this->feeTypes = config('business.return_fee_types', []);
         
-        // 處理傳入的參數（可能是 ID 或模型）
+        // 初始化費用陣列，確保每個類型都有對應的 key
+		foreach ($this->feeTypes as $key => $config) {
+			$this->fees[$key] = [
+				'fee_type' => $key,
+				'amount'   => 0, // 預設 0
+				'note'     => $config['name']
+			];
+		}
+		
+		// 處理傳入的參數（可能是 ID 或模型）
         if ($sale instanceof Sale) {
             $this->sale = $sale->load(['customer', 'items.product']);
         } else {
@@ -56,54 +65,33 @@ class ReturnCreate extends Component
 	/**
      * 將商品加入退貨清單
      */
-    public function addItemToReturn($productId)
-    {
-        // 從原銷售單中尋找該商品（使用 SaleItem）
-        $saleItem = $this->sale->items->where('product_id', $productId)->first();
-        
-        if (!$saleItem) {
-            $this->error('此商品不在原訂單中');
-            return;
-        }
-        
-        $product = $saleItem->product;
-        $productName = $product->full_display_name ?? $product->name;
-        
-        // 獲取商品單價（嘗試多個可能的欄位）
-        $unitPrice = $saleItem->unit_price ?? $saleItem->price ?? 0;
-        
-        if ($unitPrice <= 0) {
-            $this->error("商品 {$productName} 的單價為 0，無法退貨");
-            return;
-        }
-        
-        // 檢查是否已在退貨清單中
-        foreach ($this->return_items as &$item) {
-            if ($item['product_id'] === $productId) {
-                $newQty = $item['quantity'] + 1;
-                if ($newQty > $saleItem->quantity) {
-                    $this->error("退貨數量不可超過原購買數量 ({$saleItem->quantity})");
-                    return;
-                }
-                $item['quantity'] = $newQty;
-                $item['subtotal'] = $item['quantity'] * $item['unit_price'];
-                $this->success("已增加 {$productName} 退貨數量至 {$newQty}");
-                return;
-            }
-        }
-        
-        // 新增退貨商品
-        $this->return_items[] = [
-            'sale_item_id' => $saleItem->id,
-            'product_id' => $productId,
-            'product_name' => $productName,
-            'quantity' => 1,
-            'unit_price' => $unitPrice,
-            'subtotal' => $unitPrice,
-        ];
-        
-        $this->success("已加入退貨商品: {$productName}");
-    }
+	public function addItemToReturn($saleItemId)
+	{
+		// 找出原單中的該筆項目
+		$saleItem = SaleItem::with('product')->find($saleItemId);
+
+		if (!$saleItem) return;
+
+		// 檢查是否重複加入
+		foreach ($this->return_items as $item) {
+			if ($item['sale_item_id'] == $saleItemId) {
+				$this->warning('該商品已在退貨清單中');
+				return;
+			}
+		}
+
+		// 【關鍵修正】：不要直接存入整個 Eloquent Model
+		// 手動建立一個純陣列結構，確保 Livewire 序列化不會遺失資料
+		$this->return_items[] = [
+			'sale_item_id' => $saleItem->id,
+			'product_id'   => $saleItem->product_id,
+			'name'         => $saleItem->product->name,    // 預先提取名稱
+			'barcode'      => $saleItem->product->barcode, // 預先提取條碼
+			'price'        => $saleItem->price,
+			'quantity'     => 1, // 預設退 1 個
+			'max_qty'      => $saleItem->quantity, // 記錄上限以供驗證
+		];
+	}
     
     /**
      * 移除退貨清單中的項目
@@ -123,14 +111,15 @@ class ReturnCreate extends Component
      */
     public function addFee(): void
     {
-        // 使用設定檔中第一筆費用類型作為預設
-        $defaultFeeType = !empty($this->feeTypes) ? $this->feeTypes[0]['id'] : 'shipping_fee_customer';
-        
-        $this->fees[] = [
-            'fee_type' => $defaultFeeType,
-            'amount' => '0.0000',
-            'note' => ''
-        ];
+        // 【修正】使用 array_key_first 取得關聯陣列的第一個 Key (例如 'shipping_fee')
+		$firstKey = array_key_first($this->feeTypes);
+		$defaultFeeType = $firstKey ?? 'shipping_fee';
+		
+		$this->fees[] = [
+			'fee_type' => $defaultFeeType,
+			'amount'   => '0.0000',
+			'note'     => $this->feeTypes[$defaultFeeType]['name'] ?? ''
+		];
     }
 
     /**
@@ -143,25 +132,41 @@ class ReturnCreate extends Component
     }
 
     /**
-     * 即時計算費用總和 (Computed Property)
-     */
-    #[Computed]
-    public function itemsTotal(): string
-    {
-        return array_reduce($this->return_items, fn($carry, $item) => bcadd($carry, $item['subtotal'], 4), '0.0000');
-    }
+	 * 商品小計 (即時計算)
+	 */
+	#[Computed]
+	public function itemsTotal(): string
+	{
+		$total = '0.0000';
+		foreach ($this->return_items as $item) {
+			// 修正：使用正確的鍵名 price 與 quantity
+			$subtotal = bcmul((string)($item['price'] ?? 0), (string)($item['quantity'] ?? 0), 4);
+			$total = bcadd($total, $subtotal, 4);
+		}
+		return $total;
+	}
 
-    #[Computed]
-    public function feesTotal(): string
-    {
-        return array_reduce($this->fees, fn($carry, $item) => bcadd($carry, $item['amount'] ?: '0', 4), '0.0000');
-    }
+	/**
+	 * 費用小計 (即時計算)
+	 */
+	#[Computed]
+	public function feesTotal(): string
+	{
+		$total = '0.0000';
+		foreach ($this->fees as $fee) {
+			$total = bcadd($total, (string)($fee['amount'] ?? 0), 4);
+		}
+		return $total;
+	}
 
-    #[Computed]
-    public function netRefundTotal(): string
-    {
-        return bcsub($this->itemsTotal, $this->feesTotal, 4);
-    }
+	/**
+	 * 最終應退金額
+	 */
+	#[Computed]
+	public function netRefundTotal(): string
+	{
+		return bcsub($this->itemsTotal, $this->feesTotal, 4);
+	}
 		
 	/**
 	 * 計算所有金額
@@ -191,28 +196,42 @@ class ReturnCreate extends Component
      */
     public function save()
     {
-        if (empty($this->return_items)) {
-            $this->error('請至少加入一項退貨商品');
-            return;
-        }
+        $this->validate([
+			'fees.*.amount' => 'required|numeric|min:0',
+		]);
         
         return DB::transaction(function () {
             // 1. 建立退回單主表
-            $return = SalesReturn::create([
-                'shop_id' => auth()->user()->shop_id,
-                'sale_id' => $this->sale->id,
-                'warehouse_id' => $this->warehouse_id,
-                'return_no' => 'SR-' . now()->format('YmdHis'),
-                'created_by' => auth()->id(),
-                'status' => 'pending',
-            ]);
+            $returnData = [
+				'shop_id'             => auth()->user()->shop_id ?? 1,
+				'sale_id'             => $this->sale->id,
+				'warehouse_id'        => $this->warehouse_id,
+				'return_no'           => 'SR-' . now()->format('YmdHis'),
+				
+				// 【修正】：將計算屬性的值對應到正確的 SQL 欄位
+				'items_total_amount'  => $this->itemsTotal, 
+				'fees_total_amount'   => $this->feesTotal,
+				'total_refund_amount' => $this->netRefundTotal, // SQL 欄位是 total_refund_amount
+				
+				'remark'              => $this->remark,
+				'created_by'          => auth()->id(),
+				'status'              => 'pending',
+			];
 
-            // 2. 寫入費用明細 (SalesReturnFee)
-            foreach ($this->fees as $fee) {
-                if ($fee['amount'] > 0) {
-                    $return->fees()->create($fee);
-                }
-            }
+			$return = SalesReturn::create($returnData);
+
+			// 寫入費用明細
+			foreach ($this->fees as $fee) {
+				// 使用 bcmath 檢查金額是否大於 0
+				if (bccomp((string)$fee['amount'], '0', 4) === 1) {
+					$return->fees()->create([
+						'shop_id'  => auth()->user()->shop_id ?? 1,
+						'fee_type' => $fee['fee_type'],
+						'amount'   => $fee['amount'],
+						'note'     => $fee['note'],
+					]);
+				}
+			}
 
             // 3. 寫入退貨商品 (SalesReturnItem)
             foreach ($this->return_items as $item) {

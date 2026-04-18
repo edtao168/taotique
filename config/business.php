@@ -58,6 +58,19 @@ return [
 			'icon'     => 'o-banknotes',
 		],
 	],
+	
+	// 退貨費用類型
+    'return_fee_types' => [
+        'shipping_fee' => [
+			'name' 	   => '退貨運費',
+			'operator' => 'add'
+		],
+		'restocking_fee' => [
+			'name' 	   => '整新費',
+			'operator' => 'sub',
+		],        
+    ],
+
 
 	'currencies' => [
 		'TWD' => ['symbol' => 'NT$', 'name' => '新台幣', 'precision' => 0, 'default_rate' => '1.0000'],

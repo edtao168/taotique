@@ -2,7 +2,7 @@
 <div>
     <x-header title="系統概覽" subtitle="今日經營數據與趨勢分析">
         <x-slot:actions>
-            <x-button label="新增銷售" icon="o-cube" class="btn-primary" link="{{ route('sales.create') }}" />
+            <x-button label="新增銷售" icon="o-chart-bar" class="btn-primary" link="{{ route('sales.create') }}" />
             <x-button label="新增採購" icon="o-shopping-bag" :link="route('purchases.create')" />
         </x-slot:actions>
     </x-header>

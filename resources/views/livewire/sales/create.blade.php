@@ -10,10 +10,24 @@
      @scroll.window="checkScroll()">
 	 
     <x-header separator progress-indicator>
+	    {{-- 驗證錯誤顯示 --}}
+    @if($errors->any())
+    <div class="alert alert-error mb-4 shadow-lg">
+        <x-icon name="o-exclamation-triangle" class="w-6 h-6" />
+        <div>
+            <h3 class="font-bold">請修正以下錯誤：</h3>
+            <ul class="list-disc list-inside text-sm mt-1">
+                @foreach($errors->all() as $error)
+                    <li>{{ $error }}</li>
+                @endforeach
+            </ul>
+        </div>
+    </div>
+@endif
 		<x-slot:title>
 			<div class="flex items-center gap-4">
 				<div class="p-3 bg-primary/10 rounded-2xl text-primary">
-					<x-icon name="o-cube" class="w-8 h-8" />
+					<x-icon name="o-chart-bar" class="w-8 h-8" />
 				</div>
 				<div>
 					<h1 class="text-2xl font-bold tracking-tight text-base-content">
@@ -144,7 +158,7 @@
 								<div class="flex justify-between items-center pt-2 border-t border-dashed">
 									<span class="text-xs font-bold opacity-50">小計</span>
 									<span class="font-mono font-bold text-primary text-lg">
-										{{ number_format(bcmul($item['price'] ?? 0, $item['quantity'] ?? 0, 4), 0) }}
+										{{ number_format(bcmul($item['price'] ?? 0, $item['quantity'] ?? 0, 4), 2) }}
 									</span>
 								</div>
 							</div>

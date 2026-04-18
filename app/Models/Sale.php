@@ -13,6 +13,9 @@ class Sale extends Model
     
     protected $casts = [
         'sold_at' => 'datetime',
+		'subtotal' => 'decimal:4',
+        'customer_total' => 'decimal:4',
+        'final_net_amount' => 'decimal:4',
     ];
 
     // 快取費用類型配置
@@ -81,76 +84,81 @@ class Sale extends Model
             ->firstWhere('id', $this->payment_method)['name'] ?? $this->payment_method;
     }
 
-    public static function createWithCalculations(array $data, array $items)
-    {
-        return DB::transaction(function () use ($data, $items) {
+    /**
+	 * 【修正】解決 $sale 變數未定義的問題
+	 */
+	public static function createWithCalculations(array $data, array $items)
+	{
+		return DB::transaction(function () use ($data, $items) {
+            $feeConfigs = config('business.fee_types', []);
+            
+            // 1. 過濾掉不屬於 sales 主表的欄位（即費用欄位）
+            $saleFields = array_diff_key($data, $feeConfigs);
+            
+            // 2. 建立 Sale 主表紀錄
+            $sale = self::create($saleFields);
+            
             $allowNegative = Setting::get('allow_negative_stock', false);
 
-			foreach ($items as $item) {
-				// 鎖定庫存紀錄
-				$inventory = Inventory::where('product_id', $item['product_id'])
-					->where('warehouse_id', $formData['warehouse_id'])
-					->lockForUpdate()
-					->first();
+            foreach ($items as $item) {
+                $warehouseId = $item['warehouse_id'] ?? $data['warehouse_id'];
+                
+                $inventory = Inventory::where('product_id', $item['product_id'])
+                    ->where('warehouse_id', $warehouseId)
+                    ->lockForUpdate()
+                    ->first();
 
-				$currentQty = $inventory ? $inventory->quantity : 0;
+                $currentQty = $inventory ? $inventory->quantity : 0;
 
-				// 如果不允許負庫存且數量不足，拋出異常觸發 Transaction 回滾
-				if (!$allowNegative && $currentQty < $item['quantity']) {
-					throw new \Exception("商品 ID {$item['product_id']} 庫存不足，無法出庫。");
-				}
+                if (!$allowNegative && bccomp((string)$currentQty, (string)$item['quantity'], 4) === -1) {
+                    throw new \Exception("商品 ID {$item['product_id']} 庫存不足。");
+                }
 
-				// 執行扣除 (即使結果是負數，bcsub 也能處理)
-				$newQty = bcsub($currentQty, $item['quantity'], 4);
+                $newQty = bcsub((string)$currentQty, (string)$item['quantity'], 4);
 
-				Inventory::updateOrCreate(
-					['product_id' => $item['product_id'], 'warehouse_id' => $formData['warehouse_id']],
-					['quantity' => $newQty]
-				);
-			}
-		
-			// 分離費用資料與主表資料
-            $feeConfigs = config('business.fee_types');
-            $saleData = array_diff_key($data, $feeConfigs);
-            
-            // 確保必要欄位存在
-            //$saleData['subtotal'] = $data['subtotal'] ?? '0';
-            //$saleData['customer_total'] = $data['customer_total'] ?? '0';
-            //$saleData['final_net_amount'] = $data['final_net_amount'] ?? '0';
-            
-            $sale = self::create($saleData);
+                Inventory::updateOrCreate(
+                    ['product_id' => $item['product_id'], 'warehouse_id' => $warehouseId],
+                    ['quantity' => $newQty]
+                );
 
-            // 儲存費用到 sale_fees
+                $sale->items()->create([
+                    'product_id'   => $item['product_id'],
+                    'warehouse_id' => $warehouseId,
+                    'price'        => $item['price'],
+                    'quantity'     => $item['quantity'],
+                    'subtotal'     => bcmul((string)$item['quantity'], (string)$item['price'], 4),
+                ]);
+            }
+
+            // 3. 儲存費用到 sale_fees 關聯表
             foreach ($data as $key => $value) {
-                if (isset($feeConfigs[$key]) && (float)$value != 0) {
+                // 檢查是否為定義的費用類型，且金額不為 0
+                if (isset($feeConfigs[$key]) && bccomp((string)$value, '0', 4) !== 0) {
                     $sale->fees()->create([
                         'shop_id'  => auth()->user()->shop_id ?? 1,
-                        'sale_id'  => $sale->id,
                         'fee_type' => $key,
                         'amount'   => $value,
-                        'note'     => $feeConfigs[$key]['name'],
+                        'note'     => $feeConfigs[$key]['name'] ?? $key,
                     ]);
                 }
             }
 
-            $sale->processItemsAndStock($items);
-            
             return $sale;
         });
-    }
+    } 
 
     public function updateWithCalculations(array $data, array $items)
     {
         return DB::transaction(function () use ($data, $items) {
+            \Log::info('Sale::updateWithCalculations 開始', ['sale_id' => $this->id]);
+            
             $oldItems = $this->items->keyBy(function ($item) {
                 return $item->product_id . '-' . $item->warehouse_id;
             });
 
-            // 分離費用資料
             $feeConfigs = config('business.fee_types');
             $saleData = array_diff_key($data, $feeConfigs);
             
-            //self::prepareFinancials($saleData);
             $this->update($saleData);
 
             // 更新費用明細
@@ -172,100 +180,30 @@ class Sale extends Model
             foreach ($items as $item) {
                 if (empty($item['product_id'])) continue;
 
+                $warehouseId = $item['warehouse_id'] ?? $saleData['warehouse_id'];
+
                 $this->items()->create([
                     'product_id'   => $item['product_id'],
-                    'warehouse_id' => $item['warehouse_id'],
+                    'warehouse_id' => $warehouseId,
                     'price'        => $item['price'],
                     'quantity'     => $item['quantity'],
                     'subtotal'     => bcmul((string)$item['quantity'], (string)$item['price'], 2),
                 ]);
 
-                $key = $item['product_id'] . '-' . $item['warehouse_id'];
+                $key = $item['product_id'] . '-' . $warehouseId;
                 $oldQty = $oldItems->has($key) ? (float)$oldItems[$key]->quantity : 0;
                 $newQty = (float)$item['quantity'];
                 $diff = $newQty - $oldQty;
 
                 if ($diff > 0) {
-                    $this->processStockReduction($item['product_id'], $item['warehouse_id'], $diff);
+                    $this->processStockReduction($item['product_id'], $warehouseId, $diff);
                 } elseif ($diff < 0) {
-                    $this->restoreStock($item['product_id'], $item['warehouse_id'], abs($diff));
+                    $this->restoreStock($item['product_id'], $warehouseId, abs($diff));
                 }
             }
 
             return $this;
         });
-    }
-
-    protected function processItemsAndStock(array $items)
-    {
-        foreach ($items as $item) {
-            if (empty($item['product_id'])) continue;
-
-            $this->items()->create([
-                'product_id'   => $item['product_id'],
-                'warehouse_id' => $item['warehouse_id'],
-                'price'        => $item['price'],
-                'quantity'     => $item['quantity'],
-                'subtotal'     => bcmul((string)$item['quantity'], (string)$item['price'], 2),
-            ]);
-
-            $needed = $item['quantity'];
-            $stocks = Inventory::where('product_id', $item['product_id'])
-                ->where('warehouse_id', $item['warehouse_id'])
-                ->where('status', 'in_stock')
-                ->where('quantity', '>', 0)
-                ->orderBy('created_at', 'asc')
-                ->get();
-
-            foreach ($stocks as $inv) {
-                if ($needed <= 0) break;
-                if ($inv->quantity >= $needed) {
-                    $inv->decrement('quantity', $needed);
-                    $needed = 0;
-                } else {
-                    $needed -= $inv->quantity;
-                    $inv->update(['quantity' => 0, 'status' => 'sold']);
-                }
-                if ($inv->fresh()->quantity <= 0) $inv->update(['status' => 'sold']);
-            }
-            if ($needed > 0) throw new \Exception("庫存不足");
-        }
-    }
-    
-    public function getTotalFeeByTarget(string $target): string
-    {
-        $feeConfigs = config('business.fee_types');
-        $total = '0.0000';
-        
-        foreach ($this->fees as $fee) {
-            $config = $feeConfigs[$fee->fee_type] ?? null;
-            if (!$config || $config['target'] !== $target) continue;
-            
-            if ($config['operator'] === 'add') {
-                $total = bcadd($total, (string)$fee->amount, 4);
-            } else {
-                $total = bcsub($total, (string)$fee->amount, 4);
-            }
-        }
-        return $total;
-    }
-    
-    private static function prepareFinancials(array &$data) {
-        $subtotal = (string)($data['subtotal'] ?? '0');
-        $discount = (string)($data['discount'] ?? '0');
-        $platCoupon = (string)($data['platform_coupon'] ?? '0');
-        $shipCust = (string)($data['shipping_fee_customer'] ?? '0');
-        $shipPlat = (string)($data['shipping_fee_platform'] ?? '0');
-        $platFee  = (string)($data['platform_fee'] ?? '0');
-        $adj      = (string)($data['order_adjustment'] ?? '0');
-
-        $buyTotal = bcadd($subtotal, $shipCust, 2);
-        $buyTotal = bcsub($buyTotal, $discount, 2);
-        $data['customer_total'] = bcsub($buyTotal, $platCoupon, 2);
-
-        $net = bcsub($subtotal, $shipPlat, 2);
-        $net = bcsub($net, $platFee, 2);
-        $data['final_net_amount'] = bcsub($net, $adj, 2);
     }
     
     protected function processStockReduction($productId, $warehouseId, $amount)

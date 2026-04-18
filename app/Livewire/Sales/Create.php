@@ -25,230 +25,219 @@ class Create extends Component
     public array $productOptions = [];
     public bool $showScanner = false;
     public string $invoice_number = '';
-    
-    // 將 form 初始化為空的，我們在 mount 中動態填充
     public array $form = [];
 
-    /**
-     * 驗證規則：採動態定義，確保 business.php 增加費用時不需改動此處
-     */
     protected function rules()
     {
-        $rules = [
-            'form.customer_id'   => 'required|integer',
-			'form.user_id'	     => 'required|integer',
-            'form.sold_at'       => 'required|date',
-            'form.warehouse_id'  => 'required|integer',
-            'form.invoice_number'=> 'required|string',
-            'form.channel'       => 'required|integer',
-            'form.payment_method'=> 'required|string',
-            'form.remark'  		 => 'nullable|string',
-            'items'              => 'required|array|min:1',
-            'items.*.product_id' => 'required|integer',
-            'items.*.quantity'   => 'required|numeric|min:0.0001',
-            'items.*.price'      => 'required|numeric',
+        $saleId = $this->sale?->id ?? 'NULL';
+        
+        return [
+            'form.customer_id'    => 'required|integer|exists:customers,id',
+            'form.user_id'	      => 'required|integer|exists:users,id',
+            'form.sold_at'        => 'required|date',
+            'form.warehouse_id'   => 'required|integer|exists:warehouses,id',
+            'form.invoice_number' => 'required|string|unique:sales,invoice_number,' . $saleId . ',id',
+            'form.channel'        => 'required|integer|exists:shops,id',
+            'form.payment_method' => 'required|string',
+            'form.remark'  		  => 'nullable|string',
+            'items'               => 'required|array|min:1',
+            'items.*.product_id'  => 'required|integer|exists:products,id',
+            'items.*.quantity'    => 'required|numeric|min:0.0001',
+            'items.*.price'       => 'required|numeric|min:0',
+            'items.*.warehouse_id'=> 'required|integer|exists:warehouses,id',
         ];
+    }
 
-        // 從 business.php 動態加入費用驗證
-        foreach (config('business.fee_types') as $key => $config) {
-            $rules["form.{$key}"] = 'nullable|numeric';
-        }
-
-        return $rules;
+    protected function messages()
+    {
+        return [
+            'form.customer_id.required' => '請選擇客戶',
+            'form.warehouse_id.required' => '請選擇業務歸屬倉庫',
+            'form.invoice_number.required' => '單號不能為空，請重新整理頁面',
+            'form.invoice_number.unique' => '單號已存在',
+            'items.required' => '請至少添加一個商品',
+            'items.*.product_id.required' => '請選擇商品',
+        ];
     }
 
     public function mount(?Sale $sale = null)
-	{
-		if ($sale && $sale->exists) {
-			$this->isEdit = true;
-			$this->sale = $sale;
-			$this->form = $sale->toArray();
-			$this->form['sold_at'] = $sale->sold_at->format('Y-m-d');
+    {
+        if ($sale && $sale->exists) {
+            $this->isEdit = true;
+            $this->sale = $sale;
+            $this->form = $sale->toArray();
+            $this->form['sold_at'] = $sale->sold_at->format('Y-m-d');
+            $feeConfigs = config('business.fee_types', []);
+			foreach ($feeConfigs as $key => $config) {
+				$this->form[$key] = $sale->$key ?? '0.00';
+			}
+			
 			$this->items = $sale->items->map(function ($item) {
-				return [
-					'product_id'   => $item->product_id,
-					'warehouse_id' => $item->warehouse_id,
-					'quantity'     => $item->quantity,
-					'price'        => $item->price,
-					'sku'          => $item->product->sku ?? '',
-					'name'         => $item->product?->full_display_name ?? '',
-				];
-			})->toArray();
-			
-			// 【新增】從 sale_fees 載入費用到 form
-			foreach ($sale->fees as $fee) {
-				$this->form[$fee->fee_type] = $fee->amount;
-			}
-		} else {
-			// 基礎欄位初始化（不變）
-			$this->form = [                
-				'customer_id'      => 1,
-				'user_id'          => auth()->id() ?? 1,
-				'sold_at'          => now()->format('Y-m-d'),
-				'invoice_number'   => '',
-				'warehouse_id'     => Setting::get('default_warehouse_id', 1),
-				'channel'          => auth()->user()->shop_id ?? 1,
-				'payment_method'   => 'cash',
-				'payment_note'     => '',
-				'subtotal'         => '0.00',
-				'customer_total'   => '0.00',
-				'final_net_amount' => '0.00',
-			];
-
-			// 動態初始化所有費用欄位為 0
-			foreach (config('business.fee_types') as $key => $config) {
-				$this->form[$key] = '0.00';
-			}
-			
-			$this->invoice_number = Sale::generateInvoiceNumber();
-			$this->addRow();
-		}
-	}
-
-    /**
-     * 計算所有金額 (強制使用 BC Math)
-     */
-    public function calculateAll()
-    {
-        $subtotal = '0.0000';
-        foreach ($this->items as $item) {
-            $lineTotal = bcmul($item['quantity'], $item['price'], 4);
-            $subtotal = bcadd($subtotal, $lineTotal, 4);
-        }
-        $this->form['subtotal'] = $subtotal;
-
-        // 初始化動態計算
-        $customer_total = $subtotal;
-        $final_net_amount = $subtotal;
-
-        $feeConfigs = config('business.fee_types');
-
-        foreach ($feeConfigs as $key => $config) {
-            $val = (string)($this->form[$key] ?? '0');
-			if ($val === '') $val = '0';
+                return [
+                    'product_id'   => $item->product_id,
+                    'warehouse_id' => $item->warehouse_id,
+                    'quantity'     => $item->quantity,
+                    'price'        => $item->price,
+                    'sku'          => $item->product->sku ?? '',
+                    'name'         => $item->product?->full_display_name ?? '',
+                ];
+            })->toArray();
+        } else {           
+            $this->invoice_number = Sale::generateInvoiceNumber();
             
-            // 處理買家支付總額
-            if ($config['target'] === 'customer') {
-                $customer_total = ($config['operator'] === 'add') 
-                    ? bcadd($customer_total, $val, 4) 
-                    : bcsub($customer_total, $val, 4);
+            $this->form = [                
+                'customer_id'      => 1,
+                'user_id'          => auth()->id() ?? 1,
+                'sold_at'          => now()->format('Y-m-d'),
+                'invoice_number'   => $this->invoice_number, // ← 使用生成的單號
+                'warehouse_id'     => Setting::get('default_warehouse_id', 1),
+                'channel'          => auth()->user()->shop_id ?? 1,
+                'payment_method'   => 'cash',
+                'remark'     	   => '',
+                'subtotal'         => '0.00',
+                'customer_total'   => '0.00',
+                'final_net_amount' => '0.00',
+            ];
+
+            foreach (config('business.fee_types') as $key => $config) {
+                $this->form[$key] = '0.00';
             }
-
-            // 處理賣家最終淨利 (進帳 = 買家付的 - 賣家支出的費用)
-            // 注意：若買家端有折扣(sub)，賣家收入也會減少，所以所有費用都要計算進來
-            $final_net_amount = ($config['operator'] === 'add')
-                ? bcadd($final_net_amount, $val, 4)
-                : bcsub($final_net_amount, $val, 4);
+            
+            $this->addRow();
         }
-
-        $this->form['customer_total'] = $customer_total;
-        $this->form['final_net_amount'] = $final_net_amount;
     }
-
-	/**
-	 * 當 form 陣列中的任何數值改變時（例如輸入佣金、手續費、折讓）
-	 * 自動觸發重新計算
-	 */
-	public function updatedForm($value, $key)
-	{
-		// 檢查更新的 key 是否屬於 fee_types 中定義的費用項目
-		$fees = array_keys(config('business.fee_types'));
-		
-		// 如果變動的是費用項目、小計相關欄位，就重新計算
-		if (in_array($key, $fees) || $key === 'subtotal') {
-			$this->calculateAll();
-		}
-	}
-
-	/**
-	 * 當 items 陣列中的數據更新時觸發
-	 * $value: 更新後的值, $key: 格式為 "index.field" (例如 "0.product_id")
-	 */
-	public function updatedItems($value, $key)
-	{
-		// 解析是哪個索引的 product_id 發生變化
-		if (str_ends_with($key, '.product_id')) {
-			$parts = explode('.', $key);
-			$index = $parts[0];
-
-			if ($value) {
-				$product = Product::find($value);
-				if ($product) {
-					// 自動填入單價
-					$this->items[$index]['name'] = $product->full_display_name;
-					$this->items[$index]['price'] = $product->price;					
-					
-					// 若有商品名稱需求也可在此填入
-					$this->productOptions = Product::whereIn('id', collect($this->items)->pluck('product_id')->filter())
-                    ->get()
-					->map(fn($p) => [
-                        'id' => $p->id,
-                        'name' => $p->full_display_name,
-                    ])
-                    ->toArray();
-					
-					$this->calculateAll();
-				}
-			}
-		}
-		if (str_contains($key, '.price') || str_contains($key, '.quantity')) {
-			$this->calculateAll();
-		}
-	}
 
     /**
-     * 增加空的一行
+     * 【關鍵修正】即時顯示驗證錯誤
      */
-	public function addRow()
+    public function updated($propertyName)
     {
-		$this->items[] = [
-			'product_id' => null,            
-			'warehouse_id' => $this->form['warehouse_id'] ?? 1,
-			'quantity' => 1,
-			'price' => 0,			
-		];
-		$this->search('');
+        // 即時驗證，讓使用者馬上看到錯誤
+        $this->validateOnly($propertyName);
     }
-	
-	/**
-	 * 刪除行
-	 */
-	public function removeRow($index)
-	{
-		unset($this->items[$index]);
-		$this->items = array_values($this->items); // 重新索引，這對 Livewire 迴圈很重要
-		$this->calculateAll();
-	}
-	
-	/**
-     * 
-     */
-	public function save()
-    {
-        // 1. 執行 rules() 中定義的動態驗證
-        $this->validate();
-		
-		// 取得系統設定：是否允許負庫存
-		$allowNegative = Setting::get('allow_negative_stock', false);
-		
-		if (!$allowNegative) {
-			foreach ($this->items as $item) {
-				// 檢查該倉庫目前的庫存
-				$currentStock = Inventory::where('product_id', $item['product_id'])
-					->where('warehouse_id', $this->form['warehouse_id'])
-					->value('quantity') ?? 0;
 
-				if ($currentStock < $item['quantity']) {
-					$this->error("商品 [{$item['name']}] 庫存不足 (現有: {$currentStock})");
-					return;
-				}
+    /**
+	 * 【修正】計算邏輯 - 確保所有數值都是字串型態
+	 */
+	public function calculateAll()
+	{
+		$subtotal = '0';
+		foreach ($this->items as $item) {
+			$quantity = (string)($item['quantity'] ?? '0');
+			$price = (string)($item['price'] ?? '0');
+			$lineTotal = bcmul($quantity, $price, 4);
+			$subtotal = bcadd($subtotal, $lineTotal, 4);
+		}
+		$this->form['subtotal'] = $subtotal;
+
+		$customer_total = $subtotal;
+		$final_net_amount = $subtotal;
+
+		$feeConfigs = config('business.fee_types', []);
+
+		foreach ($feeConfigs as $key => $config) {
+			$val = (string)($this->form[$key] ?? '0');
+			if ($val === '' || $val === null) $val = '0';
+			
+			// 套用運算符
+			if ($config['operator'] === 'add') {
+				$customer_total = bcadd($customer_total, $val, 4);
+				$final_net_amount = bcadd($final_net_amount, $val, 4);
+			} else {
+				$customer_total = bcsub($customer_total, $val, 4);
+				$final_net_amount = bcsub($final_net_amount, $val, 4);
 			}
 		}
+
+		$this->form['customer_total'] = $customer_total;
+		$this->form['final_net_amount'] = $final_net_amount;
+	}
+
+    public function updatedForm($value, $key)
+    {
+        $fees = array_keys(config('business.fee_types'));
+        if (in_array($key, $fees) || $key === 'subtotal') {
+            $this->calculateAll();
+        }
+    }
+
+    public function updatedItems($value, $key)
+    {
+        if (str_ends_with($key, '.product_id')) {
+            $parts = explode('.', $key);
+            $index = $parts[0];
+
+            if ($value) {
+                $product = Product::find($value);
+                if ($product) {
+                    $this->items[$index]['name'] = $product->full_display_name;
+                    $this->items[$index]['price'] = $product->price;					
+                    
+                    $this->productOptions = Product::whereIn('id', collect($this->items)->pluck('product_id')->filter())
+                        ->get()
+                        ->map(fn($p) => [
+                            'id' => $p->id,
+                            'name' => $p->full_display_name,
+                        ])
+                        ->toArray();
+                    
+                    $this->calculateAll();
+                }
+            }
+        }
+        if (str_contains($key, '.price') || str_contains($key, '.quantity')) {
+            $this->calculateAll();
+        }
+    }
+
+    public function addRow()
+    {
+        $this->items[] = [
+            'product_id'   => null,            
+            'warehouse_id' => $this->form['warehouse_id'] ?? 1,
+            'quantity'     => 1,
+            'price'        => 0,			
+        ];
+        $this->search('');
+    }
+    
+    public function removeRow($index)
+    {
+        unset($this->items[$index]);
+        $this->items = array_values($this->items);
+        $this->calculateAll();
+    }
+    
+    /**
+     * 【修正】解決 DB::transaction 閉包內的變數範圍問題
+     */
+    public function save()
+    {
+        $this->validate();
+
+        // 取得系統設定：是否允許負庫存
+        $allowNegative = \App\Models\Setting::get('allow_negative_stock', false);
+
+        if (!$allowNegative) {
+            foreach ($this->items as $item) {
+                // 檢查該倉庫目前的庫存
+                $currentStock = Inventory::where('product_id', $item['product_id'])
+                    ->where('warehouse_id', $item['warehouse_id'] ?? $this->form['warehouse_id'])
+                    ->value('quantity') ?? 0;
+
+                // 使用 bccomp 進行高精度比較
+                if (bccomp($currentStock, $item['quantity'], 4) === -1) {
+                    $this->error("商品 [{$item['name']}] 庫存不足 (現有: " . (float)$currentStock . ")");
+                    return;
+                }
+            }
+        }
 
         try {
+            // 使用 DB::transaction 確保資料一致性
             DB::transaction(function () {
-                // 2. 呼叫 Model 層的嚴謹儲存邏輯 (包含庫存鎖定 lockForUpdate)
-                if ($this->isEdit) {
+                // 明確使用 $this->isEdit 與 $this->sale，PHP 閉包會自動綁定 $this
+                if ($this->isEdit && $this->sale) {
                     $this->sale->updateWithCalculations($this->form, $this->items);
                     $msg = '訂單已更新';
                 } else {
@@ -256,16 +245,21 @@ class Create extends Component
                     $msg = '新訂單已建立';
                 }
                 
+                \Log::info('銷售儲存成功', ['invoice' => $this->form['invoice_number']]);
+                
+                // 提示成功並跳轉
                 $this->success($msg, redirectTo: route('sales.index'));
             });
         } catch (\Exception $e) {
-            $this->error($e->getMessage());
+            \Log::error('銷售過帳失敗', [
+                'error' => $e->getMessage(),
+                'line' => $e->getLine()
+            ]);
+            // 丟出明確錯誤訊息給前端
+            $this->error('儲存失敗：' . $e->getMessage());
         }
     }
 
-    /**
-     * 掃碼器邏輯
-     */
     public function onBarcodeScanned(string $barcode, ?int $index = null): void
     {
         $product = Product::where('barcode', $barcode)->first();
@@ -289,10 +283,10 @@ class Create extends Component
         return view('livewire.sales.create', [
             'customers' => Customer::all(),
             'warehouses' => Warehouse::where('is_active', true)->get(),
-			'shops' => \App\Models\Shop::all()->map(fn($s) => [
-				'id' => $s->id,  // 確保是字串
-				'name' => $s->name,
-			]),
+            'shops' => \App\Models\Shop::all()->map(fn($s) => [
+                'id' => $s->id,
+                'name' => $s->name,
+            ]),
         ]);
     }
 }
