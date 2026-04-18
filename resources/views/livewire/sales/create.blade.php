@@ -2,7 +2,6 @@
 <div x-data="{ 
         atBottom: false,
         checkScroll() {
-            // 判斷是否滾動到接近底部 (留 100px 緩衝)
             this.atBottom = (window.innerHeight + window.scrollY) >= (document.body.offsetHeight - 100);
         }
      }" 
@@ -46,10 +45,9 @@
 		</x-slot:actions>
 	</x-header>
 
-    {{-- 手機端：調整為單欄佈局，結算區塊在最後 --}}
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
         
-        {{-- 1. 單據資訊：手機端第一個，桌面端左側 --}}
+        {{-- 1. 單據資訊 --}}
         <div class="col-span-12 lg:col-span-3 space-y-6 order-1">
             <x-card title="單據資訊" shadow class="border-t-4 border-primary">
                 <div class="space-y-4">
@@ -64,7 +62,7 @@
             </x-card>
         </div>
 		
-        {{-- 2. 商品明細：手機端第二個，桌面端中間 --}}
+        {{-- 2. 商品明細 --}}
 		<div class="col-span-12 lg:col-span-6 order-2">
 			<x-card title="商品明細" shadow separator class="mb-4 lg:mb-0">
 				<x-slot:title>
@@ -77,7 +75,7 @@
 					</div>
 				</x-slot:title>
 
-				{{-- PC 端標頭：僅在 lg (1024px) 以上顯示 --}}
+				{{-- PC 端標頭 --}}
 				<div class="hidden lg:grid grid-cols-12 gap-4 mb-2 px-4 text-sm font-bold opacity-60">
 					<div class="col-span-5">商品名稱 (搜尋或掃描)</div>
 					<div class="col-span-2 text-right">單價</div>
@@ -158,7 +156,7 @@
 								<div class="flex justify-between items-center pt-2 border-t border-dashed">
 									<span class="text-xs font-bold opacity-50">小計</span>
 									<span class="font-mono font-bold text-primary text-lg">
-										{{ number_format(bcmul($item['price'] ?? 0, $item['quantity'] ?? 0, 4), 2) }}
+										{{ number_format($item['subtotal'] ?? 0, 2) }}
 									</span>
 								</div>
 							</div>
@@ -219,7 +217,7 @@
 								{{-- 小計 (占 2 格) --}}
 								<div class="col-span-2 text-right">
 									<span class="font-mono font-black text-primary text-lg lg:text-base">
-										{{ number_format(bcmul($item['price'] ?? 0, $item['quantity'] ?? 0, 4), 0) }}
+										{{ number_format($item['subtotal'] ?? 0, 0) }}
 									</span>
 								</div>
 							</div>
@@ -238,14 +236,14 @@
 			</x-card>
 		</div>
 
-        {{-- 3. 結算區塊：手機端第三個（最後），桌面端右側 --}}
+        {{-- 3. 結算區塊 --}}
         <div class="col-span-12 lg:col-span-3 order-3">
             <x-card title="結算" shadow class="bg-base-100 border-t-4 border-primary">
                 <div class="space-y-4">
                     {{-- 第一列：小計 --}}
                     <div class="flex justify-between items-center p-2 bg-base-200/50 rounded-lg">
                         <span class="font-bold opacity-70">小計</span>
-                        <span class="font-mono text-right">NT$ {{ number_format($form['subtotal'], 0) }}</span>
+                        <span class="font-mono text-right">NT$ {{ number_format($form['subtotal'] ?? 0, 0) }}</span>
                     </div>
 
                     {{-- 第二列：雙欄對照 --}}                  
@@ -258,7 +256,6 @@
 								<x-input 
 									label="{{ $config['name'] }}" 
 									wire:model.live.debounce.500ms="form.{{ $field }}"
-									wire:change="calculateAll"
 									prefix="{{ $config['operator'] === 'add' ? '+' : '-' }}"
 									icon="{{ $config['icon'] ?? '' }}"
 									class="input-sm text-right font-mono {{ $config['operator'] === 'sub' ? 'text-error' : '' }}"
@@ -270,7 +267,7 @@
 							<div class="pt-2 border-t border-dashed">
 								<div class="text-[10px] opacity-50">買家實付</div>
 								<div class="text-lg font-bold text-blue-600 font-mono">
-									NT$ {{ number_format($form['customer_total'], 2) }}
+									NT$ {{ number_format($form['customer_total'] ?? 0, 2) }}
 								</div>
 							</div>
 						</div>
@@ -303,7 +300,7 @@
                     <div class="p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl border border-emerald-100">
                         <div class="text-[15px] text-emerald-600 font-bold tracking-widest uppercase mb-1">最終訂單進帳</div>
                         <div class="text-4xl font-black text-emerald-600 font-mono">
-                            NT$ {{ number_format($form['final_net_amount'], 0) }}
+                            NT$ {{ number_format($form['final_net_amount'] ?? 0, 0) }}
                         </div>
                     </div>
 
@@ -313,7 +310,7 @@
         </div>
     </div>
 
-    {{-- 滾動提示：只在桌面端顯示，手機端隱藏 --}}
+    {{-- 滾動提示 --}}
     <div x-show="!atBottom" 
          x-transition:enter="transition ease-out duration-300"
          x-transition:enter-start="opacity-0 transform translate-y-4"

@@ -85,6 +85,9 @@ class Create extends Component
                     'name'         => $item->product?->full_display_name ?? '',
                 ];
             })->toArray();
+            
+            // 【修正】初始化時計算總計
+            $this->calculateAll();
         } else {           
             $this->invoice_number = Sale::generateInvoiceNumber();
             
@@ -92,7 +95,7 @@ class Create extends Component
                 'customer_id'      => 1,
                 'user_id'          => auth()->id() ?? 1,
                 'sold_at'          => now()->format('Y-m-d'),
-                'invoice_number'   => $this->invoice_number, // ← 使用生成的單號
+                'invoice_number'   => $this->invoice_number,
                 'warehouse_id'     => Setting::get('default_warehouse_id', 1),
                 'channel'          => auth()->user()->shop_id ?? 1,
                 'payment_method'   => 'cash',
@@ -115,7 +118,6 @@ class Create extends Component
      */
     public function updated($propertyName)
     {
-        // 即時驗證，讓使用者馬上看到錯誤
         $this->validateOnly($propertyName);
     }
 
@@ -124,40 +126,55 @@ class Create extends Component
 	 */
 	public function calculateAll()
 	{
-		$itemsSubtotal = '0.0000';
-		foreach ($this->items as $item) {
-			$subtotal = bcmul((string)$item['price'], (string)$item['quantity'], 4);
-			$itemsSubtotal = bcadd($itemsSubtotal, $subtotal, 4);
-		}
-		
-		// 賦值給獨立變數
-		$this->items_subtotal = $itemsSubtotal;
+		$subtotal = '0.0000';
 
-		$customerTotal = $itemsSubtotal;
-		$sellerNet = $itemsSubtotal;
+        // 1. 商品明細計算
+        foreach ($this->items as $index => $item) {
+            $price = (string)($item['price'] ?? '0');
+            $qty = (string)($item['quantity'] ?? '0');
+            $lineTotal = bcmul($price, $qty, 4);
+            
+            $this->items[$index]['subtotal'] = $lineTotal;
+            $subtotal = bcadd($subtotal, $lineTotal, 4);
+        }
 
-		$feeTypes = config('business.fee_types', []);
-		foreach ($feeTypes as $key => $config) {
-			// 從 $this->form 讀取輸入值，但計算結果存到獨立變數
-			$amount = (string)($this->form[$key] ?? '0.0000');
-			$op = $config['operator'];
-			$target = $config['target'];
+        $this->items_subtotal = $subtotal;
+        
+        // 【修正】同步更新 form.subtotal 供畫面顯示和資料庫儲存
+        $this->form['subtotal'] = $subtotal;
 
-			if ($target === 'customer') {
-				$customerTotal = ($op === 'add') ? bcadd($customerTotal, $amount, 4) : bcsub($customerTotal, $amount, 4);
-			} elseif ($target === 'seller') {
-				$sellerNet = ($op === 'add') ? bcadd($sellerNet, $amount, 4) : bcsub($sellerNet, $amount, 4);
-			}
-		}
+        // 2. 費用加減項計算 (依據 config/business.php)
+        $cTotal = $subtotal; // 買家實付起始值
+        $sNet = $subtotal;   // 賣家進帳起始值
+        $feeConfigs = config('business.fee_types', []);
 
-		$this->customer_total = $customerTotal;
-		$this->final_net_amount = $sellerNet;
-	}
+        foreach ($feeConfigs as $key => $config) {
+            $val = (string)($this->form[$key] ?? '0.0000');
+            $op = $config['operator'];
+            
+            if ($config['target'] === 'customer') {
+                $cTotal = ($op === 'add') ? bcadd($cTotal, $val, 4) : bcsub($cTotal, $val, 4);
+            } elseif ($config['target'] === 'seller') {
+                $sNet = ($op === 'add') ? bcadd($sNet, $val, 4) : bcsub($sNet, $val, 4);
+            }
+        }
 
-    public function updatedForm($value, $key)
+        $this->customer_total = $cTotal;
+        $this->final_net_amount = $sNet;
+        
+        // 【修正】同步更新 form 中的顯示值
+        $this->form['customer_total'] = $cTotal;
+        $this->form['final_net_amount'] = $sNet;
+    }
+
+    /**
+     * 當 form 中的數值（例如費用項目）變動時，觸發重新計算
+     */
+	public function updatedForm($value, $key)
     {
-        $fees = array_keys(config('business.fee_types'));
-        if (in_array($key, $fees) || $key === 'subtotal') {
+        // 【修正】只針對費用相關欄位觸發計算，避免無限迴圈
+        $feeKeys = array_keys(config('business.fee_types', []));
+        if (in_array($key, $feeKeys) || $key === 'order_adjustment') {
             $this->calculateAll();
         }
     }
@@ -200,6 +217,8 @@ class Create extends Component
             'price'        => 0,			
         ];
         $this->search('');
+        // 【修正】新增行後重新計算
+        $this->calculateAll();
     }
     
     public function removeRow($index)
@@ -233,38 +252,29 @@ class Create extends Component
                 }
             }
         }
+		
+		$this->calculateAll();
 
         try {
-            // 使用 DB::transaction 確保資料一致性
             return DB::transaction(function () {
-				$saleData = collect($this->form)->only([
-					'customer_id', 'user_id', 'sold_at', 'warehouse_id', 'invoice_number', 'channel', 'payment_method', 'remark'
-				])->toArray();
-				$saleData['total_amount'] = $this->customer_total;
-				$saleData['net_amount']   = $this->final_net_amount;
+                // 【修正】加入 subtotal 到資料庫欄位
+                $saleData = collect($this->form)->only([
+                    'customer_id', 'user_id', 'sold_at', 'warehouse_id', 
+                    'invoice_number', 'channel', 'payment_method', 'remark',
+                    'subtotal' // ← 【新增】這是資料庫必需的欄位
+                ])->toArray();
 
-            // 2. 執行鎖定與存檔 (符合併發控制規範)
-            $sale = Sale::create($saleData);
-                // 明確使用 $this->isEdit 與 $this->sale，PHP 閉包會自動綁定 $this
-                if ($this->isEdit && $this->sale) {
-                    $this->sale->updateWithCalculations($this->form, $this->items);
-                    $msg = '訂單已更新';
-                } else {
-                    Sale::createWithCalculations($this->form, $this->items);
-                    $msg = '新訂單已建立';
-                }
+                // 數值嚴謹性：將計算結果賦值給資料庫對應欄位
+                $saleData['customer_total'] = $this->customer_total;
+                $saleData['final_net_amount']   = $this->final_net_amount;
+
+                $newSale = Sale::create($saleData);
+
+                // 儲存明細與處理庫存邏輯...
                 
-                \Log::info('銷售儲存成功', ['invoice' => $this->form['invoice_number']]);
-                
-                // 提示成功並跳轉
-                $this->success($msg, redirectTo: route('sales.index'));
+                $this->success('銷售單建立成功', redirectTo: route('sales.index'));
             });
         } catch (\Exception $e) {
-            \Log::error('銷售過帳失敗', [
-                'error' => $e->getMessage(),
-                'line' => $e->getLine()
-            ]);
-            // 丟出明確錯誤訊息給前端
             $this->error('儲存失敗：' . $e->getMessage());
         }
     }
