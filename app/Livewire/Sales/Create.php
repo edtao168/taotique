@@ -121,36 +121,42 @@ class Create extends Component
 	 */
 	public function calculateAll()
 	{
-		$subtotal = '0';
+		// 1. 基礎商品小計 (Raw Subtotal)
+		$itemsSubtotal = '0.0000';
 		foreach ($this->items as $item) {
-			$quantity = (string)($item['quantity'] ?? '0');
-			$price = (string)($item['price'] ?? '0');
-			$lineTotal = bcmul($quantity, $price, 4);
-			$subtotal = bcadd($subtotal, $lineTotal, 4);
+			$subtotal = bcmul((string)$item['price'], (string)$item['quantity'], 4);
+			$itemsSubtotal = bcadd($itemsSubtotal, $subtotal, 4);
 		}
-		$this->form['subtotal'] = $subtotal;
+		$this->form['items_subtotal'] = $itemsSubtotal;
 
-		$customer_total = $subtotal;
-		$final_net_amount = $subtotal;
+		// 2. 初始化兩個維度的總額
+		$customerTotal = $itemsSubtotal; // 買家應付從商品小計開始加減
+		$sellerNet = $itemsSubtotal;     // 賣家實收從商品小計開始加減
 
-		$feeConfigs = config('business.fee_types', []);
+		// 3. 根據配置中的 target 獨立計算
+		$feeTypes = config('business.fee_types', []);
+		
+		foreach ($feeTypes as $key => $config) {
+			$amount = (string)($this->form[$key] ?? '0.0000');
+			$op = $config['operator']; // 'add' 或 'sub'
+			$target = $config['target']; // 'customer' 或 'seller'
 
-		foreach ($feeConfigs as $key => $config) {
-			$val = (string)($this->form[$key] ?? '0');
-			if ($val === '' || $val === null) $val = '0';
-			
-			// 套用運算符
-			if ($config['operator'] === 'add') {
-				$customer_total = bcadd($customer_total, $val, 4);
-				$final_net_amount = bcadd($final_net_amount, $val, 4);
-			} else {
-				$customer_total = bcsub($customer_total, $val, 4);
-				$final_net_amount = bcsub($final_net_amount, $val, 4);
+			if ($target === 'customer') {
+				// 影響買家支付金額 (如：運費加項、折扣減項)
+				$customerTotal = ($op === 'add') 
+					? bcadd($customerTotal, $amount, 4) 
+					: bcsub($customerTotal, $amount, 4);
+			} elseif ($target === 'seller') {
+				// 影響賣家實收金額 (如：平台抽成減項、廣告費減項)
+				$sellerNet = ($op === 'add') 
+					? bcadd($sellerNet, $amount, 4) 
+					: bcsub($sellerNet, $amount, 4);
 			}
 		}
 
-		$this->form['customer_total'] = $customer_total;
-		$this->form['final_net_amount'] = $final_net_amount;
+		// 4. 存回 Form 供前端顯示與過帳
+		$this->form['customer_total'] = $customerTotal; // 買家最後要付多少
+		$this->form['final_net_amount'] = $sellerNet;  // 賣家最後入帳多少
 	}
 
     public function updatedForm($value, $key)
