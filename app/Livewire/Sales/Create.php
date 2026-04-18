@@ -26,6 +26,9 @@ class Create extends Component
     public bool $showScanner = false;
     public string $invoice_number = '';
     public array $form = [];
+	public string $items_subtotal = '0.0000';
+	public string $customer_total = '0.0000';
+	public string $final_net_amount = '0.0000';
 
     protected function rules()
     {
@@ -121,42 +124,34 @@ class Create extends Component
 	 */
 	public function calculateAll()
 	{
-		// 1. 基礎商品小計 (Raw Subtotal)
 		$itemsSubtotal = '0.0000';
 		foreach ($this->items as $item) {
 			$subtotal = bcmul((string)$item['price'], (string)$item['quantity'], 4);
 			$itemsSubtotal = bcadd($itemsSubtotal, $subtotal, 4);
 		}
-		$this->form['items_subtotal'] = $itemsSubtotal;
-
-		// 2. 初始化兩個維度的總額
-		$customerTotal = $itemsSubtotal; // 買家應付從商品小計開始加減
-		$sellerNet = $itemsSubtotal;     // 賣家實收從商品小計開始加減
-
-		// 3. 根據配置中的 target 獨立計算
-		$feeTypes = config('business.fee_types', []);
 		
+		// 賦值給獨立變數
+		$this->items_subtotal = $itemsSubtotal;
+
+		$customerTotal = $itemsSubtotal;
+		$sellerNet = $itemsSubtotal;
+
+		$feeTypes = config('business.fee_types', []);
 		foreach ($feeTypes as $key => $config) {
+			// 從 $this->form 讀取輸入值，但計算結果存到獨立變數
 			$amount = (string)($this->form[$key] ?? '0.0000');
-			$op = $config['operator']; // 'add' 或 'sub'
-			$target = $config['target']; // 'customer' 或 'seller'
+			$op = $config['operator'];
+			$target = $config['target'];
 
 			if ($target === 'customer') {
-				// 影響買家支付金額 (如：運費加項、折扣減項)
-				$customerTotal = ($op === 'add') 
-					? bcadd($customerTotal, $amount, 4) 
-					: bcsub($customerTotal, $amount, 4);
+				$customerTotal = ($op === 'add') ? bcadd($customerTotal, $amount, 4) : bcsub($customerTotal, $amount, 4);
 			} elseif ($target === 'seller') {
-				// 影響賣家實收金額 (如：平台抽成減項、廣告費減項)
-				$sellerNet = ($op === 'add') 
-					? bcadd($sellerNet, $amount, 4) 
-					: bcsub($sellerNet, $amount, 4);
+				$sellerNet = ($op === 'add') ? bcadd($sellerNet, $amount, 4) : bcsub($sellerNet, $amount, 4);
 			}
 		}
 
-		// 4. 存回 Form 供前端顯示與過帳
-		$this->form['customer_total'] = $customerTotal; // 買家最後要付多少
-		$this->form['final_net_amount'] = $sellerNet;  // 賣家最後入帳多少
+		$this->customer_total = $customerTotal;
+		$this->final_net_amount = $sellerNet;
 	}
 
     public function updatedForm($value, $key)
@@ -241,7 +236,15 @@ class Create extends Component
 
         try {
             // 使用 DB::transaction 確保資料一致性
-            DB::transaction(function () {
+            return DB::transaction(function () {
+				$saleData = collect($this->form)->only([
+					'customer_id', 'user_id', 'sold_at', 'warehouse_id', 'invoice_number', 'channel', 'payment_method', 'remark'
+				])->toArray();
+				$saleData['total_amount'] = $this->customer_total;
+				$saleData['net_amount']   = $this->final_net_amount;
+
+            // 2. 執行鎖定與存檔 (符合併發控制規範)
+            $sale = Sale::create($saleData);
                 // 明確使用 $this->isEdit 與 $this->sale，PHP 閉包會自動綁定 $this
                 if ($this->isEdit && $this->sale) {
                     $this->sale->updateWithCalculations($this->form, $this->items);
