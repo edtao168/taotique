@@ -34,6 +34,25 @@ class Purchase extends Model
             'total_amount' => 'decimal:4',
         ];
     }
+	
+	/**
+     * 判斷是否有採購退貨紀錄
+     */
+    public function hasReturnRecords(): bool
+    {
+        // 排除已取消的退貨單（若有狀態定義）
+        return $this->returns()
+            ->whereIn('status', ['pending', 'completed']) 
+            ->exists();
+    }
+
+    /**
+     * 判斷單據是否允許異動
+     */
+    public function canBeModified(): bool
+    {
+        return !$this->hasReturnRecords();
+    }
 
     // --- 新增的單號生成邏輯 (參考 Sale.php) ---
     protected static function booted()
@@ -161,4 +180,12 @@ class Purchase extends Model
 		// 假設您的 sales 表中有 user_id 欄位
 		return $this->belongsTo(User::class);
 	}
+	
+	/**
+     * 定義與採購退貨單的關聯
+     */
+    public function returns(): HasMany
+    {
+        return $this->hasMany(PurchaseReturn::class, 'purchase_id');
+    }
 }

@@ -54,8 +54,21 @@
     </div>
 
     {{-- 採購詳情 Drawer --}}
-    <x-drawer wire:model="drawer" title="採購單據詳情" right separator with-close-button class="w-11/12 lg:w-1/3">  
+    <x-drawer wire:model="drawer" title="採購單據詳情" right separator with-close-button class="w-11/12 lg:w-1/3">
+
+		@if($selectedPurchase?->hasReturnRecords())
+			{{-- 浮水印容器 --}}
+			<div class="absolute inset-0 flex items-center justify-center overflow-hidden pointer-events-none select-none z-50">
+				<div class="border-8 border-error/30 text-error/30 text-7xl font-black uppercase tracking-widest px-8 py-4 rounded-xl border-dashed -rotate-12 transform">
+					已退貨
+				</div>
+			</div>
+		@endif
+			
         @if($selectedPurchase)
+			@php
+				$isLocked = $selectedPurchase->hasReturnRecords();
+			@endphp
 			
 			<p>採購單號：{{ $selectedPurchase->purchase_number }}</p>
 				
@@ -113,36 +126,22 @@
 
             <x-slot:actions>
                 <div class="flex gap-3 w-full border-t pt-4 bg-base-100">
-                    <x-button label="刪除" icon="o-trash" wire:click="confirmDelete({{ $selectedPurchase->id }})" class="btn-error btn-outline flex-1" />
-                    <x-button label="修改" icon="o-pencil" :link="route('purchases.edit', $selectedPurchase->id)" class="btn-primary flex-1 text-white" />
-                    <x-button label="退貨" icon="o-arrow-path" :link="route('purchases.returns.create', ['purchase' => $selectedPurchase->id])" class="btn-outline flex-1" />
+                    @if($isLocked)
+						<x-button label="返回" icon="o-arrow-uturn-left" :link="route('purchases.index')" class="btn-success flex-1 text-white" />
+					@else
+						<x-button 
+							label="刪除" 
+							icon="o-trash" 
+							wire:click="delete({{ $selectedPurchase->id }})" 
+							wire:confirm="確定要刪除此單據並扣除庫存嗎？" 
+							class="btn-error btn-outline flex-1" 
+							spinner="delete" 
+						/>
+						<x-button label="修改" icon="o-pencil" :link="route('purchases.edit', $selectedPurchase->id)" class="btn-primary flex-1 text-white" />
+						<x-button label="退貨" icon="o-arrow-path" :link="route('purchases.returns.create', ['purchase' => $selectedPurchase->id])" class="btn-outline flex-1" />
+					@endif
                 </div>
             </x-slot:actions>
         @endif
-    </x-drawer>	
-
-    {{-- 刪除確認 Modal --}}
-    <x-modal wire:model="deleteModal" title="確認刪除採購單？" separator>
-        <div class="py-2">
-            <p class="text-sm text-gray-600 mb-4">
-                單號：<span class="font-mono font-bold">{{ $selectedPurchase?->purchase_number }}</span>
-            </p>
-            <x-checkbox 
-                label="同步扣除關聯庫存" 
-                wire:model="shouldSyncInventory" 
-                hint="若勾選，系統將自動刪除此單產生的入庫紀錄（警告：若商品已賣出可能導致庫存數據異常）"
-                class="checkbox-warning"
-            />
-        </div>
-        <x-slot:actions>
-        {{-- Modal 只放刪除相關操作 --}}
-			<x-button label="取消" wire:click="$set('deleteModal', false)" class="btn-ghost" />
-			<x-button 
-				label="確認刪除" 
-				wire:click="delete" 
-				class="btn-error" 
-				spinner="delete"
-			/>
-		</x-slot:actions>
-    </x-modal>
+    </x-drawer>	    
 </div>

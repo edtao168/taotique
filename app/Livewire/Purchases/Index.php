@@ -22,39 +22,55 @@ class Index extends Component
     public ?Purchase $selectedPurchase = null;
     public bool $shouldSyncInventory = true; // 預設勾選同步扣除
 
-    // 第一步：點擊刪除鈕時觸發
-    public function confirmDelete(Purchase $purchase)
-    {
-        $this->selectedPurchase = $purchase;
-        $this->deleteModal = true;
-    }
+	/**
+	 * 參考銷售單模式：直接執行刪除（由前端 wire:confirm 保護）
+	 */
+	public function delete($id)
+	{
+		$purchase = Purchase::with('items')->find($id);
+		
+		if (!$purchase) {
+			$this->error('找不到該單據，可能已被刪除。');
+			return;
+		}
+		
+		if ($purchase->hasReturnRecords()) {
+			$this->error('此採購單已有退貨紀錄，禁止刪除。');
+			return;
+		}
 
-    // 第二步：使用者在 Modal 點擊確認後執行
-    public function delete()
-    {
-        if (!$this->selectedPurchase) return;
+		try {
+			DB::transaction(function () use ($purchase) {
+				if ($this->shouldSyncInventory) {
+					foreach ($purchase->items as $item) {
+						$inventory = Inventory::where('product_id', $item->product_id)
+							->where('warehouse_id', $item->warehouse_id)
+							->lockForUpdate()
+							->first();
 
-        DB::transaction(function () {
-            if ($this->shouldSyncInventory) {
-                // 根據 product_id + warehouse_id 並鎖定採購單關聯進行刪除
-                foreach ($this->selectedPurchase->items as $item) {
-                    Inventory::where('product_id', $item->product_id)
-                        ->where('warehouse_id', $item->warehouse_id)
-                        ->where('purchase_item_id', $item->id) // 建議保留此關聯以精確刪除該批次
-                        ->delete();
-                }
-            }
+						if ($inventory) {
+							$newQty = bcsub($inventory->quantity, $item->quantity, 4);
+							
+							if (bccomp($newQty, '0', 4) <= 0) {
+								$inventory->delete();
+							} else {
+								$inventory->update(['quantity' => $newQty]);
+							}
+						}
+					}
+				}
+				
+				$purchase->delete();
+			});
 
-            // 刪除明細與主表 (受資料庫級聯或手動刪除)
-            $this->selectedPurchase->items()->delete();
-            $this->selectedPurchase->delete();
-        });
-
-        $this->deleteModal = false;
-        $this->drawer = false;
-        $this->selectedPurchase = null;
-        $this->success('採購單已刪除，相關庫存已同步更新。');
-    }
+			$this->selectedPurchase = null;
+			$this->drawer = false;
+			$this->success('採購單已刪除');
+			
+		} catch (\Exception $e) {
+			$this->error('刪除失敗：' . $e->getMessage());
+		}
+	}
 	
 	/**
      * 顯示採購單詳情
@@ -62,11 +78,16 @@ class Index extends Component
      */
     public function showDetail(int $id): void
     {
-        // 載入採購單並預載入關聯資料，確保 Drawer 顯示時不會產生 N+1 查詢
-        $this->selectedPurchase = Purchase::with(['supplier', 'items.product','items.warehouse', 'user'])
-            ->findOrFail($id);
+        $purchase = Purchase::with(['supplier', 'items.product', 'items.warehouse', 'user'])
+			->find($id);
 
-        $this->drawer = true;
+		if (!$purchase) {
+			$this->error('找不到該單據，可能已被刪除。');
+			return;
+		}
+
+		$this->selectedPurchase = $purchase;
+		$this->drawer = true;
     }
 
     /**
