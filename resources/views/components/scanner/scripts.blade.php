@@ -41,43 +41,13 @@
 				// 嘗試取得相機列表
 				let devices;
 				try {
-					devices = await this.codeReader.listVideoInputDevices();
-				} catch (e) {
-					// 如果 listVideoInputDevices 失敗，嘗試直接請求權限
-					console.warn('無法列出相機設備，嘗試直接啟動');
-					devices = [];
-				}
-				
-				console.log('相機設備列表:', devices.map(d => ({ id: d.deviceId, label: d.label })));
-				
-				let constraints;
-				
-				if (devices.length === 0) {
-					// 無法取得設備列表時，使用 facingMode 約束
-					constraints = { 
-						video: { 
-							facingMode: { ideal: 'environment' } 
-						} 
-					};
-				} else {
-					// 選擇後置鏡頭
-					const backCamera = devices.find(d => {
-						const label = d.label.toLowerCase();
-						return label.includes('back') || 
-							   label.includes('rear') || 
-							   label.includes('environment') ||
-							   label.includes('後');
-					});
-					
-					const selectedDevice = backCamera || devices[devices.length - 1];
-					constraints = { 
-						video: { 
-							deviceId: { exact: selectedDevice.deviceId },
-							width: { ideal: 1280 },
-							height: { ideal: 720 }
-						} 
-					};
-				}
+					// 優先嘗試使用 facingMode: environment (這是標準的後置鏡頭約束)
+    let constraints = { 
+        video: { 
+            facingMode: "environment" 
+        } 
+    };
+
 				
 				// 使用 getUserMedia 直接取得串流（更可靠）
 				const stream = await navigator.mediaDevices.getUserMedia(constraints);
