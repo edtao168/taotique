@@ -75,8 +75,21 @@
 
 	{{-- 詳情抽屜 --}}
 	<x-drawer wire:model="drawer" title="銷貨單據詳情" right separator with-close-button class="w-11/12 lg:w-1/3" >
+	
+		@if($selectedSale?->hasReturnRecords())
+			{{-- 浮水印容器 --}}
+			<div class="absolute inset-0 flex items-center justify-center overflow-hidden pointer-events-none select-none z-50">
+				<div class="border-8 border-error/30 text-error/30 text-7xl font-black uppercase tracking-widest px-8 py-4 rounded-xl border-dashed -rotate-12 transform">
+					已退貨
+				</div>
+			</div>
+		@endif
 		
-		@if($selectedSale)		
+		@if($selectedSale)
+			@php
+				// 呼叫我們在 Model 定義的邏輯
+				$isLocked = $selectedSale->hasReturnRecords();
+			@endphp
 			<div class="space-y-6 pb-20">		
 				{{-- 基礎單據資訊 --}}
 				<div class="bg-base-100 border rounded-xl p-4 shadow-sm">					
@@ -193,17 +206,21 @@
 			</div>
 
 			{{-- 底部固定動作欄 --}}
-			<x-slot:actions>
+			<x-slot:actions>			
 				<div class="flex gap-3 w-full border-t pt-4 bg-base-100">
-					<x-button label="刪除" icon="o-trash" wire:click="delete({{ $selectedSale->id }})" wire:confirm="確定要刪除此單據並回補庫存嗎？" class="btn-error btn-outline flex-1" />
-					<x-button label="修改" icon="o-pencil" :link="route('sales.edit', $selectedSale->id)" class="btn-primary flex-1 text-white" />
-					<x-button 
-						label="退貨" 
-						icon="o-arrow-path" 
-						:link="route('sales.returns.create', ['sale' => $selectedSale->id])"
-						class="btn-outline-dark flex-1"	
-					/>
-				</div>
+					@if($isLocked)
+						<x-button label="返回" icon="o-arrow-uturn-left" :link="route('sales.index')" class="btn-success flex-1 text-white" />
+					@else
+						<x-button label="刪除" icon="o-trash" wire:click="delete({{ $selectedSale->id }})" wire:confirm="確定要刪除此單據並回補庫存嗎？" class="btn-error btn-outline flex-1" />
+						<x-button label="修改" icon="o-pencil" :link="route('sales.edit', $selectedSale->id)" class="btn-primary flex-1 text-white" />
+						<x-button 
+							label="退貨" 
+							icon="o-arrow-path" 
+							:link="route('sales.returns.create', ['sale' => $selectedSale->id])"
+							class="btn-outline-dark flex-1"	
+						/>					
+				@endif
+				</div>				
 			</x-slot:actions>
 		@endif
 	</x-drawer>

@@ -33,7 +33,15 @@ class ReturnCreate extends Component
      */
     public function mount($sale)
     {
-        // 載入費用類型設定
+        $this->sale = Sale::with('returns')->findOrFail($sale);
+
+		// 檢查是否還能進行退貨（可依據業務需求決定是完全鎖定，還是檢查剩餘可退數量）
+		if ($this->sale->status === 'completed' && $this->sale->hasReturnRecords()) {
+			// 如果您的業務邏輯是「一單僅限一退」，則在此阻斷
+			// $this->warning('此單據已有退貨紀錄');
+		}
+	
+		// 載入費用類型設定
         $this->feeTypes = config('business.return_fee_types', []);
         
         // 初始化費用陣列，確保每個類型都有對應的 key

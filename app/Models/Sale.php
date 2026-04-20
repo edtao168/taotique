@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class Sale extends Model
 {
@@ -20,6 +21,40 @@ class Sale extends Model
 
     // 快取費用類型配置
     private static ?array $feeTypesCache = null;
+	
+	/**
+     * 如果已有關聯的 SalesReturn 
+	 * 且狀態為 pending 或 completed，則鎖定
+     */
+	public function isLocked(): bool
+	{
+		return $this->returns()->whereIn('status', ['pending', 'approved', 'completed'])->exists();
+	}
+	
+	/**
+     * 第一階段判斷：是否存在任何（非作廢）的退貨紀錄
+     */
+    public function hasReturnRecords(): bool
+    {
+        // 排除已取消 (cancelled) 的退貨單，僅鎖定處理中、已審核或已完成的單據
+        return $this->returns()
+            ->whereIn('status', ['pending', 'approved', 'completed'])
+            ->exists();
+    }
+	
+	/**
+     * 第二階段：綜合判斷是否允許變動（刪除、修改、再次退貨）
+     */
+    public function canBeModified(): bool
+    {
+        // 如果已經有退貨紀錄，則不允許任何變動
+        if ($this->hasReturnRecords()) {
+            return false;
+        }
+
+        // 此外可增加其他判斷，例如：單據是否已結案 (completed)
+        return $this->status !== 'completed';
+    }
 
     /**
      * 動態攔截所有費用屬性
@@ -47,7 +82,19 @@ class Sale extends Model
 
     protected static function booted()
     {
-        static::creating(function ($sale) {
+        static::deleting(function ($sale) {
+			if ($sale->hasReturnRecords()) {
+				throw new \Exception('此銷售單已有退貨紀錄，禁止刪除。');
+			}
+		});
+
+		static::updating(function ($sale) {
+			if ($sale->hasReturnRecords()) {
+				throw new \Exception('此銷售單已有退貨紀錄，禁止修改。');
+			}
+		});
+		
+		static::creating(function ($sale) {
             if (empty($sale->invoice_number)) {
                 $sale->invoice_number = self::generateInvoiceNumber();
             }
@@ -275,5 +322,10 @@ class Sale extends Model
     public function fees(): HasMany
     {
         return $this->hasMany(SaleFee::class);
-    }    
+    }
+	
+	public function returns(): HasMany
+    {
+        return $this->hasMany(SalesReturn::class, 'sale_id');
+    }
 }
