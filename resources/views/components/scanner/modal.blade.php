@@ -21,7 +21,11 @@
                 <span class="loading loading-spinner loading-lg"></span>
                 <span class="ml-2">啟動相機中...</span>
             </div>
-            
+            <div id="camera-debug" class="absolute top-4 left-4 bg-black/70 text-white text-xs p-2 rounded z-30 hidden">
+    <div id="debug-protocol">Protocol: <span></span></div>
+    <div id="debug-devices">Devices: <span></span></div>
+    <div id="debug-selected">Selected: <span></span></div>
+</div>
             <div id="interactive" class="viewport" wire:ignore>
 				<video id="camera-video" style="width: 100%; height: auto;"></video>
 				<canvas id="camera-canvas" class="hidden"></canvas>

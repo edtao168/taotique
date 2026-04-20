@@ -13,110 +13,148 @@
         scanCooldown: 1500,
         
         async start(options = {}) {
-            const { continuous = false, onScan } = options;
-            this.continuousMode = continuous;
-            
-            const video = document.getElementById('camera-video');
-            const status = document.getElementById('scan-status');
-            
-            if (!video) {
-                console.error('找不到 video 元素');
-                return;
-            }
-            
-            try {
-                // 🔧 新增：先檢查瀏覽器支援
-                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                    throw new Error('瀏覽器不支援相機功能');
-                }
-                
-                // 檢查是否為 HTTPS 或 localhost
-                //if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
-                //    throw new Error('相機功能需要 HTTPS 安全連線');
-                //}
-                
-                this.codeReader = new ZXing.BrowserMultiFormatReader();
-                
-                // 取得相機設備
-                const devices = await this.codeReader.listVideoInputDevices();
-                console.log('可用相機:', devices); // 除錯用
-                
-                if (!devices || devices.length === 0) {
-                    throw new Error('找不到相機設備');
-                }
-                
-                // 過濾出真正的後置鏡頭，排除虛擬設備
-				const backCamera = devices.reverse().find(d => 
-					d.label.toLowerCase().includes('back') || 
-					d.label.toLowerCase().includes('rear') ||
-					d.label.toLowerCase().includes('environment') ||
-					d.label.toLowerCase().includes('後')
-				);
-                
-                // 如果找不到標籤，改用最後一個設備（通常手機最後一個是主鏡頭）
-				const deviceId = backCamera ? backCamera.deviceId : devices[devices.length - 1].deviceId;
-                console.log('使用相機:', backCamera?.label || devices[0].label); // 除錯用
-                
-                status.textContent = continuous ? '連續掃描中...' : '請對準條碼...';
-                this.isScanning = true;
-                
-                await this.codeReader.decodeFromVideoDevice(deviceId, video, (result, err) => {
-                    if (!this.isScanning) return;
-                    
-                    if (result) {
-                        const barcode = result.text;
-                        const now = Date.now();
-                        
-                        if (this.continuousMode && (now - this.lastScanTime < this.scanCooldown)) {
-                            return;
-                        }
-                        
-                        this.lastScanTime = now;
-                        status.textContent = '掃描成功: ' + barcode;
-                        
-                        if (navigator.vibrate) navigator.vibrate(200);
-                        
-                        if (onScan) {
-                            onScan(barcode);
-                        } else {
-                            Livewire.dispatch('camera-scan-result', { barcode: barcode });
-                        }
-                        
-                        if (!this.continuousMode) this.stop();
-                    }
-                    
-                    if (err && !(err instanceof ZXing.NotFoundException)) {
-                        console.error('掃描錯誤:', err);
-                        // 不顯示錯誤，因為 NotFoundException 是正常的（還沒對準條碼）
-                    }
-                });
-                
-            } catch (error) {
-                console.error('相機啟動失敗:', error);
-                
-                let errorMsg = '相機啟動失敗';
-                
-                // 🔧 友善的錯誤訊息
-                if (error.message.includes('Permission denied') || error.message.includes('拒絕')) {
-                    errorMsg = '相機權限被拒絕，請檢查瀏覽器設定';
-                } else if (error.message.includes('HTTPS')) {
-                    errorMsg = '相機功能需要 HTTPS 安全連線';
-                } else if (error.message.includes('不支援')) {
-                    errorMsg = '瀏覽器不支援相機功能';
-                } else if (error.message.includes('找不到')) {
-                    errorMsg = '找不到相機設備';
-                } else {
-                    errorMsg = '相機啟動失敗: ' + error.message;
-                }
-                
-                if (status) status.textContent = errorMsg;
-                
-                // 3 秒後自動切換到手動輸入
-                setTimeout(() => {
-                    Livewire.dispatch('camera-failed');
-                }, 3000);
-            }
-        },
+			const { continuous = false, onScan } = options;
+			this.continuousMode = continuous;
+			
+			const video = document.getElementById('camera-video');
+			const status = document.getElementById('scan-status');
+			const loading = document.getElementById('camera-loading');
+			
+			if (!video) {
+				console.error('找不到 video 元素');
+				return;
+			}
+			
+			try {
+				// 檢查基本支援
+				if (!navigator.mediaDevices?.getUserMedia) {
+					throw new Error('瀏覽器不支援相機 API');
+				}
+				
+				// 檢查 HTTPS（生產環境必需）
+				if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+					throw new Error('相機功能需要 HTTPS 安全連線');
+				}
+				
+				this.codeReader = new ZXing.BrowserMultiFormatReader();
+				
+				// 嘗試取得相機列表
+				let devices;
+				try {
+					devices = await this.codeReader.listVideoInputDevices();
+				} catch (e) {
+					// 如果 listVideoInputDevices 失敗，嘗試直接請求權限
+					console.warn('無法列出相機設備，嘗試直接啟動');
+					devices = [];
+				}
+				
+				console.log('相機設備列表:', devices.map(d => ({ id: d.deviceId, label: d.label })));
+				
+				let constraints;
+				
+				if (devices.length === 0) {
+					// 無法取得設備列表時，使用 facingMode 約束
+					constraints = { 
+						video: { 
+							facingMode: { ideal: 'environment' } 
+						} 
+					};
+				} else {
+					// 選擇後置鏡頭
+					const backCamera = devices.find(d => {
+						const label = d.label.toLowerCase();
+						return label.includes('back') || 
+							   label.includes('rear') || 
+							   label.includes('environment') ||
+							   label.includes('後');
+					});
+					
+					const selectedDevice = backCamera || devices[devices.length - 1];
+					constraints = { 
+						video: { 
+							deviceId: { exact: selectedDevice.deviceId },
+							width: { ideal: 1280 },
+							height: { ideal: 720 }
+						} 
+					};
+				}
+				
+				// 使用 getUserMedia 直接取得串流（更可靠）
+				const stream = await navigator.mediaDevices.getUserMedia(constraints);
+				video.srcObject = stream;
+				await video.play();
+				
+				if (loading) loading.classList.add('hidden');
+				if (status) status.textContent = continuous ? '連續掃描中...' : '請對準條碼...';
+				
+				this.isScanning = true;
+				
+				// 使用 ZXing 解碼視訊串流
+				await this.codeReader.decodeFromVideoElement(video, (result, err) => {
+					if (!this.isScanning) return;
+					
+					if (result) {
+						const barcode = result.text;
+						const now = Date.now();
+						
+						if (this.continuousMode && (now - this.lastScanTime < this.scanCooldown)) {
+							return;
+						}
+						
+						this.lastScanTime = now;
+						if (status) status.textContent = '掃描成功: ' + barcode;
+						
+						if (navigator.vibrate) navigator.vibrate(200);
+						
+						if (onScan) {
+							onScan(barcode);
+						} else {
+							Livewire.dispatch('camera-scan-result', { barcode: barcode });
+						}
+						
+						if (!this.continuousMode) this.stop();
+					}
+				});
+				
+			} catch (error) {
+				console.error('相機啟動失敗:', error);
+				this.handleCameraError(error, status);
+			}
+		}
+
+		handleCameraError(error, statusElement) {
+			let errorMsg = '相機啟動失敗';
+			let autoSwitchToManual = true;
+			
+			if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+				errorMsg = '相機權限被拒絕，請在瀏覽器設定中允許相機存取';
+			} else if (error.name === 'NotFoundError') {
+				errorMsg = '找不到相機設備';
+			} else if (error.name === 'NotReadableError') {
+				errorMsg = '相機被其他應用程式占用';
+			} else if (error.message?.includes('HTTPS')) {
+				errorMsg = '需要 HTTPS 安全連線';
+			} else if (error.name === 'AbortError') {
+				errorMsg = '相機啟動被中止';
+				autoSwitchToManual = false;
+			}
+			
+			if (statusElement) statusElement.textContent = errorMsg;
+			
+			// 顯示錯誤提示給使用者
+			if (typeof Livewire !== 'undefined') {
+				Livewire.dispatch('notify', { 
+					type: 'error', 
+					message: errorMsg 
+				});
+			}
+			
+			if (autoSwitchToManual) {
+				setTimeout(() => {
+					Livewire.dispatch('camera-failed');
+				}, 2000);
+			}
+		}
         
         stop() {
             this.isScanning = false;
