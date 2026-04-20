@@ -30,39 +30,6 @@ class Create extends Component
 	public string $customer_total = '0.0000';
 	public string $final_net_amount = '0.0000';
 
-    protected function rules()
-    {
-        $saleId = $this->sale?->id ?? 'NULL';
-        
-        return [
-            'form.customer_id'    => 'required|integer|exists:customers,id',
-            'form.user_id'	      => 'required|integer|exists:users,id',
-            'form.sold_at'        => 'required|date',
-            'form.warehouse_id'   => 'required|integer|exists:warehouses,id',
-            'form.invoice_number' => 'required|string|unique:sales,invoice_number,' . $saleId . ',id',
-            'form.channel'        => 'required|integer|exists:shops,id',
-            'form.payment_method' => 'required|string',
-            'form.remark'  		  => 'nullable|string',
-            'items'               => 'required|array|min:1',
-            'items.*.product_id'  => 'required|integer|exists:products,id',
-            'items.*.quantity'    => 'required|numeric|min:0.0001',
-            'items.*.price'       => 'required|numeric|min:0',
-            'items.*.warehouse_id'=> 'required|integer|exists:warehouses,id',
-        ];
-    }
-
-    protected function messages()
-    {
-        return [
-            'form.customer_id.required' => '請選擇客戶',
-            'form.warehouse_id.required' => '請選擇業務歸屬倉庫',
-            'form.invoice_number.required' => '單號不能為空，請重新整理頁面',
-            'form.invoice_number.unique' => '單號已存在',
-            'items.required' => '請至少添加一個商品',
-            'items.*.product_id.required' => '請選擇商品',
-        ];
-    }
-
     public function mount(?Sale $sale = null)
     {
         if ($sale && $sale->exists) {
@@ -113,6 +80,40 @@ class Create extends Component
         }
     }
 
+
+	protected function rules()
+    {
+        $saleId = $this->sale?->id ?? 'NULL';
+        
+        return [
+            'form.customer_id'    => 'required|integer|exists:customers,id',
+            'form.user_id'	      => 'required|integer|exists:users,id',
+            'form.sold_at'        => 'required|date',
+            'form.warehouse_id'   => 'required|integer|exists:warehouses,id',
+            'form.invoice_number' => 'required|string|unique:sales,invoice_number,' . $saleId . ',id',
+            'form.channel'        => 'required|integer|exists:shops,id',
+            'form.payment_method' => 'required|string',
+            'form.remark'  		  => 'nullable|string',
+            'items'               => 'required|array|min:1',
+            'items.*.product_id'  => 'required|integer|exists:products,id',
+            'items.*.quantity'    => 'required|numeric|min:0.0001',
+            'items.*.price'       => 'required|numeric|min:0',
+            'items.*.warehouse_id'=> 'required|integer|exists:warehouses,id',
+        ];
+    }
+
+    protected function messages()
+    {
+        return [
+            'form.customer_id.required' => '請選擇客戶',
+            'form.warehouse_id.required' => '請選擇業務歸屬倉庫',
+            'form.invoice_number.required' => '單號不能為空，請重新整理頁面',
+            'form.invoice_number.unique' => '單號已存在',
+            'items.required' => '請至少添加一個商品',
+            'items.*.product_id.required' => '請選擇商品',
+        ];
+    }
+    
     /**
      * 【關鍵修正】即時顯示驗證錯誤
      */
@@ -229,55 +230,96 @@ class Create extends Component
     }
     
     /**
-     * 【修正】解決 DB::transaction 閉包內的變數範圍問題
+     * 
      */
     public function save()
-    {
-        $this->validate();
+	{
+		$this->validate();
 
-        // 取得系統設定：是否允許負庫存
-        $allowNegative = \App\Models\Setting::get('allow_negative_stock', false);
+		// 取得系統設定：是否允許負庫存
+		$allowNegative = \App\Models\Setting::get('allow_negative_stock', false);
 
-        if (!$allowNegative) {
-            foreach ($this->items as $item) {
-                // 檢查該倉庫目前的庫存
-                $currentStock = Inventory::where('product_id', $item['product_id'])
-                    ->where('warehouse_id', $item['warehouse_id'] ?? $this->form['warehouse_id'])
-                    ->value('quantity') ?? 0;
+		try {
+			return DB::transaction(function () use ($allowNegative) {
+				
+				// 1. 準備基礎資料
+				$saleData = collect($this->form)->only([
+					'customer_id', 'user_id', 'sold_at', 'warehouse_id', 
+					'invoice_number', 'channel', 'payment_method', 'remark',
+					'subtotal'
+				])->toArray();
 
-                // 使用 bccomp 進行高精度比較
-                if (bccomp($currentStock, $item['quantity'], 4) === -1) {
-                    $this->error("商品 [{$item['name']}] 庫存不足 (現有: " . (float)$currentStock . ")");
-                    return;
-                }
-            }
-        }
-		
-		$this->calculateAll();
+				// 強制寫入計算後的嚴謹數值
+				$saleData['customer_total'] = $this->customer_total;
+				$saleData['final_net_amount'] = $this->final_net_amount;
 
-        try {
-            return DB::transaction(function () {
-                // 【修正】加入 subtotal 到資料庫欄位
-                $saleData = collect($this->form)->only([
-                    'customer_id', 'user_id', 'sold_at', 'warehouse_id', 
-                    'invoice_number', 'channel', 'payment_method', 'remark',
-                    'subtotal' // ← 【新增】這是資料庫必需的欄位
-                ])->toArray();
+				if ($this->isEdit && $this->sale) {
+					// --- 編輯模式 ---
+					// 鎖定單據避免併發衝突
+					$currentSale = Sale::where('id', $this->sale->id)->lockForUpdate()->first();
+					
+					// A. 回退舊庫存 (假設您的 Model 或 Service 有處理庫存加回的邏輯)
+					foreach ($currentSale->items as $oldItem) {
+						Inventory::where('product_id', $oldItem->product_id)
+							->where('warehouse_id', $oldItem->warehouse_id)
+							->increment('quantity', $oldItem->quantity);
+					}
 
-                // 數值嚴謹性：將計算結果賦值給資料庫對應欄位
-                $saleData['customer_total'] = $this->customer_total;
-                $saleData['final_net_amount']   = $this->final_net_amount;
+					// B. 更新主表
+					$currentSale->update($saleData);
+					
+					// C. 刪除舊明細
+					$currentSale->items()->delete();
+				} else {
+					// --- 新增模式 ---
+					$currentSale = Sale::create($saleData);
+				}
 
-                $newSale = Sale::create($saleData);
+				// 2. 處理新明細與庫存扣除
+				foreach ($this->items as $item) {
+					// 檢查庫存 (Lock for update)
+					$inventory = Inventory::where('product_id', $item['product_id'])
+						->where('warehouse_id', $item['warehouse_id'])
+						->lockForUpdate()
+						->first();
 
-                // 儲存明細與處理庫存邏輯...
-                
-                $this->success('銷售單建立成功', redirectTo: route('sales.index'));
-            });
-        } catch (\Exception $e) {
-            $this->error('儲存失敗：' . $e->getMessage());
-        }
-    }
+					$currentQty = $inventory->quantity ?? '0.0000';
+
+					// 若不允許負庫存，進行檢查
+					if (!$allowNegative && bccomp($currentQty, $item['quantity'], 4) === -1) {
+						throw new \Exception("商品 [{$item['name']}] 庫存不足 (現有: " . (float)$currentQty . ")");
+					}
+
+					// 建立銷售明細
+					$currentSale->items()->create([
+						'shop_id'      => $currentSale->channel,
+						'product_id'   => $item['product_id'],
+						'warehouse_id' => $item['warehouse_id'],
+						'quantity'     => $item['quantity'],
+						'price'        => $item['price'],
+						'subtotal'     => bcmul($item['price'], $item['quantity'], 4),
+					]);
+
+					// 扣除庫存
+					if ($inventory) {
+						$inventory->decrement('quantity', $item['quantity']);
+					} else {
+						// 若無庫存記錄則建立 (支援負庫存情況)
+						Inventory::create([
+							'shop_id' => $currentSale->channel,
+							'warehouse_id' => $item['warehouse_id'],
+							'product_id' => $item['product_id'],
+							'quantity' => bcsub('0', $item['quantity'], 4),
+						]);
+					}
+				}
+
+				$this->success($this->isEdit ? '銷售單修改成功' : '銷售單建立成功', redirectTo: route('sales.index'));
+			});
+		} catch (\Exception $e) {
+			$this->error('儲存失敗：' . $e->getMessage());
+		}
+	}
 
     public function onBarcodeScanned(string $barcode, ?int $index = null): void
     {
