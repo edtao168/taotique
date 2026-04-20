@@ -70,15 +70,62 @@ class Index extends Component
     }
 
     /**
-     * 刪除訂單
-     */
-    public function delete(Sale $sale)
-    {
-        // 呼叫 Model 層的作廢/刪除邏輯
-        $sale->delete(); 
-        $this->drawer = false;
-        $this->success('訂單已刪除，庫存已回滾');
-    }
+	 * 刪除訂單（含庫存回滾與關聯清理）
+	 */
+	public function delete($id)
+	{
+		$sale = Sale::with(['items', 'fees'])->find($id);
+		
+		if (!$sale) {
+			$this->error('找不到該單據，可能已被刪除。');
+			return;
+		}
+		
+		// 1. 檢查是否已有退貨紀錄
+		if ($sale->hasReturnRecords()) {
+			$this->error('此銷售單已有退貨紀錄，禁止刪除。');
+			return;
+		}
+
+		// 2. 檢查是否已結案
+		if ($sale->status === 'completed') {
+			$this->error('已結案單據不可刪除。');
+			return;
+		}
+
+		try {
+			DB::transaction(function () use ($sale) {
+				// 3. 回滾庫存
+				foreach ($sale->items as $item) {
+					$inventory = Inventory::where('product_id', $item->product_id)
+						->where('warehouse_id', $item->warehouse_id)
+						->lockForUpdate()
+						->first();
+
+					if ($inventory) {
+						$newQty = bcadd($inventory->quantity, $item->quantity, 4);
+						$inventory->update(['quantity' => $newQty]);
+					}
+				}
+
+				// 4. 【關鍵】先刪除關聯的費用明細
+				$sale->fees()->delete();
+				
+				// 5. 刪除商品明細（如果沒有設定 cascade）
+				$sale->items()->delete();
+
+				// 6. 最後刪除主單
+				$sale->delete();
+			});
+
+			$this->selectedSale = null;
+			$this->drawer = false;
+			$this->success('銷售單已刪除，庫存已回滾');
+			
+		} catch (\Exception $e) {
+			$this->error('刪除失敗：' . $e->getMessage());
+		}
+	}
 		
     public function render()
     {
