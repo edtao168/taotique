@@ -52,6 +52,8 @@
 				// 使用 getUserMedia 直接取得串流（更可靠）
 				const stream = await navigator.mediaDevices.getUserMedia(constraints);
 				video.srcObject = stream;
+				console.log('📸 視訊流已綁定:', video);
+				console.log('📹 視訊軌道:', stream.getTracks());
 				await video.play();
 				
 				if (loading) loading.classList.add('hidden');
