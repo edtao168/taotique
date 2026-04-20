@@ -62,7 +62,7 @@ return [
 	// 退貨費用類型
     'return_fee_types' => [
         'shipping_fee' => [
-			'name' 	   => '退貨運費',
+			'name' 	   => '退貨運費（買家付為正數，賣家付為負數）',
 			'operator' => 'add'
 		],
 		'restocking_fee' => [

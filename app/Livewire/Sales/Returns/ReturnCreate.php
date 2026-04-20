@@ -8,6 +8,7 @@ use App\Models\SaleItem;
 use App\Models\SalesReturn;
 use App\Models\SalesReturnFee;
 use App\Models\Product;
+use App\Models\Setting;
 use App\Models\Warehouse;
 use App\Traits\HasProductSearch;
 use Illuminate\Support\Facades\DB;
@@ -20,13 +21,12 @@ class ReturnCreate extends Component
     use Toast, HasProductSearch;
 	
 	// 基礎屬性
-    public Sale $sale; // 原銷貨單實例
+    public Sale $sale;
     public $warehouse_id;
-    public array $return_items = []; // 退貨明細
-    public array $fees = [];         // 動態費用明細
-
-    // 從設定檔讀取費用類型
-    public array $feeTypes = [];
+    public array $return_items = [];
+    public array $fees = [];
+	public array $feeTypes = [];
+    public ?string $return_reason = null;
 
     /**
      * 掛載時載入原訂單資料
@@ -40,7 +40,7 @@ class ReturnCreate extends Component
 		foreach ($this->feeTypes as $key => $config) {
 			$this->fees[$key] = [
 				'fee_type' => $key,
-				'amount'   => 0, // 預設 0
+				'amount'   => '0.0000',
 				'note'     => $config['name']
 			];
 		}
@@ -85,10 +85,10 @@ class ReturnCreate extends Component
 		$this->return_items[] = [
 			'sale_item_id' => $saleItem->id,
 			'product_id'   => $saleItem->product_id,
-			'name'         => $saleItem->product->name,    // 預先提取名稱
-			'barcode'      => $saleItem->product->barcode, // 預先提取條碼
-			'price'        => $saleItem->price,
-			'quantity'     => 1, // 預設退 1 個
+			'name'         => $saleItem->product->name,
+			'barcode'      => $saleItem->product->barcode,
+			'unit_price'   => $saleItem->price,
+			'quantity'     => 1,
 			'max_qty'      => $saleItem->quantity, // 記錄上限以供驗證
 		];
 	}
@@ -99,7 +99,7 @@ class ReturnCreate extends Component
     public function removeReturnItem($index)
     {
         if (isset($this->return_items[$index])) {
-            $itemName = $this->return_items[$index]['product_name'];
+            $itemName = $this->return_items[$index]['name'];
             unset($this->return_items[$index]);
             $this->return_items = array_values($this->return_items);
             $this->success("已移除 {$itemName}");
@@ -139,8 +139,8 @@ class ReturnCreate extends Component
 	{
 		$total = '0.0000';
 		foreach ($this->return_items as $item) {
-			// 修正：使用正確的鍵名 price 與 quantity
-			$subtotal = bcmul((string)($item['price'] ?? 0), (string)($item['quantity'] ?? 0), 4);
+			// 修正：使用正確的鍵名 unit_price 與 quantity
+			$subtotal = bcmul((string)($item['unit_price'] ?? 0), (string)($item['quantity'] ?? 0), 4);
 			$total = bcadd($total, $subtotal, 4);
 		}
 		return $total;
@@ -167,53 +167,32 @@ class ReturnCreate extends Component
 	{
 		return bcsub($this->itemsTotal, $this->feesTotal, 4);
 	}
-		
-	/**
-	 * 計算所有金額
-	 */
-	public function calculateTotals()
-	{
-		// 1. 取得商品退款小計
-		$this->form['items_total_amount'] = array_reduce($this->selectedItems, function ($carry, $item) {
-			return bcadd($carry, (string)($item['subtotal'] ?? 0), 4);
-		}, '0.0000');
 
-		// 2. 彙整所有退貨費用 (fees 陣列)
-		$this->form['fees_total_amount'] = array_reduce($this->fees, function ($carry, $fee) {
-			return bcadd($carry, (string)($fee['amount'] ?? 0), 4);
-		}, '0.0000');
-
-		// 3. 計算最終退款金額 (商品總計 - 費用總計)
-		$this->form['total_refund_amount'] = bcsub(
-			$this->form['items_total_amount'], 
-			$this->form['fees_total_amount'], 
-			4
-		);
-	}
-	
 	/**
      * 儲存邏輯
      */
     public function save()
     {
         $this->validate([
-			'fees.*.amount' => 'required|numeric|min:0',
+			'fees.*.amount' => 'required|numeric',
 		]);
         
-        return DB::transaction(function () {
+        return DB::transaction(function () {			
+			$prefix = Setting::get('sr_prefix', 'SR-');
+			
             // 1. 建立退回單主表
             $returnData = [
 				'shop_id'             => auth()->user()->shop_id ?? 1,
 				'sale_id'             => $this->sale->id,
 				'warehouse_id'        => $this->warehouse_id,
-				'return_no'           => 'SR-' . now()->format('YmdHis'),
+				'return_no'           => $prefix . now()->format('YmdHis'),
 				
 				// 【修正】：將計算屬性的值對應到正確的 SQL 欄位
 				'items_total_amount'  => $this->itemsTotal, 
 				'fees_total_amount'   => $this->feesTotal,
 				'total_refund_amount' => $this->netRefundTotal, // SQL 欄位是 total_refund_amount
 				
-				'remark'              => $this->remark,
+				'return_reason'              => $this->return_reason,
 				'created_by'          => auth()->id(),
 				'status'              => 'pending',
 			];
@@ -223,7 +202,7 @@ class ReturnCreate extends Component
 			// 寫入費用明細
 			foreach ($this->fees as $fee) {
 				// 使用 bcmath 檢查金額是否大於 0
-				if (bccomp((string)$fee['amount'], '0', 4) === 1) {
+				if (bccomp((string)$fee['amount'], '0', 4) !== 0) {
 					$return->fees()->create([
 						'shop_id'  => auth()->user()->shop_id ?? 1,
 						'fee_type' => $fee['fee_type'],
@@ -235,7 +214,14 @@ class ReturnCreate extends Component
 
             // 3. 寫入退貨商品 (SalesReturnItem)
             foreach ($this->return_items as $item) {
-                $return->items()->create($item);
+                $return->items()->create([
+                    'shop_id'      => auth()->user()->shop_id ?? 1,
+                    'product_id'   => $item['product_id'],
+                    'sale_item_id' => $item['sale_item_id'],
+                    'quantity'     => $item['quantity'],
+                    'unit_price'        => $item['unit_price'],
+                    'subtotal'     => bcmul((string)$item['unit_price'], (string)$item['quantity'], 4),
+                ]);
             }
 
             // 4. 強制執行 BCMath 匯總更新
