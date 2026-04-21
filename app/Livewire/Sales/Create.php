@@ -21,6 +21,7 @@ class Create extends Component
 
     public ?Sale $sale = null;
     public bool $isEdit = false;
+	public bool $stockoutWhenSold = true;
     public array $items = [];
     public array $productOptions = [];
     public bool $showScanner = false;
@@ -32,11 +33,15 @@ class Create extends Component
 
     public function mount(?Sale $sale = null)
     {
+		$this->stockoutWhenSold = Setting::getBool('so_auto_stock_out');
+		
         if ($sale && $sale->exists) {
             $this->isEdit = true;
             $this->sale = $sale;
+			// 編輯模式：應顯示該單據建立時的庫存狀態（避免事後修改全域設定造成認知錯誤）
+			$this->stockoutWhenSold = (bool) $sale->is_stocked_out;
             $this->form = $sale->toArray();
-            $this->form['sold_at'] = $sale->sold_at->format('Y-m-d');
+            $this->form['sold_at'] = $sale->sold_at->format('Y-m-d\TH:i');
             $feeConfigs = config('business.fee_types', []);
 			foreach ($feeConfigs as $key => $config) {
 				$this->form[$key] = $sale->$key ?? '0.00';
@@ -61,7 +66,7 @@ class Create extends Component
             $this->form = [                
                 'customer_id'      => 1,
                 'user_id'          => auth()->id() ?? 1,
-                'sold_at'          => now()->format('Y-m-d'),
+                'sold_at'          => now()->format('Y-m-d\TH:i'),
                 'invoice_number'   => $this->invoice_number,
                 'warehouse_id'     => Setting::get('default_warehouse_id', 1),
                 'channel'          => auth()->user()->shop_id ?? 1,
@@ -237,38 +242,40 @@ class Create extends Component
 		$this->validate();
 
 		// 取得系統設定：是否允許負庫存
-		$allowNegative = \App\Models\Setting::get('allow_negative_stock', false);
+		$allowNegative = Setting::get('allow_negative_stock', false);
 
 		try {
-			return DB::transaction(function () use ($allowNegative) {
+			return DB::transaction(function () use ($allowNegative) {				
+				$autoOut = (bool) Setting::get('so_auto_stock_out', true);
 				
-				// 1. 準備基礎資料
 				$saleData = collect($this->form)->only([
-					'customer_id', 'user_id', 'sold_at', 'warehouse_id', 
-					'invoice_number', 'channel', 'payment_method', 'remark',
-					'subtotal'
+					'customer_id', 'sold_at', 'warehouse_id', 'invoice_number', 'channel', 'payment_method', 'remark', 'subtotal'
 				])->toArray();
 
 				// 強制寫入計算後的嚴謹數值
+				$saleData['user_id'] = auth()->id();
+				$saleData['subtotal'] = $this->items_subtotal;
 				$saleData['customer_total'] = $this->customer_total;
 				$saleData['final_net_amount'] = $this->final_net_amount;
-
+				$saleData['stocked_out_at'] = $this->stockoutWhenSold ? $this->form['sold_at'] : null;
+				
+				// 根據設定決定出庫時間戳,若 autoOut 為 true，
+				// 出庫時間等於成交時間；否則為 null
+				$saleData['stocked_out_at'] = $this->stockoutWhenSold ? $this->form['sold_at'] : null;
+			
 				if ($this->isEdit && $this->sale) {
+					if ($this->sale->is_stocked_out) {
+						foreach ($this->sale->items as $oldItem) {
+							Inventory::where('product_id', $oldItem->product_id)
+								->where('warehouse_id', $oldItem->warehouse_id)
+								->lockForUpdate()
+								->increment('quantity', $oldItem->quantity);
+						}
+					}
 					// --- 編輯模式 ---
 					// 鎖定單據避免併發衝突
-					$currentSale = Sale::where('id', $this->sale->id)->lockForUpdate()->first();
-					
-					// A. 回退舊庫存 (假設您的 Model 或 Service 有處理庫存加回的邏輯)
-					foreach ($currentSale->items as $oldItem) {
-						Inventory::where('product_id', $oldItem->product_id)
-							->where('warehouse_id', $oldItem->warehouse_id)
-							->increment('quantity', $oldItem->quantity);
-					}
-
-					// B. 更新主表
+					$currentSale = Sale::where('id', $this->sale->id)->lockForUpdate()->first();					
 					$currentSale->update($saleData);
-					
-					// C. 刪除舊明細
 					$currentSale->items()->delete();
 				} else {
 					// --- 新增模式 ---
@@ -277,20 +284,6 @@ class Create extends Component
 
 				// 2. 處理新明細與庫存扣除
 				foreach ($this->items as $item) {
-					// 檢查庫存 (Lock for update)
-					$inventory = Inventory::where('product_id', $item['product_id'])
-						->where('warehouse_id', $item['warehouse_id'])
-						->lockForUpdate()
-						->first();
-
-					$currentQty = $inventory->quantity ?? '0.0000';
-
-					// 若不允許負庫存，進行檢查
-					if (!$allowNegative && bccomp($currentQty, $item['quantity'], 4) === -1) {
-						throw new \Exception("商品 [{$item['name']}] 庫存不足 (現有: " . (float)$currentQty . ")");
-					}
-
-					// 建立銷售明細
 					$currentSale->items()->create([
 						'shop_id'      => $currentSale->channel,
 						'product_id'   => $item['product_id'],
@@ -299,18 +292,47 @@ class Create extends Component
 						'price'        => $item['price'],
 						'subtotal'     => bcmul($item['price'], $item['quantity'], 4),
 					]);
+					
+					if ($this->stockoutWhenSold) {
+						$inventory = Inventory::where('product_id', $item['product_id'])
+							->where('warehouse_id', $item['warehouse_id'])
+							->lockForUpdate()
+							->first();
 
-					// 扣除庫存
-					if ($inventory) {
-						$inventory->decrement('quantity', $item['quantity']);
-					} else {
-						// 若無庫存記錄則建立 (支援負庫存情況)
-						Inventory::create([
-							'shop_id' => $currentSale->channel,
-							'warehouse_id' => $item['warehouse_id'],
-							'product_id' => $item['product_id'],
-							'quantity' => bcsub('0', $item['quantity'], 4),
-						]);
+						if ($inventory) {
+							// 使用 bcsub 確保計算嚴謹性
+							$newQty = bcsub($inventory->quantity, $item['quantity'], 4);
+							$inventory->update(['quantity' => $newQty]);
+						} else {
+
+							// 若不允許負庫存，進行檢查
+							if (!$allowNegative && bccomp($currentQty, $item['quantity'], 4) === -1) {
+								throw new \Exception("商品 [{$item['name']}] 庫存不足 (現有: " . (float)$currentQty . ")");
+							}
+
+							// 建立銷售明細
+							$currentSale->items()->create([
+								'shop_id'      => $currentSale->channel,
+								'product_id'   => $item['product_id'],
+								'warehouse_id' => $item['warehouse_id'],
+								'quantity'     => $item['quantity'],
+								'price'        => $item['price'],
+								'subtotal'     => bcmul($item['price'], $item['quantity'], 4),
+							]);
+
+							// 扣除庫存
+							if ($inventory) {
+								$inventory->decrement('quantity', $item['quantity']);
+							} else {
+								// 若無庫存記錄則建立 (支援負庫存情況)
+								Inventory::create([
+									'shop_id' => $currentSale->channel,
+									'warehouse_id' => $item['warehouse_id'],
+									'product_id' => $item['product_id'],
+									'quantity' => bcsub('0', $item['quantity'], 4),
+								]);
+							}
+						}
 					}
 				}
 

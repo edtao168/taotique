@@ -29,8 +29,10 @@
         <div class="hidden lg:block">
             <x-table :headers="$headers" :rows="$sales" @row-click="$wire.showDetail($event.detail.id)" class="cursor-pointer" with-pagination>
                 @scope('cell_invoice_number', $sale)
-                    <x-badge :value="$sale->invoice_number" class="badge-neutral font-mono" />
-                @endscope
+					<x-badge :value="$sale->invoice_number" 
+							 :class="$sale->stocked_out_at ? 'badge-success text-white' : 'badge-warning'"
+							 title="{{ $sale->stocked_out_at ? '已過帳（已扣庫存）' : '未過帳（待扣庫存）' }}" />	
+				@endscope			
                 @scope('cell_customer_total', $sale)
                     <span class="font-bold text-info">NT$ {{ number_format($sale->customer_total, 0) }}</span>
                 @endscope
@@ -50,7 +52,7 @@
 							{{-- 新增：顯示出庫倉庫 --}}
 							<span class="text-[10px] opacity-60"><x-icon name="o-home-modern" class="w-3 h-3" /> {{ $sale->warehouse?->name ?? '未指定倉庫' }}</span>
 						</div>
-						<span class="text-[10px] text-gray-500">{{ $sale->sold_at->format('m/d H:i') }}</span>
+						<span class="text-[10px] text-gray-500">{{ $sale->sold_at->format('m/d') }}</span>
 					</div>
                     <div class="flex justify-between items-center">
                         <div>
@@ -208,18 +210,27 @@
 			{{-- 底部固定動作欄 --}}
 			<x-slot:actions>			
 				<div class="flex gap-3 w-full border-t pt-4 bg-base-100">
-					@if($isLocked)
-						<x-button label="返回" icon="o-arrow-uturn-left" :link="route('sales.index')" class="btn-success flex-1 text-white" />
-					@else
-						<x-button label="刪除" icon="o-trash" wire:click="delete({{ $selectedSale->id }})" wire:confirm="確定要刪除此單據並回補庫存嗎？" class="btn-error btn-outline flex-1" />
+					<x-button label="返回" icon="o-arrow-uturn-left" :link="route('sales.index')" class="btn-success flex-1 text-white" />
+					@if(!$isLocked)							
 						<x-button label="修改" icon="o-pencil" :link="route('sales.edit', $selectedSale->id)" class="btn-primary flex-1 text-white" />
-						<x-button 
-							label="退貨" 
-							icon="o-arrow-path" 
-							:link="route('sales.returns.create', ['sale' => $selectedSale->id])"
-							class="btn-outline-dark flex-1"	
-						/>					
-				@endif
+						@if($selectedSale->stocked_out_at)
+							<x-button 
+								label="退貨" 
+								icon="o-arrow-path" 
+								:link="route('sales.returns.create', ['sale' => $selectedSale->id])"
+								class="btn-outline-dark flex-1"	
+							/>							
+						@else
+							<x-button 
+								label="出庫" 
+								icon="o-archive-box-arrow-down" 
+								class="btn-warning flex-1" 
+								wire:click="processStockOut({{ $selectedSale->id }})"
+								wire:confirm="確定要執行出庫扣減庫存嗎？"
+								spinner />
+							<x-button label="刪除" icon="o-trash" wire:click="delete({{ $selectedSale->id }})" wire:confirm="確定要刪除此單據並回補庫存嗎？" class="btn-error btn-outline flex-1" />									
+						@endif								
+					@endif
 				</div>				
 			</x-slot:actions>
 		@endif

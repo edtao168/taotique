@@ -126,6 +126,53 @@ class Index extends Component
 			$this->error('刪除失敗：' . $e->getMessage());
 		}
 	}
+	
+	/**
+	 * 扣庫存
+	 */
+	public function processStockOut(int $saleId)
+	{
+		// 1. 取得銷售單與明細，並加上鎖定
+		$sale = Sale::with('items')->findOrFail($saleId);
+
+		if ($sale->stocked_out_at) {
+			$this->error('此單據已執行過出庫');
+			return;
+		}
+
+		try {
+			DB::transaction(function () use ($sale) {
+				foreach ($sale->items as $item) {
+					// 2. 尋找庫存紀錄
+					$inventory = Inventory::where('product_id', $item->product_id)
+						->where('warehouse_id', $sale->warehouse_id)
+						->lockForUpdate()
+						->first();
+
+					// 3. 執行扣除 (嚴謹性使用 bcsub 或 decrement)
+					if ($inventory) {
+						$inventory->decrement('quantity', $item->quantity);
+					} else {
+						// 若無紀錄則建立 (支援負庫存)
+						Inventory::create([
+							'shop_id' => $sale->channel,
+							'warehouse_id' => $sale->warehouse_id,
+							'product_id' => $item->product_id,
+							'quantity' => bcsub('0', $item->quantity, 4),
+						]);
+					}
+				}
+
+				// 4. 更新出庫時間戳（這會觸發 DB 的 is_stocked_out 虛擬欄位）
+				$sale->update(['stocked_out_at' => now()]);
+			});
+
+			$this->success('庫存扣除成功');
+			$this->drawer = false; // 處理完後關閉抽屜
+		} catch (\Exception $e) {
+			$this->error('出庫失敗：' . $e->getMessage());
+		}
+	}
 		
     public function render()
     {
@@ -151,12 +198,12 @@ class Index extends Component
             ->paginate(10);
 
         $headers = [
-            ['key' => 'invoice_number', 'label' => '訂單單號', 'class' => 'font-mono'],
-            ['key' => 'shop.name', 'label' => '通路', 'class' => 'w-40'],
+            ['key' => 'invoice_number', 'label' => '銷售單號', 'class' => 'font-mono'],
+            ['key' => 'shop.name', 'label' => '通路/分店', 'class' => 'w-40'],
             ['key' => 'customer.name', 'label' => '客戶'],
-            ['key' => 'customer_total', 'label' => '應收總額', 'textAlign' => 'text-right'],
+            ['key' => 'customer_total', 'label' => '買家實付', 'textAlign' => 'text-right'],
 			['key' => 'final_net_amount', 'label' => '最終進帳', 'textAlign' => 'text-right'],
-            ['key' => 'sold_at', 'label' => '日期', 'class' => 'w-32'],
+            ['key' => 'sold_at', 'label' => '銷售日期', 'class' => 'w-32'],
         ];
 
         return view('livewire.sales.index', [

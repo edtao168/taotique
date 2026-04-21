@@ -13,7 +13,7 @@ class Sale extends Model
     protected $guarded = [];
     
     protected $casts = [
-        'sold_at' => 'datetime',
+        'sold_at' => 'datetime:Y-m-d H:i:s',
 		'subtotal' => 'decimal:4',
         'customer_total' => 'decimal:4',
         'final_net_amount' => 'decimal:4',
@@ -293,6 +293,18 @@ class Sale extends Model
             throw new \Exception("無法還原庫存：找不到對應的庫存紀錄");    
         }
     }
+	
+	// 取得銷售日期
+	public function getSoldDateAttribute()
+	{
+		return $this->sold_at->format('Y-m-d');
+	}
+
+	// 取得成交時間
+	public function getSoldTimeAttribute()
+	{
+		return $this->sold_at->format('H:i');
+	}
     
     public function customer(): BelongsTo
     {

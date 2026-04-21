@@ -158,6 +158,13 @@ class Setting extends Model
 		});
     }
     
+	public static function getBool(string $key, bool $default = true): bool
+	{
+		$value = self::get($key, $default);
+		// 這裡就是關鍵：把資料庫的「字串」轉成「真布林」
+		return filter_var($value, FILTER_VALIDATE_BOOLEAN);
+	}
+
     /**
      * 批量取得設定值
      */

@@ -52,8 +52,27 @@
             <x-card title="單據資訊" shadow class="border-t-4 border-primary">
                 <div class="space-y-4">
                     <x-choices label="客戶" wire:model="form.customer_id" :options="$customers" single icon="o-users" />
-                    <x-datetime label="銷售日期" wire:model="form.sold_at" icon="o-calendar" />
-                    <x-select label="管道" wire:model="form.channel" :options="$shops" option-value="id" option-label="name" icon="o-building-storefront" />
+                    <x-datetime 
+						label="成交時間" 
+						wire:model="form.sold_at" 
+						icon="o-clock" 
+						type="datetime-local"
+					/>
+					
+					{{-- 顯示目前系統設定狀態，讓操作員知曉 --}}
+					@php
+						$isAuto = (bool) App\Models\Setting::get('so_auto_stock_out', true);
+					@endphp
+					<div class="p-3 bg-base-200/50 rounded-lg border border-dashed border-base-300 flex items-center gap-3">
+						<x-icon :name="$isAuto ? 'o-check-circle' : 'o-pause-circle'" 
+								:class="$isAuto ? 'text-success' : 'text-warning'" />
+						<div class="text-xs">
+							<span class="font-bold">目前庫存處理模式：</span>
+							{{ $isAuto ? '過帳即扣庫存' : '過帳僅存檔待後續進行出庫' }}
+						</div>
+					</div>
+		
+                    <x-select label="通路" wire:model="form.channel" :options="$shops" option-value="id" option-label="name" icon="o-building-storefront" />
                     <x-select label="付款方式" wire:model="form.payment_method" :options="config('business.payment_methods')" icon="o-banknotes" />
 					<x-select label="業務歸屬倉庫" wire:model="form.warehouse_id" :options="$warehouses" placeholder="請選擇倉庫"  icon="o-home-modern" />
 
