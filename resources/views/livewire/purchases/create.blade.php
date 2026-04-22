@@ -2,13 +2,12 @@
 <div x-data="{ 
         atBottom: false,
         checkScroll() {
-            // 判斷是否滾動到接近底部 (留 150px 緩衝)
             this.atBottom = (window.innerHeight + window.scrollY) >= (document.body.offsetHeight - 100);
         }
      }" 
      x-init="checkScroll()"
      @scroll.window="checkScroll()">
-    {{-- 頁頭：改用 Mary UI 原生標題，加入柔和層次 --}}
+
     <x-header separator progress-indicator>
         <x-slot:title>
             <div class="flex items-center gap-4">
@@ -27,121 +26,143 @@
             </div>
         </x-slot:title>
         <x-slot:actions>
-            <x-button label="返回列表" icon="o-arrow-left" link="/purchases" class="btn-ghost" />
-            <x-button label="確認入庫" icon="o-check" class="btn-primary shadow-md hover:shadow-lg transition-all px-8" wire:click="save" spinner />
+            <x-button label="返回列表" icon="o-arrow-left" link="{{ route('purchases.index') }}" class="btn-ghost" />
         </x-slot:actions>
     </x-header>
 
-    <div class="grid grid-cols-12 gap-6">
-        
-        {{-- 1. 左側：單據屬性 (3格) --}}
-        <div class="col-span-12 lg:col-span-3 space-y-6">
-            <x-card title="單據資訊" shadow class="border-t-4 border-primary">
-                <div class="space-y-4">
-                    <x-choices label="供應商" wire:model="supplier_id" :options="$suppliers" single icon="o-building-storefront" />
-                    
-                    <div class="grid grid-cols-2 gap-4">
-                        <x-datetime label="採購日期" wire:model="purchased_at" />
-                        <x-select label="幣別" wire:model.live="currency" :options="[['id'=>'CNY', 'name'=>'CNY'], ['id'=>'TWD', 'name'=>'TWD']]" />
-                    </div>
-						<x-select label="預設入庫倉庫" wire:model.live="warehouse_id" :options="$warehouses" icon="o-home-modern" />
-                    <x-textarea label="內部備註" wire:model="remark" rows="3" placeholder="備註採購細節..." />
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 pb-24">
+        {{-- 左側：表單主要內容 --}}
+        <div class="lg:col-span-8 space-y-6">
+            {{-- 基本資訊卡片 --}}
+            <x-card shadow class="border-none bg-base-100/60 backdrop-blur">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <x-choices label="供應商" wire:model.live="supplier_id" :options="$suppliers" searchable single icon="o-truck" />
+                    <x-datetime label="採購日期" wire:model.live="purchased_at" icon="o-calendar" />
+                    <x-select label="入庫倉庫" wire:model.live="warehouse_id" :options="$warehouses" icon="o-home-modern" />					
                 </div>
-            </x-card>
-        </div>
-		
-		<div x-show="!atBottom" 
-			 x-transition:enter="transition ease-out duration-300"
-			 x-transition:enter-start="opacity-0 transform translate-y-4"
-			 x-transition:leave="transition ease-in duration-300"
-			 x-transition:leave-end="opacity-0 transform translate-y-4"
-			 class="fixed bottom-6 right-6 z-50 pointer-events-none">
-			
-			<div class="flex flex-col items-center">
-				<span class="text-xs font-bold text-orange-600 bg-orange-50 px-2 py-1 rounded-full shadow-sm mb-1">下面還有</span>
-				<div class="bg-orange-500 text-white p-3 rounded-full shadow-lg animate-bounce">
-					<x-icon name="o-chevron-double-down" class="w-6 h-6" />
+				@php
+					$isAuto = (bool) App\Models\Setting::get('po_auto_stock_in', true);
+				@endphp
+				<div class="p-3 bg-base-200/50 rounded-lg border border-dashed border-base-300 flex items-center gap-3">
+					<x-icon :name="$isAuto ? 'o-check-circle' : 'o-pause-circle'" 
+							:class="$isAuto ? 'text-success' : 'text-warning'" />
+					<div class="text-xs">
+						<span class="font-bold">目前庫存處理模式：</span>
+						{{ $isAuto ? '儲存即完成入庫並計算成本' : '儲存後僅保留單據，需手動執行入庫' }}
+					</div>
 				</div>
-			</div>
-		</div>
+                <x-textarea label="備註" wire:model.live="remark" rows="3" placeholder="輸入此訂單的特殊說明..." />            
+            </x-card>
 
-        {{-- 2. 中間：商品明細 (6格) --}}
-        <div class="col-span-12 lg:col-span-6 space-y-4">
-            <x-card shadow>
-                <x-slot:title>
-                    <div class="flex justify-between items-center w-full">
-                        <div class="flex items-center gap-2">
-                            <span class="font-bold text-lg">商品明細清冊</span>
-                            <span class="text-xs opacity-50 font-mono tracking-widest">ITEMS</span>
-                        </div>
-                        <x-scanner.button mode="continuous" class="btn-sm btn-outline border-base-300" />
-                    </div>
-                </x-slot:title>
+            {{-- 採購明細區塊 --}}
+            <x-card title="採購明細" separator shadow class="border-none bg-base-100/60 backdrop-blur">
+                <x-slot:menu>
+                    <x-button label="手動新增商品" icon="o-plus" wire:click="addRow" class="btn-outline btn-sm btn-primary" />
+                </x-slot:menu>
 
-                {{-- PC 端標頭：柔和背景 --}}
-                <div class="hidden lg:grid grid-cols-12 gap-4 mb-4 px-4 py-2 bg-base-200 rounded-lg text-xs font-bold opacity-70 uppercase">
-                    <div class="col-span-5">商品描述</div>
-					<div class="col-span-2">入庫倉庫</div>
-                    <div class="col-span-1 text-right">數量</div>
-                    <div class="col-span-2 text-right">單價 ({{ $currency }})</div>
+                {{-- 電腦端：表格標題 --}}
+                <div class="hidden lg:grid grid-cols-12 gap-4 px-2 mb-2 text-xs font-bold text-gray-500 uppercase tracking-widest">
+                    <div class="col-span-5">商品資訊 (含描述)</div>
+                    <div class="col-span-2 text-center">單價 ({{ $currency }})</div>
+                    <div class="col-span-2 text-center">數量</div>
                     <div class="col-span-2 text-right">小計</div>
+                    <div class="col-span-1"></div>
                 </div>
 
-                <div class="divide-y divide-base-200">
-                    @forelse($items as $index => $item)
-                        <div wire:key="pur-row-{{ $index }}" class="group relative py-4 lg:px-4 hover:bg-primary/5 rounded-xl transition-all">
-                            <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-center">
-                                <div class="col-span-1 lg:col-span-5">
-                                    <x-choices wire:model.live="items.{{ $index }}.product_id" :options="$productOptions" searchable single />
+                <div class="space-y-4">
+                    @foreach($items as $index => $item)
+                        <div wire:key="purchase-item-{{ $index }}" class="group relative p-4 lg:p-0 border lg:border-none rounded-2xl bg-base-200/30 lg:bg-transparent">
+                            
+                            {{-- 電腦端佈局 --}}
+                            <div class="hidden lg:grid grid-cols-12 gap-4 items-center">
+                                <div class="col-span-5">
+                                    @if(isset($item['product_id']) && $item['product_id'] > 0)
+                                        <div class="flex items-center justify-between p-2 border rounded-lg bg-base-100 shadow-sm">
+                                            <span class="font-bold text-sm truncate">{{ $item['name'] }}</span>
+                                            <x-button icon="o-pencil" class="btn-ghost btn-xs text-primary" wire:click="$set('items.{{ $index }}.product_id', null)" />
+                                        </div>
+                                    @else
+                                        <x-choices wire:model.live="items.{{ $index }}.product_id" :options="$productOptions" 
+                                            search-function="search" option-label="name" searchable single />
+                                    @endif
                                 </div>
-								<div class="col-span-1 lg:col-span-2">    
-									<x-select wire:model="items.{{ $index }}.warehouse_id" :options="$warehouses" class="select rounded-none border-slate-200" />
-								</div>
-                                <div class="col-span-1 lg:col-span-1">
-                                    <x-input type="number" step="0.0001" wire:model.live="items.{{ $index }}.quantity" class="text-right font-mono" />
+                                <div class="col-span-2">
+                                    <x-input wire:model.live.debounce.500ms="items.{{ $index }}.foreign_price" type="number" step="0.0001" class="text-right font-mono" />
                                 </div>
-                                <div class="col-span-1 lg:col-span-2">
-                                    <x-input wire:model.live="items.{{ $index }}.foreign_price" class="text-right font-mono" />
+                                <div class="col-span-2">
+                                    <x-input wire:model.live.debounce.500ms="items.{{ $index }}.quantity" type="number" step="1" class="text-center font-mono" />
                                 </div>
-                                <div class="col-span-1 lg:col-span-2 text-right font-mono font-bold text-primary">
+                                <div class="col-span-2 text-right font-mono font-bold text-primary">
                                     {{ number_format(bcmul($item['quantity'] ?? 0, $item['foreign_price'] ?? 0, 4), 2) }}
-                                    <x-button icon="o-trash" class="btn-ghost btn-xs text-error absolute top-0 right-0 opacity-0 group-hover:opacity-100 transition-opacity" wire:click="removeRow({{ $index }})" />
+                                </div>
+                                <div class="col-span-1 text-right">
+                                    <x-button icon="o-trash" class="btn-ghost btn-sm text-error opacity-0 group-hover:opacity-100" wire:click="removeRow({{ $index }})" />
                                 </div>
                             </div>
+
+                            {{-- 手機端佈局 (採購明細卡片) --}}
+                            <div class="block lg:hidden space-y-3">
+                                <div class="flex justify-between items-start">
+                                    <div class="flex-1">
+                                        <div class="text-xs font-bold opacity-50 mb-1 uppercase">商品項目</div>
+                                        @if(isset($item['product_id']) && $item['product_id'] > 0)
+                                            <div class="flex items-center justify-between p-2 border rounded-lg bg-base-100 shadow-sm">
+                                                <span class="font-bold text-sm">{{ $item['name'] }}</span>
+                                                <x-button icon="o-pencil" class="btn-ghost btn-xs text-primary" wire:click="$set('items.{{ $index }}.product_id', null)" />
+                                            </div>
+                                        @else
+                                            <x-choices wire:model.live="items.{{ $index }}.product_id" :options="$productOptions" 
+                                                search-function="search" option-label="name" searchable single />
+                                        @endif
+                                    </div>
+                                    <x-button icon="o-trash" class="btn-ghost btn-sm text-error ml-2" wire:click="removeRow({{ $index }})" />
+                                </div>
+                                <div class="grid grid-cols-2 gap-3">
+                                    <x-input label="單價 ({{ $currency }})" wire:model.live.debounce.500ms="items.{{ $index }}.foreign_price" type="number" step="0.0001" class="font-mono" />
+                                    <x-input label="數量" wire:model.live.debounce.500ms="items.{{ $index }}.quantity" type="number" step="1" class="font-mono" />
+                                </div>
+                                <div class="flex justify-between items-center pt-2 border-t border-dashed border-base-content/10">
+                                    <span class="text-xs opacity-60 italic">項目小計</span>
+                                    <span class="font-mono font-bold text-primary">
+                                        {{ number_format(bcmul($item['quantity'] ?? 0, $item['foreign_price'] ?? 0, 4), 2) }}
+                                    </span>
+                                </div>
+                            </div>
+
                         </div>
-                    @empty
-                        <div class="py-12 text-center opacity-30 italic">尚未加入商品</div>
-                    @endforelse
+                    @endforeach
                 </div>
 
-                <x-slot:actions>
-                    <x-button label="手動新增一行商品" icon="o-plus" class="btn-ghost btn-sm w-full border-dashed border-2 hover:bg-primary/5" wire:click="addRow" />
-                </x-slot:actions>
-            </x-card>
+                @if(count($items) === 0)
+                    <div class="py-12 text-center">
+                        <x-icon name="o-cube" class="w-12 h-12 mx-auto opacity-20" />
+                        <p class="mt-2 text-sm opacity-50">尚未加入任何商品</p>
+                    </div>
+                @endif
+            </x-card>            
         </div>
 
-        {{-- 3. 右側：財務結算 (3格) --}}
-        <div class="col-span-12 lg:col-span-3 space-y-6">
-            <x-card title="結算" shadow class="bg-base-100 border-t-4 border-primary">
+        {{-- 右側：費用結算區 --}}
+        <div class="lg:col-span-4 space-y-6">
+            <x-card shadow class="border-none bg-base-100 sticky top-6">
                 <div class="space-y-6">
-					<div class="flex justify-between items-center p-2 bg-base-200/50 rounded-lg">
-                        <span class="font-bold opacity-70">小計</span>
-                        <span class="font-mono text-right">
-							{{ $currency }} {{ number_format($this->subTotal, 0) }}
-						</span>
+                    {{-- 費用輸入區 --}}
+                    <div class="space-y-4">
+                        <div class="flex items-center gap-2 mb-2">
+                            <x-icon name="o-calculator" class="w-5 h-5 text-primary" />
+                            <span class="font-bold">費用與折扣</span>
+                        </div>
+                        <x-input label="運費" wire:model.live.debounce.500ms="shipping_fee" icon="o-truck" class="text-right font-mono" />
+                        <x-input label="稅金" wire:model.live.debounce.500ms="tax" icon="o-receipt-percent" class="text-right font-mono" />
+                        <x-input label="其他費用" wire:model.live.debounce.500ms="other_fees" icon="o-plus-circle" class="text-right font-mono" />
+                        <x-input label="折扣金額" wire:model.live.debounce.500ms="discount" icon="o-minus-circle" class="text-right font-mono text-error" />
                     </div>
-                    {{-- 金額微調 --}}
-                    <div class="grid gap-3 pt-2">
-						<x-input label="運費 (+)" wire:model.live="shipping_fee" prefix="{{ $currency }}" class="text-right font-mono" />
-						{{-- 新增稅金與雜費 --}}
-						<x-input label="稅金 (+)" wire:model.live="tax" prefix="{{ $currency }}" class="text-right font-mono" />
-						<x-input label="其他規費 (+)" wire:model.live="other_fees" prefix="{{ $currency }}" class="text-right font-mono" />
-						<x-input label="折扣 (-)" wire:model.live="discount" prefix="{{ $currency }}" class="text-right font-mono text-error font-bold" />
-					</div>
 
-                    {{-- 總額大區塊：採用銷售單那種大圓角 --}}
-                    <div class="p-5 bg-slate-800 text-white rounded-xl shadow-inner relative overflow-hidden">
-                        <div class="absolute -right-4 -bottom-4 opacity-10">
+                    <div class="divider"></div>
+
+                    {{-- 應付總額 --}}
+                    <div class="p-6 bg-base-content text-base-100 rounded-2xl shadow-inner relative overflow-hidden">
+                        <div class="absolute -right-4 -top-4 opacity-10">
                             <x-icon name="o-banknotes" class="w-24 h-24" />
                         </div>
                         <div class="relative z-10">
@@ -154,7 +175,8 @@
 
                     {{-- 匯率轉換 --}}
                     <div class="pt-2 px-1">
-                        <x-input label="評估匯率" wire:model.live="exchange_rate" icon="o-arrows-right-left" :readonly="$currency === 'TWD'" class="text-right font-mono {{ $currency === 'TWD' ? 'bg-base-200' : '' }}" />
+                        <x-input label="評估匯率" wire:model.live="exchange_rate" icon="o-arrows-right-left" :readonly="$currency === 'TWD'" 
+                            class="text-right font-mono {{ $currency === 'TWD' ? 'bg-base-200' : '' }}" />
                     </div>
 
                     {{-- 最終 TWD 成本 --}}
@@ -165,12 +187,33 @@
                         </div>
                     </div>
 
-                    <x-button label="確認入庫 / 過帳" icon="o-check-circle" class="btn-primary w-full btn-lg shadow-xl" wire:click="save" spinner />
+                    <x-button 
+						:label="$isAuto ? '確認入庫 / 過帳' : ($isEdit ? '更新採購單' : '確認建檔')" 
+						:icon="$isAuto ? 'o-check-circle' : 'o-document-plus'" 
+						class="w-full btn-lg shadow-xl btn-primary" 
+						wire:click="save" 
+						spinner 
+					/>
                 </div>
             </x-card>
         </div>
     </div>
+	{{-- 滾動提示 --}}
+    <div x-show="!atBottom" 
+         x-transition:enter="transition ease-out duration-300"
+         x-transition:enter-start="opacity-0 transform translate-y-4"
+         x-transition:leave="transition ease-in duration-300"
+         x-transition:leave-end="opacity-0 transform translate-y-4"
+         class="hidden lg:flex fixed bottom-6 right-6 z-50 pointer-events-none">
+        
+        <div class="flex flex-col items-center">
+            <span class="text-xs font-bold text-orange-600 bg-orange-50 px-2 py-1 rounded-full shadow-sm mb-1">下面還有</span>
+            <div class="bg-orange-500 text-white p-3 rounded-full shadow-lg animate-bounce">
+                <x-icon name="o-chevron-double-down" class="w-6 h-6" />
+            </div>
+        </div>
+    </div>
 
-    <x-scanner.modal />       
+    <x-scanner.modal />
     <x-scanner.scripts />
 </div>

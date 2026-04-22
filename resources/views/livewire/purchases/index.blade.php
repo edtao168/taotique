@@ -17,13 +17,22 @@
                 @scope('cell_purchase_number', $purchase)
                     <x-badge :value="$purchase->purchase_number" class="badge-neutral font-mono" />
                 @endscope
-
+				@scope('cell_purchase_number', $purchase)
+					<x-badge :value="$purchase->purchase_number" 
+							 :class="$purchase->stocked_in_at ? 'badge-success text-white' : 'badge-warning'"
+							 title="{{ $purchase->stocked_in_at ? '已過帳（已入庫）' : '未過帳（待入庫）' }}" />	
+				@endscope
+				@scope('cell_purchased_at', $purchase)
+                    {{ $purchase->purchased_at->format('Y-m-d') }}
+                @endscope
                 @scope('cell_supplier_name', $purchase)
                     {{ $purchase->supplier?->name ?? 'N/A' }}
                 @endscope
-
+				@scope('cell_total_amount', $purchase)
+					<span class="font-bold text-blue-700">{{ $purchase->currency }} {{ number_format($purchase->total_amount, 0) }}</span>
+                @endscope
                 @scope('cell_total_twd', $purchase)
-                    <span class="font-bold text-blue-700">NT$ {{$purchase->total_twd }}</span>
+                    <span class="font-bold">NT$ {{ number_format($purchase->total_twd, 0) }}</span>			
                 @endscope
             </x-table>
         </x-card>
@@ -70,7 +79,7 @@
 				$isLocked = $selectedPurchase->hasReturnRecords();
 			@endphp
 			
-			<p>採購單號：{{ $selectedPurchase->purchase_number }}</p>
+			<p class="text-sm font-bold border-l-4 border-primary pl-2 mb-3">採購單號：{{ $selectedPurchase->purchase_number }}</p>
 				
 			<div class="space-y-6 pb-20">				
 				<div class="bg-base-100 border rounded-xl p-4 shadow-sm">
@@ -94,20 +103,14 @@
                     </div>
                 </div>
 
-                {{-- 總額統計 --}}
-                <div class="p-4 border rounded-xl bg-blue-50/50">
-                    <p class="text-[10px] text-blue-600 mb-1 font-bold">採購總金額 (TWD)</p>
-                    <p class="text-2xl font-black text-blue-800 font-mono">NT$ {{ number_format($selectedPurchase->total_twd, 0) }}</p>
-                </div>
-
-                {{-- 商品明細 --}}
+				{{-- 商品明細 --}}
                 <div>
-                    <p class="text-sm font-bold border-l-4 border-primary pl-2 mb-3">入庫明細</p>
+                    <p class="text-sm font-bold border-l-4 border-primary pl-2 mb-3">採購明細</p>
                     <div class="space-y-2">
                         @foreach($selectedPurchase->items as $item)
                             <div class="p-3 border rounded-lg bg-base-50 text-sm">
                                 <div class="flex justify-between">
-                                    <span class="font-bold">{{ $item->product->name }}</span>
+                                    <span class="font-bold">{{ $item->product->full_display_name }}</span>
                                     <span class="font-mono">x{{ (int)$item->quantity }}</span>
                                 </div>
                                 <div class="flex justify-between mt-1 text-[11px] text-gray-500">
@@ -122,23 +125,77 @@
                         @endforeach
                     </div>
                 </div>
+				{{-- 費用輸入區 --}}
+				<div class="space-y-3">
+					<div class="flex items-center gap-2 mb-2">
+						<x-icon name="o-calculator" class="w-5 h-5 text-primary" />
+						<span class="font-bold text-sm">費用與折扣項目</span>
+					</div>
+					
+					<div class="bg-base-200/30 rounded-xl p-4 space-y-2 border border-dashed">
+						<div class="flex justify-between text-sm">
+							<span class="opacity-60">運費</span>
+							<span class="font-mono">+ {{ number_format($selectedPurchase->shipping_fee ?? 0, 2) }}</span>
+						</div>
+						<div class="flex justify-between text-sm">
+							<span class="opacity-60">稅金</span>
+							<span class="font-mono">+ {{ number_format($selectedPurchase->tax ?? 0, 2) }}</span>
+						</div>
+						<div class="flex justify-between text-sm">
+							<span class="opacity-60">其他費用</span>
+							<span class="font-mono">+ {{ number_format($selectedPurchase->other_fees ?? 0, 2) }}</span>
+						</div>
+						<div class="flex justify-between text-sm text-error font-bold">
+							<span>折扣金額</span>
+							<span class="font-mono">- {{ number_format($selectedPurchase->discount ?? 0, 2) }}</span>
+						</div>
+					</div>
+				</div>
+                {{-- 總額統計 --}}
+                <div class="space-y-3 pt-4">
+					<div class="p-4 border-2 border-primary/20 rounded-2xl bg-primary/5 relative overflow-hidden">
+						<x-icon name="o-currency-dollar" class="absolute -right-2 -bottom-2 w-16 h-16 opacity-10 text-primary" />
+						
+						<div class="flex justify-between items-end relative z-10">
+							<div>
+								<p class="text-[10px] text-primary font-bold uppercase tracking-wider">採購總計 ({{ $selectedPurchase->currency }})</p>
+								<p class="text-2xl font-black text-primary font-mono leading-none">
+									{{ number_format($selectedPurchase->total_amount, 2) }}
+								</p>
+							</div>
+							<div class="text-right border-l pl-4 border-primary/20">
+								<p class="text-[10px] text-gray-500 font-bold uppercase tracking-wider">換算本幣 (TWD)</p>
+								<p class="text-xl font-bold text-base-content font-mono leading-none">
+									NT$ {{ number_format($selectedPurchase->total_twd, 0) }}
+								</p>
+							</div>
+						</div>
+					</div>
+				</div>				
             </div>
 
             <x-slot:actions>
                 <div class="flex gap-3 w-full border-t pt-4 bg-base-100">
-                    @if($isLocked)
-						<x-button label="返回" icon="o-arrow-uturn-left" :link="route('purchases.index')" class="btn-success flex-1 text-white" />
-					@else
-						<x-button 
-							label="刪除" 
-							icon="o-trash" 
-							wire:click="delete({{ $selectedPurchase->id }})" 
-							wire:confirm="確定要刪除此單據並扣除庫存嗎？" 
-							class="btn-error btn-outline flex-1" 
-							spinner="delete" 
-						/>
+                    <x-button label="返回" icon="o-arrow-uturn-left" :link="route('purchases.index')" class="btn-success flex-1 text-white" />
+					@if(!$isLocked)							
 						<x-button label="修改" icon="o-pencil" :link="route('purchases.edit', $selectedPurchase->id)" class="btn-primary flex-1 text-white" />
-						<x-button label="退貨" icon="o-arrow-path" :link="route('purchases.returns.create', ['purchase' => $selectedPurchase->id])" class="btn-outline flex-1" />
+						@if($selectedPurchase->stocked_in_at)
+							<x-button 
+								label="退貨" 
+								icon="o-arrow-path" 
+								:link="route('purchases.returns.create', ['purchase' => $selectedPurchase->id])"
+								class="btn-outline-dark flex-1"	
+							/>							
+						@else
+							<x-button 
+								label="入庫" 
+								icon="o-archive-box-arrow-down" 
+								class="btn-warning flex-1" 
+								wire:click="processStockIn({{ $selectedPurchase->id }})"
+								wire:confirm="確定要執行出庫扣減庫存嗎？"
+								spinner />
+							<x-button label="刪除" icon="o-trash" wire:click="delete({{ $selectedPurchase->id }})" wire:confirm="確定要刪除此單據並回補庫存嗎？" class="btn-error btn-outline flex-1" />									
+						@endif								
 					@endif
                 </div>
             </x-slot:actions>

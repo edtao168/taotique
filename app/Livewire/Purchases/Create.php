@@ -2,6 +2,7 @@
 
 namespace App\Livewire\Purchases;
 
+use App\Models\Inventory;
 use App\Models\Product;
 use App\Models\Purchase;
 use App\Models\Setting;
@@ -45,18 +46,20 @@ class Create extends Component
             $this->purchase = $purchase;
             $this->supplier_id = $purchase->supplier_id;
 			$this->warehouse_id = $purchase->warehouse_id;
-            $this->purchased_at = $purchase->purchased_at->format('Y-m-d');
-            $this->currency = $purchase->currency;
-            $this->exchange_rate = $purchase->exchange_rate;
-			$this->shipping_fee = $purchase->shipping_fee;
-            $this->discount = $purchase->discount;
-			$this->tax = $purchase->tax_amount;
-			$this->other_fees = $purchase->other_fees;
-            $this->remark = $purchase->remark;
+			$this->purchased_at = $purchase->purchased_at->format('Y-m-d');
+			$this->currency = $purchase->currency;
+			$this->exchange_rate = $purchase->exchange_rate;
+
+			// 【修正】費用數據載入：確保欄位對應正確且不歸零
+			$this->shipping_fee = (string) ($purchase->shipping_fee ?? '0.0000');
+			$this->discount = (string) ($purchase->discount ?? '0.0000');
+			$this->tax = (string) ($purchase->tax ?? '0.0000');
+			$this->other_fees = (string) ($purchase->other_fees ?? '0.0000');			
+			$this->remark = $purchase->remark;
             
             $this->items = $purchase->items->map(fn($item) => [
                 'product_id' => $item->product_id,
-				'name' => $item->product->name,
+				'name' => $item->product?->full_display_name ?? '',
                 'warehouse_id' => $item->warehouse_id,
                 'quantity' => $item->quantity,
                 'foreign_price' => $item->foreign_price,
@@ -70,6 +73,26 @@ class Create extends Component
         }
     }
 	
+	/**
+	 * 當商品選擇變動時同步名稱
+	 */
+	public function updatedItems($value, $key)
+	{
+		if (str_ends_with($key, '.product_id')) {
+			$parts = explode('.', $key);
+			$index = $parts[0];
+
+			if ($value) {
+				$product = \App\Models\Product::find($value);
+				if ($product) {
+					// 使用 full_display_name 包含規格/描述資訊
+					$this->items[$index]['name'] = $product->full_display_name;
+					$this->items[$index]['foreign_price'] = $product->last_purchase_price ?? 0;
+				}
+			}
+		}
+	}
+
 	/**
 	 * 監聽幣別切換
 	 */
@@ -129,63 +152,110 @@ class Create extends Component
 	}
 
 	/**
-     * 
+     * 定義校驗規則
      */
-	public function save()
+    protected function rules()
     {
-        $this->validate([
-            'supplier_id' => 'required',
-            'purchased_at' => 'required|date',
-            'items.*.product_id' => 'required',
-            'items.*.quantity' => 'required|numeric|min:0.01',
-        ]);
+        return [
+            'supplier_id'   => 'required|exists:suppliers,id',
+            'warehouse_id'  => 'required|exists:warehouses,id',
+            'purchased_at'  => 'required|date',
+            'currency'      => 'required|string|max:3',
+            'exchange_rate' => 'required|numeric|min:0.000001',
+            'items'         => 'required|array|min:1',
+            'items.*.product_id'    => 'required|exists:products,id',
+            'items.*.quantity'      => 'required|numeric|min:0.0001',
+            'items.*.foreign_price' => 'required|numeric|min:0',
+        ];
+    }
 
-        DB::transaction(function () {
-			$totalForeign = $this->calculateTotal();	
-			$totalTwd = bcmul($totalForeign, $this->exchange_rate, 4);
-            if ($this->isEdit) {
-                // 1. 修改模式：精確沖銷舊明細對應的庫存
-                foreach ($this->purchase->items as $oldItem) {
-                    Inventory::where('product_id', $oldItem->product_id)
-                        ->where('warehouse_id', $oldItem->warehouse_id)
-                        ->where('purchase_item_id', $oldItem->id)
-                        ->delete();
-                }
-                $this->purchase->items()->delete();
-                
-                $this->purchase->update([
-                    'supplier_id' => $this->supplier_id,
-					'warehouse_id' => $this->warehouse_id,
-                    'exchange_rate' => $this->exchange_rate,
-                    'purchased_at' => $this->purchased_at,
-                    'remark' => $this->remark,
-                ]);
-                $target = $this->purchase;
-            } else {
-                // 2. 新增模式
-                $target = Purchase::create([                  
-                    'purchase_number' => $this->purchase_number,
-					'supplier_id' => $this->supplier_id,
-					'warehouse_id' => $this->warehouse_id,
-					'user_id' => auth()->id(),
-					'currency' => $this->currency,
-					'exchange_rate' => $this->exchange_rate,
-					'total_amount' => $totalForeign,
-					'total_twd' => $totalTwd,
-					'shipping_fee' => $this->shipping_fee,
-					'discount' => $this->discount,
-					'purchased_at' => $this->purchased_at,
-					'shop_id' => 1,
-                ]);
-            }
-
-            // 3. 呼叫 Model 層的進貨處理程序 (處理加權平均成本與新庫存寫入)
-            $target->processInbound($this->items);
-        });
-
-        $this->success($this->isEdit ? '採購單修改完成' : '採購入庫成功', redirectTo: route('purchases.index'));
+    /**
+     * 自定義校驗錯誤訊息 (選配)
+     */
+    protected function validationAttributes()
+    {
+        return [
+            'supplier_id' => '供應商',
+            'warehouse_id' => '倉庫',
+            'items' => '採購明細',
+            'items.*.quantity' => '數量',
+            'items.*.foreign_price' => '採購單價',
+        ];
     }
 	
+	/**
+     * 採購單儲存邏輯
+     */	
+	public function save()
+	{
+		$this->validate();
+
+		try {
+			DB::transaction(function () {
+				// 1. 取得全域設定：是否自動入庫
+				$autoStockIn = Setting::getBool('po_auto_stock_in', true);
+
+				// 2. 準備主表資料 (包含各項費用)
+				$purchaseData = [
+					'supplier_id'   => $this->supplier_id,
+					'warehouse_id'  => $this->warehouse_id,
+					'user_id'       => auth()->id() ?? 1,
+					'currency'      => $this->currency,
+					'exchange_rate' => $this->exchange_rate,
+					'shipping_fee'  => $this->shipping_fee,
+					'tax'           => $this->tax,
+					'other_fees'    => $this->other_fees,
+					'discount'      => $this->discount,
+					'purchased_at'  => $this->purchased_at,
+					'remark'        => $this->remark,
+					'subtotal'      => $this->subTotal, // 來自 Computed 屬性
+					'total_amount'  => $this->totalAmount, // 來自 Computed 屬性
+					'total_twd'     => $this->totalTwd, // 來自 Computed 屬性
+				];
+
+				if ($this->isEdit && $this->purchase) {
+					// 編輯模式：檢查是否已過帳
+					if ($this->purchase->stocked_in_at) {
+						throw new \Exception("此單據已入庫過帳，不允許修改。請執行退貨或反過帳程序。");
+					}
+					
+					$currentPurchase = Purchase::where('id', $this->purchase->id)->lockForUpdate()->first();
+					$currentPurchase->update($purchaseData);
+					$currentPurchase->items()->delete();
+					$msg = "採購單 {$currentPurchase->purchase_number} 修改成功";
+				} else {
+					// 新增模式
+					$purchaseData['purchase_number'] = $this->purchase_number;
+					$currentPurchase = Purchase::create($purchaseData);
+					$msg = "採購單 {$currentPurchase->purchase_number} 建立成功";
+				}
+
+				// 3. 處理明細與入庫
+				if ($autoStockIn) {
+					// 自動入庫：呼叫模型層的厚邏輯（處理 Inventory、WeightedAverageCost、stocked_in_at）
+					$currentPurchase->processInbound($this->items);
+					$msg .= "並完成入庫過帳";
+				} else {
+					// 僅存檔：純粹記錄明細 Snapshot
+					foreach ($this->items as $item) {
+						$currentPurchase->items()->create([
+							'product_id'    => $item['product_id'],
+							'warehouse_id'  => $item['warehouse_id'],
+							'quantity'      => $item['quantity'],
+							'foreign_price' => $item['foreign_price'],
+							'cost_twd'      => bcmul($item['foreign_price'], $this->exchange_rate, 4),
+							'subtotal_twd'  => bcmul(bcmul($item['foreign_price'], $this->exchange_rate, 4), $item['quantity'], 4),
+						]);
+					}
+					$msg .= " (待入庫)";
+				}
+
+				$this->success($msg, redirectTo: route('purchases.index'));
+			});
+		} catch (\Exception $e) {
+			$this->error('儲存失敗：' . $e->getMessage());
+		}
+	}
     
     /**
      * 

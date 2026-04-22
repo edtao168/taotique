@@ -23,6 +23,25 @@ class Index extends Component
     public bool $shouldSyncInventory = true; // 預設勾選同步扣除
 
 	/**
+     * 手動執行採購入庫 (對應列表頁的入庫按鈕)
+     */
+    public function processStockIn(Purchase $purchase)
+    {        
+        try {
+            // 執行模型層的厚邏輯
+            $purchase->processInbound();
+			
+			$this->drawer = false;
+			
+			$this->selectedPurchase = null;
+            
+            $this->success("採購單 {$purchase->purchase_number} 已成功入庫");
+        } catch (\Exception $e) {
+            $this->error('入庫失敗：' . $e->getMessage());
+        }
+    }
+	
+	/**
 	 * 參考銷售單模式：直接執行刪除（由前端 wire:confirm 保護）
 	 */
 	public function delete($id)
@@ -107,7 +126,7 @@ class Index extends Component
             ['key' => 'purchase_number', 'label' => '單號', 'class' => 'font-semibold'],
             ['key' => 'supplier_name', 'label' => '供應商', 'sortBy' => 'supplier_id'],
             ['key' => 'purchased_at', 'label' => '日期'],
-            ['key' => 'total_foreign', 'label' => '外幣總額', 'textAlign' => 'text-right'],
+            ['key' => 'total_amount', 'label' => '原幣總額', 'textAlign' => 'text-right'],
             ['key' => 'total_twd', 'label' => '本幣(TWD)', 'textAlign' => 'text-right'],
             ['key' => 'actions', 'label' => '', 'sortable' => false],
         ];

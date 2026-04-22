@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Inventory;
 use App\Models\PurchaseItem;
 use App\Models\Setting;
 use App\Models\Supplier;
@@ -17,23 +18,40 @@ class Purchase extends Model
         'purchase_number',
         'supplier_id',
         'user_id',
+		'warehouse_id',
         'currency',
         'exchange_rate',
+		'subtotal',
+		'shipping_fee',
+        'tax',
+        'other_fees',
+        'discount',
         'total_amount',
         'total_twd',
         'purchased_at',
+		'stocked_in_at',
         'remark'
     ];
 
     protected function casts(): array
     {
         return [
-            'purchased_at' => 'datetime',
+            'purchased_at' 	=> 'datetime',
+			'stocked_in_at' => 'datetime',
             'exchange_rate' => 'decimal:4',
-            'total_twd' => 'decimal:4',
-            'total_amount' => 'decimal:4',
+            'total_twd' 	=> 'decimal:4',
+			'subtotal' 		=> 'decimal:4',
+            'total_amount' 	=> 'decimal:4',
         ];
     }
+	
+	/**
+     * 判定採購單是否已鎖定 (不允許任何修改)
+     */
+	public function isLocked(): bool
+	{
+		return $this->returns()->whereIn('status', ['pending', 'approved', 'completed'])->exists();
+	}
 	
 	/**
      * 判斷是否有採購退貨紀錄
@@ -101,53 +119,40 @@ class Purchase extends Model
     /**
      * 執行採購單入庫：處理明細、換算匯率、更新庫存與加權成本
      */
-    public function processInbound(array $inputItems)
+    public function processInbound()
     {
-        return DB::transaction(function () use ($inputItems) {
-            $grandTotalTWD = '0';
-            $grandTotalForeign = '0';
+        // 檢查是否已入庫
+		if ($this->stocked_in_at) {
+			throw new \Exception("此單據已入庫。");
+		}
+		
+		return DB::transaction(function () {
+            // 遍歷此採購單下所有的明細
+			foreach ($this->items as $item) {
+				// 1. 建立庫存紀錄 (Inventories)
+				Inventory::create([
+					'product_id'   => $item->product_id,
+					'warehouse_id' => $item->warehouse_id,
+					'supplier_id'  => $this->supplier_id,
+					'quantity'     => $item->quantity,
+					'cost'         => $item->cost_twd,
+					'status'       => 'in_stock'
+				]);
 
-            foreach ($inputItems as $item) {
-                // 1. 計算本幣單價 (BCMath)
-                $costTwd = bcmul($item['foreign_price'], $this->exchange_rate, 4);
-                $subtotalTwd = bcmul($costTwd, $item['quantity'], 4);
-                
-                // 2. 建立明細
-                $this->items()->create([
-                    'product_id' => $item['product_id'],
-                    'warehouse_id' => $item['warehouse_id'],
-                    'quantity' => $item['quantity'],
-                    'foreign_price' => $item['foreign_price'],
-                    'cost_twd' => $costTwd,
-                    'subtotal_twd' => $subtotalTwd,
-                ]);
+				// 2. 更新產品加權平均成本
+				$product = Product::find($item->product_id);
+				if ($product) {
+					$product->updateWeightedAverageCost($item->quantity, $item->cost_twd);
+				}
+			}
 
-                // 3. 建立庫存紀錄 (Inventories)
-                Inventory::create([
-                    'product_id' => $item['product_id'],
-                    'warehouse_id' => $item['warehouse_id'],
-                    'supplier_id' => $this->supplier_id,
-                    'quantity' => $item['quantity'],
-                    'cost' => $costTwd,
-                    'status' => 'in_stock'
-                ]);
-
-                // 4. 更新產品加權平均成本 (厚 Model 呼叫)
-                $product = Product::find($item['product_id']);
-                $product->updateWeightedAverageCost($item['quantity'], $costTwd);
-
-                // 累計總額
-                $grandTotalTWD = bcadd($grandTotalTWD, $subtotalTwd, 4);
-                $grandTotalForeign = bcadd($grandTotalForeign, bcmul($item['foreign_price'], $item['quantity'], 4), 4);
-            }
-
-            // 更新主表總額
-            $this->update([
-                'total_twd' => $grandTotalTWD,
-                'total_amount' => $grandTotalForeign
-            ]);
+			// 3. 標記主表為已入庫
+			$this->update([
+				'stocked_in_at' => now(),
+			]);
         });
     }
+	
 	/**
      * 明細
      */	 
