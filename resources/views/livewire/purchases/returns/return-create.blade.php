@@ -12,8 +12,7 @@
                 </div>
                 
             </div>
-            <div class="text-right">
-                
+            <div class="text-right">                
 				<div class="text-sm opacity-70">供應商：{{ $purchase->supplier->name ?? '未指定' }}</div>
 				<div class="text-sm opacity-70">幣別 / 匯率快照：{{ $purchase->currency }} ({{ number_format($purchase->exchange_rate, 4) }})</div>
 			</div>
@@ -34,10 +33,7 @@
                         ['key' => 'action', 'label' => '加入 ', 'class' => 'text-center']
                     ]" :rows="$purchase->items">
                         @scope('cell_product_name', $item)
-                            <div>
-                                <div class="font-medium">{{ $item->product->name }}</div>
-                                <div class="text-[10px] opacity-50 font-mono italic">{{ $item->product->sku }}</div>
-                            </div>
+                            <span class="font-bold text-sm">{{ $item->product->full_display_name }}</span>
                         @endscope
                         
                         @scope('cell_purchase_qty', $item)
@@ -65,7 +61,7 @@
                         <div class="p-4 border rounded-xl bg-base-100 flex justify-between items-center active:scale-95 transition-transform" 
                              wire:click="addItemToReturn({{ $item->product_id }})">
                             <div class="flex-1">
-                                <div class="font-bold text-sm">{{ $item->product->name }}</div>
+                                <div class="font-bold text-sm">{{ $item->product_name }}</div>
                                 <div class="text-xs opacity-60 font-mono">
                                     {{ number_format($item->unit_price, 2) }} x {{ number_format($item->quantity, 0) }}
                                 </div>
@@ -92,9 +88,12 @@
                         <div class="flex-1">
                             <div class="text-sm font-bold truncate">{{ $item['product_name'] }}</div>
                             <div class="flex items-center gap-2 mt-1">
-                                <span class="text-xs font-mono bg-base-200 px-1.5 py-0.5 rounded">
-                                    {{ number_format($item['quantity'], 2) }}
-                                </span>
+                                <x-input 
+                                        wire:model.live.debounce.500ms="return_items.{{ $index }}.quantity" 
+                                        type="number" 
+                                        class="input-xs w-20 font-mono" 
+                                        suffix="入" 
+                                    />
                                 <span class="text-[10px] opacity-40">x</span>
                                 <span class="text-xs font-mono opacity-70">{{ number_format($item['unit_price'], 2) }}</span>
                             </div>
@@ -112,6 +111,10 @@
                     </div>
                 @endforeach
             </div>
+			<div class="space-y-2 py-4 border-t border-dashed">
+				<x-input label="退回運費 (+)" wire:model.live="shipping_fee" prefix="{{ $purchase->currency }}" class="text-right font-mono" />
+				<x-input label="其他補償 (+)" wire:model.live="other_fees" prefix="{{ $purchase->currency }}" class="text-right font-mono" />
+			</div>
         @endif
 
         {{-- 總額和按鈕區域 - 移到 x-card 內部但不在 x-slot:actions 中 --}}
@@ -121,7 +124,7 @@
                 <div class="text-right">
                     <div class="text-[10px] font-mono opacity-40">{{ $purchase->currency }}</div>
                     <div class="text-2xl font-black font-mono text-primary leading-none">
-                        {{ number_format($this->totalAmount, 2) }}
+                        {{ number_format($this->totalReturnAmount, 2) }}
                     </div>
                 </div>
             </div>
@@ -129,7 +132,7 @@
             <x-button 
                 label="提交採購退回單" 
                 icon="o-check" 
-                class="btn-primary w-full shadow-lg" 
+                class="btn-primary w-full btn-lg" 
                 wire:click="save" 
                 spinner 
                 :disabled="empty($return_items)"

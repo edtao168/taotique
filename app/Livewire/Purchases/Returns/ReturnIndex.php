@@ -26,8 +26,7 @@ class ReturnIndex extends Component
         $this->selectedReturn = PurchaseReturn::with([
             'purchase.supplier', 
             'items.product', 
-            'fees',
-			'user'
+            'user'
         ])->find($id);
         
         $this->drawer = true;
@@ -48,8 +47,7 @@ class ReturnIndex extends Component
     {
         $returns = PurchaseReturn::with([
 			'purchase.supplier',
-			'items.product',
-			'fees',
+			'items.product',			
 			'user'
 			])
 			->when($this->search, function ($query) {
@@ -65,11 +63,11 @@ class ReturnIndex extends Component
 			->paginate(15);
 
 		$headers = [
-			['key' => 'return_no', 'label' => '退貨單號', 'class' => 'font-mono'], // 修正 key
-			['key' => 'purchase.purchase_number', 'label' => '原銷售單號', 'class' => 'font-mono text-xs'], // 修正 key
-			['key' => 'purchase.supplier.name', 'label' => '客戶'],
-			['key' => 'total_refund_amount', 'label' => '退款總額', 'textAlign' => 'text-right'], // 修正 key
-			['key' => 'created_at', 'label' => '退貨日期', 'class' => 'w-32'], // 修正 key
+			['key' => 'return_no', 'label' => '退貨單號', 'class' => 'font-mono'],
+			['key' => 'purchase.purchase_number', 'label' => '原採購單號', 'class' => 'font-mono text-xs'],
+			['key' => 'purchase.supplier.name', 'label' => '供應商'], // 修正標籤為供應商
+			['key' => 'total_return_amount', 'label' => '退款總額', 'textAlign' => 'text-right'], // 修正為正確欄位名
+			['key' => 'created_at', 'label' => '退貨日期', 'class' => 'w-32'],
 		];
 
         return view('livewire.purchases.returns.return-index', [

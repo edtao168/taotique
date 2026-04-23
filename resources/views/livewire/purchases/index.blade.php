@@ -176,9 +176,9 @@
 
             <x-slot:actions>
                 <div class="flex gap-3 w-full border-t pt-4 bg-base-100">
-                    <x-button label="返回" icon="o-arrow-uturn-left" :link="route('purchases.index')" class="btn-success flex-1 text-white" />
+                    <x-button label="返回" icon="o-arrow-uturn-left" :link="route('purchases.index')" class="btn-success flex-1" />
 					@if(!$isLocked)							
-						<x-button label="修改" icon="o-pencil" :link="route('purchases.edit', $selectedPurchase->id)" class="btn-primary flex-1 text-white" />
+						<x-button label="修改" icon="o-pencil" :link="route('purchases.edit', $selectedPurchase->id)" class="btn-primary flex-1" />
 						@if($selectedPurchase->stocked_in_at)
 							<x-button 
 								label="退貨" 

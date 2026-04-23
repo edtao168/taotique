@@ -114,7 +114,7 @@ class Purchase extends Model
 		$digits = Setting::get('number_digits', 4); // 根據設定檔決定流水號位數
 		
 		return $prefix . $date . str_pad($sequence, $digits, '0', STR_PAD_LEFT);
-    }    
+    }
 
     /**
      * 執行採購單入庫：處理明細、換算匯率、更新庫存與加權成本

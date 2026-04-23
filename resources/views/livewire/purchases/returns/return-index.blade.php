@@ -1,34 +1,34 @@
-{{-- 檔案路徑：resources/views/livewire/sales/returns/index.blade.php --}}
+{{-- 檔案路徑：resources/views/livewire/purchases/returns/index.blade.php --}}
 <div>
-    <x-header title="銷貨退回管理" separator progress-indicator>
+    <x-header title="採購退回管理" separator progress-indicator>
         <x-slot:middle class="!justify-end">
-            <x-input placeholder="搜尋退單號、原單號或客戶..." wire:model.live.debounce="search" icon="o-magnifying-glass" clearable />
+            <x-input placeholder="搜尋退單號、原單號或供應商..." wire:model.live.debounce="search" icon="o-magnifying-glass" clearable />
         </x-slot:middle>
         <x-slot:actions>
-            <x-button label="回銷售總覽" icon="o-arrow-left" :link="route('sales.index')" />
-            <x-button label="開始退貨" icon="o-plus" class="btn-primary" :link="route('sales.index')" tooltip="請從銷售紀錄中選擇單據進行退貨" />
+            <x-button label="回採購總覽" icon="o-arrow-left" :link="route('purchases.index')" />
+            <x-button label="開始退貨" icon="o-plus" class="btn-primary" :link="route('purchases.index')" tooltip="請從採購紀錄中選擇單據進行退貨" />
         </x-slot:actions>
     </x-header>
 
     <x-card shadow separator>
         {{-- PC 端表格 --}}
         <div class="hidden lg:block">
-            <x-table :headers="$headers" :rows="$returns" @row-click="$wire.showDetail($event.detail.id)" ...>
-				@scope('cell_return_no', $return) {{-- 匹配 return_no --}}
+            <x-table :headers="$headers" :rows="$returns" @row-click="$wire.showDetail($event.detail.id)">
+				@scope('cell_return_no', $return) 
 					<x-badge :value="$return->return_no" class="badge-error badge-outline font-mono" />
 				@endscope
 				
-				@scope('cell_sale.invoice_number', $return) {{-- 匹配 sale.invoice_number --}}
-					<span class="text-gray-400 italic">{{ $return->sale->invoice_number }}</span>
+				@scope('cell_purchase.return_no', $return) 
+					<span class="text-gray-400 italic">{{ $return->purchase->return_no }}</span>
 				@endscope
 
-				@scope('cell_total_refund_amount', $return) {{-- 匹配 total_refund_amount --}}
+				@scope('cell_total_refund_amount', $return) 
 					<span class="font-bold text-red-600 font-mono">TWD {{ number_format($return->total_refund_amount, 2) }}</span>
 				@endscope
 			</x-table>
         </div>
 
-        {{-- 手機端卡片 (參照銷售總覽風格) --}}
+        {{-- 手機端卡片 (參照採購總覽風格) --}}
         <div class="block lg:hidden space-y-3">
             @foreach($returns as $return)
                 <div class="border rounded-xl p-4 bg-base-50 active:bg-base-200 transition-colors" @click="$wire.showDetail({{ $return->id }})">
@@ -38,8 +38,8 @@
                     </div>
                     <div class="flex justify-between items-center">
                         <div>
-                            <p class="font-bold text-base">{{ $return->sale->customer?->name ?? '零售客戶' }}</p>
-                            <p class="text-[10px] text-gray-400 font-mono">原單: {{ $return->sale->invoice_number }}</p>
+                            <p class="font-bold text-base">{{ $return->purchase->customer?->name ?? '零售客戶' }}</p>
+                            <p class="text-[10px] text-gray-400 font-mono">原單: {{ $return->purchase->return_no }}</p>
                         </div>
                         <div class="text-right">
                             <p class="text-red-600 font-black text-lg font-mono">NT$ {{ number_format($return->total_refund, 2) }}</p>
@@ -71,7 +71,7 @@
                     </div>
                 </div>
 
-                {{-- 2. 費用扣除明細 (同步 SalesReturnFee) --}}
+                {{-- 2. 費用扣除明細 (同步 purchasesReturnFee) --}}
                 <div class="bg-base-200/50 rounded-xl p-4">
                     <p class="text-xs font-bold text-gray-500 mb-3 flex items-center gap-1">
                         <x-icon name="o-minus-circle" class="w-3 h-3 text-error" /> 費用扣除明細
@@ -117,7 +117,7 @@
                     <x-button 
                         label="查看原單" 
                         icon="o-eye" 
-                        :link="route('sales.index', ['search' => $selectedReturn->sale->invoice_number])"
+                        :link="route('purchases.index', ['search' => $selectedReturn->purchase->return_no])"
                         class="btn-primary flex-1 text-white" 
                     />
                 </div>
