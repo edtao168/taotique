@@ -122,7 +122,7 @@
 							<div class="block lg:hidden space-y-4 p-1">
 								<div class="flex justify-between items-start gap-2">
 									<div class="flex-1 min-w-0">
-										<div class="text-[10px] font-bold opacity-40 uppercase tracking-tighter mb-1">採購明細</div>
+										<div class="font-mono text-sm">商品</div>
 										@if(isset($item['product_id']) && $item['product_id'] > 0)
 											<div class="flex items-center justify-between p-2 border border-base-300 rounded-xl bg-base-100 shadow-sm">
 												<span class="font-bold text-sm truncate">{{ $item['name'] }}</span>
