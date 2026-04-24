@@ -10,19 +10,19 @@
 	 
     <x-header separator progress-indicator>
 	    {{-- 驗證錯誤顯示 --}}
-    @if($errors->any())
-    <div class="alert alert-error mb-4 shadow-lg">
-        <x-icon name="o-exclamation-triangle" class="w-6 h-6" />
-        <div>
-            <h3 class="font-bold">請修正以下錯誤：</h3>
-            <ul class="list-disc list-inside text-sm mt-1">
-                @foreach($errors->all() as $error)
-                    <li>{{ $error }}</li>
-                @endforeach
-            </ul>
-        </div>
-    </div>
-@endif
+		@if($errors->any())
+			<div class="alert alert-error mb-4 shadow-lg">
+				<x-icon name="o-exclamation-triangle" class="w-6 h-6" />
+				<div>
+					<h3 class="font-bold">請修正以下錯誤：</h3>
+					<ul class="list-disc list-inside text-sm mt-1">
+						@foreach($errors->all() as $error)
+							<li>{{ $error }}</li>
+						@endforeach
+					</ul>
+				</div>
+			</div>
+		@endif
 		<x-slot:title>
 			<div class="flex items-center gap-4">
 				<div class="p-3 bg-primary/10 rounded-2xl text-primary">
@@ -45,24 +45,27 @@
 		</x-slot:actions>
 	</x-header>
 
-    <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 pb-24">
         
-        {{-- 1. 單據資訊 --}}
-        <div class="col-span-12 lg:col-span-3 space-y-6 order-1">
+        
+        <div class="lg:col-span-8 space-y-6">
+			{{-- 1. 單據資訊 --}}
             <x-card title="單據資訊" shadow class="border-t-4 border-primary">
-                <div class="space-y-4">
-                    <x-choices label="客戶" wire:model="form.customer_id" :options="$customers" single icon="o-users" />
-                    <x-datetime 
+                
+				<div class="grid grid-cols-3 gap-4">
+					<x-choices label="客戶" wire:model="form.customer_id" :options="$customers" single icon="o-users" />
+					<x-datetime 
 						label="成交時間" 
 						wire:model="form.sold_at" 
 						icon="o-clock" 
 						type="datetime-local"
 					/>
 					
-					{{-- 顯示目前系統設定狀態，讓操作員知曉 --}}
+					{{-- 顯示目前系統設定狀態，讓操作員知曉 --}}						
 					@php
 						$isAuto = (bool) App\Models\Setting::get('so_auto_stock_out', true);
 					@endphp
+					
 					<div class="p-3 bg-base-200/50 rounded-lg border border-dashed border-base-300 flex items-center gap-3">
 						<x-icon :name="$isAuto ? 'o-check-circle' : 'o-pause-circle'" 
 								:class="$isAuto ? 'text-success' : 'text-warning'" />
@@ -71,22 +74,21 @@
 							{{ $isAuto ? '過帳即扣庫存' : '過帳僅存檔待後續進行出庫' }}
 						</div>
 					</div>
-		
-                    <x-select label="通路" wire:model="form.channel" :options="$shops" option-value="id" option-label="name" icon="o-building-storefront" />
-                    <x-select label="付款方式" wire:model="form.payment_method" :options="config('business.payment_methods')" icon="o-banknotes" />
+				
+					<x-select label="通路" wire:model="form.channel" :options="$shops" option-value="id" option-label="name" icon="o-building-storefront" />
+					<x-select label="付款方式" wire:model="form.payment_method" :options="config('business.payment_methods')" icon="o-banknotes" />
 					<x-select label="業務歸屬倉庫" wire:model="form.warehouse_id" :options="$warehouses" placeholder="請選擇倉庫"  icon="o-home-modern" />
-
-                    <x-textarea label="備註" wire:model="form.remark" rows="2" />
-                </div>
-            </x-card>
-        </div>
+				</div>
+				<div class="mt-4">
+					<x-textarea label="備註" wire:model="form.remark" rows="2"/>
+				</div>
+            </x-card>        
 		
-        {{-- 2. 商品明細 --}}
-		<div class="col-span-12 lg:col-span-6 order-2">
-			<x-card title="商品明細" shadow separator class="mb-4 lg:mb-0">
+			{{-- 2. 商品明細 --}}		
+			<x-card title="銷售明細" shadow separator class="mb-4 lg:mb-0 border-t-4 border-primary">
 				<x-slot:title>
 					<div class="flex justify-between items-center w-full">
-						<span class="font-bold text-xl text-base-content">商品明細</span>
+						<span class="font-bold text-xl text-base-content">銷售明細</span>
 						<div class="flex items-center gap-2">
 							<span class="text-xs opacity-50 hidden sm:inline">連續掃描模式</span>
 							<x-scanner.button mode="continuous" class="btn-xs btn-outline flex flex-row items-center gap-1" />
@@ -96,7 +98,7 @@
 
 				{{-- PC 端標頭 --}}
 				<div class="hidden lg:grid grid-cols-12 gap-4 mb-2 px-4 text-sm font-bold opacity-60">
-					<div class="col-span-5">商品名稱 (搜尋或掃描)</div>
+					<div class="col-span-5">商品 (搜尋或掃描)</div>
 					<div class="col-span-2 text-right">單價</div>
 					<div class="col-span-2">發貨倉庫</div>
 					<div class="col-span-1 text-right">數量</div>
@@ -256,7 +258,7 @@
 		</div>
 
         {{-- 3. 結算區塊 --}}
-        <div class="col-span-12 lg:col-span-3 order-3">
+        <div class="lg:col-span-4 space-y-6">
             <x-card title="結算" shadow class="bg-base-100 border-t-4 border-primary">
                 <div class="space-y-4">
                     {{-- 第一列：小計 --}}
