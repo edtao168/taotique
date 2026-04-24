@@ -7,7 +7,7 @@
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {{-- 左側：填寫表單 --}}
-        <x-card title="調撥資訊" shadow class="lg:col-span-2">
+        <x-card title="調撥資訊" shadow class="lg:col-span-2 border-t-4 border-primary">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <x-select 
                     label="1. 來源倉庫 (從哪裡移出)" 
@@ -15,6 +15,7 @@
                     :options="$warehouses" 
                     wire:model.live="from_warehouse_id" 
                     placeholder="請選擇來源"
+					class="bg-base-200"
                 />
                 
                 <x-select 
@@ -23,20 +24,20 @@
                     :options="$warehouses" 
                     wire:model.live="to_warehouse_id" 
                     placeholder="請選擇目標"
+					class="bg-base-200"
                 />
 
                 <x-choices 
-                    label="3. 選擇商品" 
-                    icon="o-cube" 
-                    wire:model="product_id" 
-                    :options="$products" 
-                    option-label="display_name"
-                    option-sub-label="sku"
-					placeholder="輸入商品名稱或 SKU 搜尋..."
-                    single 
-                    searchable
-					search-function="search" 
+                    label="選擇商品"
+					wire:model="product_id"
+					:options="$productOptions"
+					search-function="search"
 					debounce="300ms"
+					min-chars="1"
+					placeholder="請輸入SKU或商品名稱"
+					class="bg-base-200"
+					single
+					searchable
                 />
 
                 <x-input 
@@ -46,9 +47,9 @@
                     icon="o-hashtag" 
                 />
             </div>
-
-            <x-textarea label="備註 (選填)" wire:model="remark" placeholder="原因說明..." class="mt-4" rows="2" />
-
+<div class="mt-4" >
+            <x-textarea label="備註 (選填)" wire:model="remark" placeholder="原因說明..." rows="2" />
+</div>
             <x-slot:actions>
                 <x-button label="取消" :link="route('inventories.index')" />
 				<x-button label="確認執行調撥" icon="o-check" wire:click="transfer" class="btn-primary" spinner="transfer" />
