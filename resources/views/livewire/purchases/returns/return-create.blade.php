@@ -19,10 +19,18 @@
         </div>
     </x-card>
 
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+    <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
         {{-- 左側：可退回商品清單 --}}
         <div class="lg:col-span-2 space-y-4">
-            <x-card title="可退回商品清單" separator shadow progress-indicator="addItemToReturn">
+			<x-card title="退貨原因 / 內部備註" shadow class="bg-base-100 border-t-4 border-primary">
+                <x-textarea					
+                    wire:model="return_reason" 
+                    placeholder="請輸入退貨原因..." 
+                    rows="2" 
+                    shadow
+                />
+            </x-card>
+            <x-card title="可退回商品清單" separator shadow progress-indicator="addItemToReturn"  class="border-t-4 border-primary">
                 
                 {{-- PC 端表格 (md:block) --}}
                 <div class="hidden md:block">
@@ -74,71 +82,71 @@
         </div>
 
         {{-- 右側：退回明細 --}}
-<div class="lg:col-span-1">
-    <x-card title="退回明細" separator shadow class="sticky top-4">
-        @if(empty($return_items))
-            <div class="py-12 text-center">
-                <x-icon name="o-archive-box-x-mark" class="w-12 h-12 mx-auto opacity-20" />
-                <p class="text-sm opacity-50 mt-2">尚未選擇退回商品</p>
-            </div>
-        @else
-            <div class="space-y-3 mb-6 max-h-[50vh] overflow-y-auto pr-2">
-                @foreach($return_items as $index => $item)
-                    <div class="group flex justify-between items-start border-b border-base-200 pb-3">
-                        <div class="flex-1">
-                            <div class="text-sm font-bold truncate">{{ $item['product_name'] }}</div>
-                            <div class="flex items-center gap-2 mt-1">
-                                <x-input 
-                                        wire:model.live.debounce.500ms="return_items.{{ $index }}.quantity" 
-                                        type="number" 
-                                        class="input-xs w-20 font-mono" 
-                                        suffix="入" 
-                                    />
-                                <span class="text-[10px] opacity-40">x</span>
-                                <span class="text-xs font-mono opacity-70">{{ number_format($item['unit_price'], 2) }}</span>
-                            </div>
-                        </div>
-                        <div class="text-right ml-2">
-                            <div class="text-sm font-mono font-black text-error">
-                                {{ number_format($item['subtotal'], 2) }}
-                            </div>
-                            <x-button 
-                                icon="o-trash" 
-                                class="btn-ghost btn-xs text-error opacity-0 group-hover:opacity-100 transition-opacity" 
-                                wire:click="removeReturnItem({{ $index }})" 
-                            />
-                        </div>
-                    </div>
-                @endforeach
-            </div>
-			<div class="space-y-2 py-4 border-t border-dashed">
-				<x-input label="退回運費 (+)" wire:model.live="shipping_fee" prefix="{{ $purchase->currency }}" class="text-right font-mono" />
-				<x-input label="其他補償 (+)" wire:model.live="other_fees" prefix="{{ $purchase->currency }}" class="text-right font-mono" />
-			</div>
-        @endif
+		<div class="lg:col-span-2">
+			<x-card title="退回明細" separator shadow class="sticky top-4 border-t-4 border-primary">
+				@if(empty($return_items))
+					<div class="py-12 text-center">
+						<x-icon name="o-archive-box-x-mark" class="w-12 h-12 mx-auto opacity-20" />
+						<p class="text-sm opacity-50 mt-2">尚未選擇退回商品</p>
+					</div>
+				@else
+					<div class="space-y-3 mb-6 max-h-[50vh] overflow-y-auto pr-2">
+						@foreach($return_items as $index => $item)
+							<div class="group flex justify-between items-start border-b border-base-200 pb-3">
+								<div class="flex-1">
+									<div class="text-sm font-bold truncate">{{ $item['product_name'] }}</div>
+									<div class="flex items-center gap-2 mt-1">
+										<x-input 
+												wire:model.live.debounce.500ms="return_items.{{ $index }}.quantity" 
+												type="number" 
+												class="input-xs w-20 font-mono" 
+												suffix="入" 
+											/>
+										<span class="text-[10px] opacity-40">x</span>
+										<span class="text-xs font-mono opacity-70">{{ number_format($item['unit_price'], 2) }}</span>
+									</div>
+								</div>
+								<div class="text-right ml-2">
+									<div class="text-sm font-mono font-black text-error">
+										{{ number_format($item['subtotal'], 2) }}
+									</div>
+									<x-button 
+										icon="o-trash" 
+										class="btn-ghost btn-xs text-error opacity-0 group-hover:opacity-100 transition-opacity" 
+										wire:click="removeReturnItem({{ $index }})" 
+									/>
+								</div>
+							</div>
+						@endforeach
+					</div>
+					<div class="space-y-2 py-4 border-t border-dashed">
+						<x-input label="退回運費 (+)" wire:model.live="shipping_fee" prefix="{{ $purchase->currency }}" class="text-right font-mono" />
+						<x-input label="其他補償 (+)" wire:model.live="other_fees" prefix="{{ $purchase->currency }}" class="text-right font-mono" />
+					</div>
+				@endif
 
-        {{-- 總額和按鈕區域 - 移到 x-card 內部但不在 x-slot:actions 中 --}}
-        <div class="w-full space-y-4 mt-4 pt-4 border-t">
-            <div class="flex justify-between items-end">
-                <span class="text-xs opacity-60 uppercase tracking-widest">預計退款總額</span>
-                <div class="text-right">
-                    <div class="text-[10px] font-mono opacity-40">{{ $purchase->currency }}</div>
-                    <div class="text-2xl font-black font-mono text-primary leading-none">
-                        {{ number_format($this->totalReturnAmount, 2) }}
-                    </div>
-                </div>
-            </div>
+				{{-- 總額和按鈕區域 - 移到 x-card 內部但不在 x-slot:actions 中 --}}
+				<div class="w-full space-y-4 mt-4 pt-4 border-t">
+					<div class="flex justify-between items-end">
+						<span class="text-xs opacity-60 uppercase tracking-widest">預計退款總額</span>
+						<div class="text-right">
+							<div class="text-[10px] font-mono opacity-40">{{ $purchase->currency }}</div>
+							<div class="text-2xl font-black font-mono text-primary leading-none">
+								{{ number_format($this->totalReturnAmount, 2) }}
+							</div>
+						</div>
+					</div>
 
-            <x-button 
-                label="提交採購退回單" 
-                icon="o-check" 
-                class="btn-primary w-full btn-lg" 
-                wire:click="save" 
-                spinner 
-                :disabled="empty($return_items)"
-            />
-        </div>
-    </x-card>
-</div>
+					<x-button 
+						label="提交採購退回單" 
+						icon="o-check" 
+						class="btn-primary w-full btn-lg" 
+						wire:click="save" 
+						spinner 
+						:disabled="empty($return_items)"
+					/>
+				</div>
+			</x-card>
+		</div>
     </div>
 </div>
