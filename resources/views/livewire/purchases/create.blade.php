@@ -34,7 +34,7 @@
         {{-- 左側：表單主要內容 --}}
         <div class="lg:col-span-8 space-y-6">
             {{-- 基本資訊卡片 --}}
-            <x-card shadow class="border-none bg-base-100/60 backdrop-blur">
+            <x-card title="單據資訊" shadow class="bg-base-100/60 backdrop-blur border-t-4 border-primary">
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <x-choices label="供應商" wire:model.live="supplier_id" :options="$suppliers" searchable single icon="o-truck" />
                     <x-datetime label="採購日期" wire:model.live="purchased_at" icon="o-calendar" />
@@ -55,10 +55,10 @@
             </x-card>
 
 			{{-- 採購明細區塊 --}}
-			<x-card title="採購明細" separator shadow class="border-none bg-base-100/60 backdrop-blur">
+			<x-card separator shadow class="bg-base-100/60 backdrop-blur border-t-4 border-primary">
 				<x-slot:title>
 					<div class="flex justify-between items-center w-full">
-						<span class="font-bold text-xl text-base-content">商品明細</span>
+						<span class="font-bold text-xl text-base-content">採購明細</span>
 						<div class="flex items-center gap-2">
 							<span class="text-xs opacity-50 hidden sm:inline">連續掃描模式</span>
 							<x-scanner.button mode="continuous" class="btn-xs btn-outline flex flex-row items-center gap-1" />
@@ -122,7 +122,7 @@
 							<div class="block lg:hidden space-y-3">
 								<div class="flex justify-between items-start">
 									<div class="flex-1">
-										<div class="text-xs font-bold opacity-50 mb-1 uppercase">商品項目</div>
+										<div class="text-xs font-bold opacity-50 mb-1 uppercase">採購明細</div>
 										@if(isset($item['product_id']) && $item['product_id'] > 0)
 											<div class="flex items-center justify-between p-2 border rounded-lg bg-base-100 shadow-sm">
 												<span class="font-bold text-sm">{{ $item['name'] }}</span>
@@ -162,18 +162,18 @@
 
 		{{-- 右側：費用結算區 --}}
 		<div class="lg:col-span-4 space-y-6">
-			<x-card shadow class="border-none bg-base-100 sticky top-6">
+			<x-card shadow class="bg-base-100 sticky top-6 border-t-4 border-primary">
 				<div class="space-y-6">
 					{{-- 費用輸入區 --}}
 					<div class="space-y-4">
 						<div class="flex items-center gap-2 mb-2">
 							<x-icon name="o-calculator" class="w-5 h-5 text-primary" />
-							<span class="font-bold">費用與折扣</span>
+							<span class="font-bold">結算</span>
 						</div>
-						<x-input label="運費" wire:model.live.debounce.500ms="shipping_fee" icon="o-truck" class="text-right font-mono" />
-						<x-input label="稅金" wire:model.live.debounce.500ms="tax" icon="o-receipt-percent" class="text-right font-mono" />
-						<x-input label="其他費用" wire:model.live.debounce.500ms="other_fees" icon="o-plus-circle" class="text-right font-mono" />
-						<x-input label="折扣金額" wire:model.live.debounce.500ms="discount" icon="o-minus-circle" class="text-right font-mono text-error" />
+						<x-input label="運費" wire:model.live.debounce.500ms="shipping_fee" icon="o-truck" class="input-sm text-right font-mono" />
+						<x-input label="稅金" wire:model.live.debounce.500ms="tax" icon="o-receipt-percent" class="input-sm text-right font-mono" />
+						<x-input label="其他費用" wire:model.live.debounce.500ms="other_fees" icon="o-plus-circle" class="input-sm text-right font-mono" />
+						<x-input label="折扣金額" wire:model.live.debounce.500ms="discount" icon="o-minus-circle" class="input-sm text-right font-mono text-error" />
 					</div>
 
 					<div class="divider"></div>
@@ -194,7 +194,7 @@
 					{{-- 匯率轉換 --}}
 					<div class="pt-2 px-1">
 						<x-input label="評估匯率" wire:model.live="exchange_rate" icon="o-arrows-right-left" :readonly="$currency === 'TWD'" 
-							class="text-right font-mono {{ $currency === 'TWD' ? 'bg-base-200' : '' }}" />
+							class="input-sm text-right font-mono {{ $currency === 'TWD' ? 'bg-base-200' : '' }}" />
 					</div>
 
 					{{-- 最終 TWD 成本 --}}

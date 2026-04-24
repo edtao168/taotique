@@ -129,7 +129,7 @@
 				<div class="space-y-3">
 					<div class="flex items-center gap-2 mb-2">
 						<x-icon name="o-calculator" class="w-5 h-5 text-primary" />
-						<span class="font-bold text-sm">費用與折扣項目</span>
+						<span class="font-bold text-sm">結算</span>
 					</div>
 					
 					<div class="bg-base-200/30 rounded-xl p-4 space-y-2 border border-dashed">
