@@ -218,8 +218,8 @@
 								label="退貨" 
 								icon="o-arrow-path" 
 								:link="route('sales.returns.create', ['sale' => $selectedSale->id])"
-								class="btn-outline-dark flex-1"	
-							/>							
+								class="btn-outline-dark flex-1"								
+							/>					
 						@else
 							<x-button 
 								label="出庫" 

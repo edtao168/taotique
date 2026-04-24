@@ -31,10 +31,10 @@ class ReturnCreate extends Component
     /**
      * 掛載時載入原訂單資料
      */
-    public function mount($sale)
-    {
-        $this->sale = Sale::with('returns')->findOrFail($sale);
-
+    public function mount(Sale $sale)
+	{
+		$this->sale = $sale->load('returns');
+		// $this->sale = $sale->load(['returns', 'customer', 'items.product']);若找不到客戶時可試試
 		// 檢查是否還能進行退貨（可依據業務需求決定是完全鎖定，還是檢查剩餘可退數量）
 		if ($this->sale->status === 'completed' && $this->sale->hasReturnRecords()) {
 			// 如果您的業務邏輯是「一單僅限一退」，則在此阻斷
@@ -67,7 +67,7 @@ class ReturnCreate extends Component
         $this->warehouse_id = $firstItem ? $firstItem->warehouse_id : null;
         
         // 預設帶入一筆費用供填寫
-        $this->addFee();
+        // $this->addFee();
     }
 	
 	/**
@@ -87,17 +87,22 @@ class ReturnCreate extends Component
 				return;
 			}
 		}
+		
+		// 準備數值 (嚴謹遵循系統 DECIMAL 16,4 規範)
+		$unitPrice = (string)$saleItem->price; // 原銷售單價
+		$qty = '1'; // 預設退貨數量
+		$subtotal = bcmul($unitPrice, $qty, 4);
 
-		// 【關鍵修正】：不要直接存入整個 Eloquent Model
 		// 手動建立一個純陣列結構，確保 Livewire 序列化不會遺失資料
 		$this->return_items[] = [
 			'sale_item_id' => $saleItem->id,
 			'product_id'   => $saleItem->product_id,
-			'name'         => $saleItem->product->name,
+			'name'         => $saleItem->product?->full_display_name ?? '未命名商品',
 			'barcode'      => $saleItem->product->barcode,
 			'unit_price'   => $saleItem->price,
 			'quantity'     => 1,
-			'max_qty'      => $saleItem->quantity, // 記錄上限以供驗證
+			'max_qty'      => $saleItem->quantity,
+			'subtotal'     => $subtotal,
 		];
 	}
     

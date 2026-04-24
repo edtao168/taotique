@@ -107,17 +107,24 @@ class Create extends Component
         ];
     }
 
-    protected function messages()
-    {
-        return [
-            'form.customer_id.required' => '請選擇客戶',
-            'form.warehouse_id.required' => '請選擇業務歸屬倉庫',
-            'form.invoice_number.required' => '單號不能為空，請重新整理頁面',
-            'form.invoice_number.unique' => '單號已存在',
-            'items.required' => '請至少添加一個商品',
-            'items.*.product_id.required' => '請選擇商品',
-        ];
-    }
+	/**
+     * 自動生成如「客戶 是必填的」這樣的訊息。
+     */
+    public function validationAttributes()
+	{
+		return [
+			'form.customer_id'    => '客戶',
+			'form.sold_at'        => '成交時間',
+			'form.warehouse_id'   => '業務歸屬倉庫',
+			'form.invoice_number' => '銷售單號',
+			'form.channel'        => '通路',
+			'items'               => '商品明細',
+			'items.*.product_id'  => '商品',
+			'items.*.quantity'    => '數量',
+			'items.*.price'       => '單價',
+		];
+	}
+
     
     /**
      * 【關鍵修正】即時顯示驗證錯誤
