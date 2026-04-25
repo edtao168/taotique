@@ -1,12 +1,20 @@
-{{-- 檔案路徑：resources/views/livewire/sales/create.blade.php --}}
+{{-- resources/views/livewire/sales/create.blade.php --}}
 <div x-data="{ 
         atBottom: false,
         checkScroll() {
-            this.atBottom = (window.innerHeight + window.scrollY) >= (document.body.offsetHeight - 100);
+            // 修正計算公式：處理手機端瀏覽器工具列縮放問題
+            let scrollHeight = Math.max(
+                document.body.scrollHeight, document.documentElement.scrollHeight,
+                document.body.offsetHeight, document.documentElement.offsetHeight,
+                document.body.clientHeight, document.documentElement.clientHeight
+            );
+            
+            // 判斷是否接近底部 (預留 150px 緩衝區)
+            this.atBottom = (window.innerHeight + window.scrollY) >= (scrollHeight - 150);
         }
      }" 
      x-init="checkScroll()"
-     @scroll.window="checkScroll()">
+     @scroll.window.debounce.50ms="checkScroll()">
 	 
     <x-header separator progress-indicator>
 	    {{-- 驗證錯誤顯示 --}}
@@ -51,8 +59,8 @@
         <div class="lg:col-span-8 space-y-6">
 			{{-- 1. 單據資訊 --}}
             <x-card title="單據資訊" shadow class="border-t-4 border-primary">
-                
-				<div class="grid grid-cols-3 gap-4">
+                {{-- 將欄位改為：手機端 1 欄 / 平板 2 欄 / 電腦 4 欄 --}}
+				<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
 					<x-choices label="客戶" wire:model="form.customer_id" :options="$customers" single icon="o-users" />
 					<x-datetime 
 						label="成交時間" 
@@ -99,8 +107,8 @@
 				{{-- PC 端標頭 --}}
 				<div class="hidden lg:grid grid-cols-12 gap-4 mb-2 px-4 text-sm font-bold opacity-60">
 					<div class="col-span-5">商品 (搜尋或掃描)</div>
-					<div class="col-span-2 text-right">單價</div>
 					<div class="col-span-2">發貨倉庫</div>
+					<div class="col-span-2 text-right">單價</div>					
 					<div class="col-span-1 text-right">數量</div>
 					<div class="col-span-2 text-right text-primary">小計</div>
 				</div>
@@ -141,6 +149,17 @@
 									@endif
 								</div>
 
+								{{-- 倉庫 --}}
+								<div>
+									<div class="text-xs font-bold opacity-50 mb-1">發貨倉庫</div>
+									<x-select 
+										wire:model.live="items.{{ $index }}.warehouse_id" 
+										:options="$warehouses"
+										placeholder="請選擇"
+										class="text-sm"
+									/>
+								</div>
+
 								{{-- 單價 & 數量 並排 --}}
 								<div class="grid grid-cols-2 gap-3">
 									<div>
@@ -162,17 +181,6 @@
 									</div>
 								</div>
 
-								{{-- 倉庫 --}}
-								<div>
-									<div class="text-xs font-bold opacity-50 mb-1">發貨倉庫</div>
-									<x-select 
-										wire:model.live="items.{{ $index }}.warehouse_id" 
-										:options="$warehouses"
-										placeholder="請選擇"
-										class="text-sm"
-									/>
-								</div>
-
 								{{-- 小計 --}}
 								<div class="flex justify-between items-center pt-2 border-t border-dashed">
 									<span class="text-xs font-bold opacity-50">小計</span>
@@ -182,7 +190,7 @@
 								</div>
 							</div>
 
-							{{-- 桌面端：水平 Grid 佈局 --}}
+							{{-- PC端：水平 Grid 佈局 --}}
 							<div class="hidden lg:grid grid-cols-12 gap-3 lg:gap-4 items-center">
 								
 								{{-- 商品選擇 (占 5 格) --}}
@@ -332,20 +340,24 @@
     </div>
 
     {{-- 滾動提示 --}}
-    <div x-show="!atBottom" 
-         x-transition:enter="transition ease-out duration-300"
-         x-transition:enter-start="opacity-0 transform translate-y-4"
-         x-transition:leave="transition ease-in duration-300"
-         x-transition:leave-end="opacity-0 transform translate-y-4"
-         class="hidden lg:flex fixed bottom-6 right-6 z-50 pointer-events-none">
-        
-        <div class="flex flex-col items-center">
-            <span class="text-xs font-bold text-orange-600 bg-orange-50 px-2 py-1 rounded-full shadow-sm mb-1">下面還有</span>
-            <div class="bg-orange-500 text-white p-3 rounded-full shadow-lg animate-bounce">
-                <x-icon name="o-chevron-double-down" class="w-6 h-6" />
-            </div>
-        </div>
-    </div>
+	<div x-show="!atBottom" 
+		 x-transition:enter="transition ease-out duration-300"
+		 x-transition:enter-start="opacity-0 transform translate-y-4"
+		 x-transition:leave="transition ease-in duration-300"
+		 x-transition:leave-end="opacity-0 transform translate-y-4"
+		 {{-- 修正處：確保手機端也能顯示 (flex)，並調整在手機端的位置 --}}
+		 class="flex fixed bottom-20 right-4 lg:bottom-6 lg:right-6 z-50 pointer-events-none">
+		
+		<div class="flex flex-col items-center">
+			{{-- 手機端文字縮小 --}}
+			<span class="text-[10px] lg:text-xs font-bold text-orange-600 bg-orange-50 px-2 py-1 rounded-full shadow-sm mb-1">
+				下滑查看金額
+			</span>
+			<div class="bg-orange-500 text-white p-2 lg:p-3 rounded-full shadow-lg animate-bounce">
+				<x-icon name="o-chevron-down" class="w-4 h-4 lg:w-6 lg:h-6" />
+			</div>
+		</div>
+	</div>
 
     <x-scanner.modal />
     <x-scanner.scripts />
