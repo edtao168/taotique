@@ -81,11 +81,12 @@ Route::middleware(['auth'])->group(function () {
     Route::prefix('inventories')->name('inventories.')->group(function () {       
         Route::get('/', InventoryIndex::class)->name('index');
 		Route::get('/transfers', Transfers::class)->name('transfers');
+		Route::get('/stocktakes', Stocktakes::class)->name('stocktakes');
+        Route::get('/movements', Movements::class)->name('movements');
 		// --- 拆裝組合作業 ---
         Route::get('/conversions', ConversionIndex::class)->name('conversions.index');
-        Route::get('/conversions/create', ConversionCreate::class)->name('conversions.create');
-        Route::get('/stocktakes', Stocktakes::class)->name('stocktakes');
-        Route::get('/movements', Movements::class)->name('movements');
+        Route::get('/conversions/create', ConversionCreate::class)->name('conversions.create');        
+		Route::get('/conversions/{conversion}/edit', ConversionCreate::class)->name('conversions.edit');
     });
 	
     // --- 商品管理 (Products) ---

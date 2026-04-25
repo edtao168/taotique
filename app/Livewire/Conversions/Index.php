@@ -1,4 +1,4 @@
-<?php
+<?php // app/Livewire/Conversions/Index.php
 
 namespace App\Livewire\Conversions;
 
@@ -13,36 +13,50 @@ class Index extends Component
 
     public string $search = '';
     public array $sortBy = ['column' => 'process_date', 'direction' => 'desc'];
+    
+    // 控制 Drawer 顯示與儲存選中資料
+    public bool $showDrawer = false;
+    public ?Conversion $selectedConversion = null;
 
-    // 搜尋與過濾
     public function updatedSearch()
     {
         $this->resetPage();
     }
 
-    public function delete(Conversion $conversion)
+    /**
+     * 開啟詳情 Drawer
+     */
+    public function showDetails(int $id)
     {
-        // 僅刪除單據紀錄，庫存回滾邏輯通常建議另外處理或限制刪除已過帳單據
-        $conversion->delete();
-        $this->success('紀錄已刪除');
+        $this->selectedConversion = Conversion::with(['items.product', 'user', 'warehouse'])->find($id);
+        $this->showDrawer = true;
+    }
+
+    public function delete(int $id)
+    {
+        $conversion = Conversion::find($id);
+        if ($conversion) {
+            $conversion->delete();
+            $this->showDrawer = false;
+            $this->success('紀錄已刪除');
+        }
     }
 
     public function render()
     {
         $headers = [
             ['key' => 'id', 'label' => '#', 'class' => 'w-16'],
-            ['key' => 'order_no', 'label' => '轉換單號', 'class' => 'font-semibold'],
+            ['key' => 'conversion_no', 'label' => '轉換單號', 'class' => 'font-semibold'],
             ['key' => 'process_date', 'label' => '作業日期'],
             ['key' => 'user.name', 'label' => '操作員'],
             ['key' => 'remark', 'label' => '備註', 'sortable' => false],
-            ['key' => 'created_at', 'label' => '建立時間'],
         ];
 
         $conversions = Conversion::query()
-            ->with(['user', 'items'])
-            ->where('store_id', 1) // 初期預設為 1
+            ->with(['user'])
+            ->where('shop_id', 1) 
             ->when($this->search, function ($query) {
-                $query->where('order_no', 'like', "%{$this->search}%")
+                $query->where('conversion_no', 'like', "%{$this->search}%")
                       ->orWhere('remark', 'like', "%{$this->search}%");
             })
             ->orderBy($this->sortBy['column'], $this->sortBy['direction'])

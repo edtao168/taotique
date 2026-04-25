@@ -1,37 +1,77 @@
 <?php // app/Livewire/Conversions/Create.php
-//商品選單比照盤點單，但因為這裏需要兩組商品選單，所以還是有些差異
 
 namespace App\Livewire\Conversions;
 
 use App\Models\Conversion;
 use App\Models\Product;
 use App\Models\Warehouse;
+use App\Traits\HasProductSearch;
+use App\Traits\HasShop;
 use Livewire\Component;
 use Mary\Traits\Toast;
 use Illuminate\Support\Facades\DB;
 
 class Create extends Component
 {
-    use Toast;
+    use Toast, HasShop, HasProductSearch;
 
-    public $process_date;
+    public ?Conversion $conversion = null;
+    public bool $isEdit = false;
+	public $conversion_no;
+	public $process_date;
+    public $warehouse_id; // Header 預設倉庫
     public $remark;
-    public $store_id = 1;
     public array $items = [];
-    
-    // 將搜尋結果分開
-    public array $input_products = [];  // 原料搜尋結果
-    public array $output_products = []; // 成品搜尋結果
+    public array $productOptions = []; 
 
-    public function mount()
+    // mount 增加參數注入
+    public function mount(?Conversion $conversion = null)
     {
+        if ($conversion && $conversion->exists) {
+            $this->conversion = $conversion;
+            $this->isEdit = true;
+            $this->fillForm(); // 填充現有資料
+        } else {
+            $this->initNewRecord(); // 初始化新單據
+        }
+        
+        $this->search();
+    }
+
+    // 初始化新單據邏輯
+    protected function initNewRecord()
+    {
+        $prefix = config('business.ic_prefix', 'IC-');
+        $datePart = now()->format('Ymd');
+        $count = Conversion::whereDate('created_at', now())->count() + 1;
+        $this->conversion_no = $prefix . $datePart . '-' . str_pad($count, 4, '0', STR_PAD_LEFT);
         $this->process_date = now()->format('Y-m-d');
+        $this->warehouse_id = Warehouse::first()?->id;
+        
         $this->addItem(1); 
         $this->addItem(2);
-        
-        // 初始載入
-        $this->searchInputs();
-        $this->searchOutputs();
+    }
+
+    // 填充現有資料邏輯 (修改模式)
+    protected function fillForm()
+    {
+        $this->conversion_no = $this->conversion->conversion_no;
+        $this->process_date = $this->conversion->process_date->format('Y-m-d');
+        $this->warehouse_id = $this->conversion->warehouse_id;
+        $this->remark = $this->conversion->remark;
+        $this->shop_id = $this->conversion->shop_id;
+
+        // 將明細轉為陣列供前端呈現
+        $this->items = $this->conversion->items->map(function ($item) {
+            return [
+                'id' => $item->id, // 修改時需保留 ID 以便更新
+                'type' => $item->type,
+                'product_id' => $item->product_id,
+                'warehouse_id' => $item->warehouse_id,
+                'quantity' => $item->quantity,
+                'cost_snapshot' => $item->cost_snapshot,
+            ];
+        })->toArray();
     }
 
     public function addItem(int $type)
@@ -39,77 +79,54 @@ class Create extends Component
         $this->items[] = [
             'type' => $type,
             'product_id' => null,
-            'warehouse_id' => 1,
+            'warehouse_id' => $this->warehouse_id, // 預設跟隨 Header
             'quantity' => '1.0000',
             'cost_snapshot' => '0.0000',
-            'store_id' => $this->store_id,
         ];
-    }
-
-    public function removeItem(int $index)
-    {
-        unset($this->items[$index]);
-        $this->items = array_values($this->items);
-    }
-
-    /**
-     * 搜尋原料 (Type 1)
-     */
-    public function searchInputs(string $value = '')
-    {
-        $this->input_products = Product::query()
-            ->where(fn($q) => $q->where('sku', 'like', "%{$value}%")->orWhere('name', 'like', "%{$value}%"))
-            // 可以在此加入過濾邏輯，例如：->where('category', 'raw_material')
-            ->take(10)
-            ->get()
-            ->map(fn($p) => [
-                'id' => $p->id,
-                'display_name' => "[原料] {$p->sku} - {$p->name}",
-            ])
-            ->toArray();
-    }
-
-    /**
-     * 搜尋成品 (Type 2)
-     */
-    public function searchOutputs(string $value = '')
-    {
-        $this->output_products = Product::query()
-            ->where(fn($q) => $q->where('sku', 'like', "%{$value}%")->orWhere('name', 'like', "%{$value}%"))
-            // 可以在此加入過濾邏輯，例如：->where('category', 'finished_good')
-            ->take(10)
-            ->get()
-            ->map(fn($p) => [
-                'id' => $p->id,
-                'display_name' => "[成品] {$p->sku} - {$p->name}",
-            ])
-            ->toArray();
     }
 
     public function save()
     {
         $this->validate([
+            'warehouse_id' => 'required',
             'process_date' => 'required|date',
-            'items.*.product_id' => 'required|exists:products,id',
+            'items.*.product_id' => 'required',
+            'items.*.warehouse_id' => 'required',
             'items.*.quantity' => 'required|numeric|min:0.0001',
         ]);
 
         DB::transaction(function () {
-            $conversion = Conversion::create([
-                'store_id' => $this->store_id,
-                'process_date' => $this->process_date,
-                'user_id' => auth()->id(),
-                'remark' => $this->remark,
-            ]);
-
-            foreach ($this->items as $item) {
-                $conversion->items()->create($item);
+            if ($this->isEdit) {
+                // 修改邏輯
+                $this->conversion->update([
+                    'process_date' => $this->process_date,
+                    'remark' => $this->remark,
+                    'warehouse_id' => $this->warehouse_id,
+                ]);
+                // 簡易處理：刪除舊明細重新建立 (或根據 ID 更新)
+                $this->conversion->items()->delete();
+                foreach ($this->items as $item) {
+                    $this->conversion->items()->create($item);
+                }
+            } else {
+                // 原有的新增邏輯
+                $conversion = Conversion::create([
+                    'shop_id' => $this->shop_id,
+                    'warehouse_id' => $this->warehouse_id,
+                    'conversion_no' => $this->conversion_no,
+                    'process_date' => $this->process_date,
+                    'user_id' => auth()->id(),
+                    'remark' => $this->remark,
+                ]);
+                foreach ($this->items as $item) {
+                    $conversion->items()->create($item);
+                }
+                $conversion->post(); 
             }
-            $conversion->post(); 
         });
 
-        $this->success('拆裝作業已完成');
-        return redirect()->to('/conversions');
+        $this->success($this->isEdit ? '作業已修改' : '拆裝作業已完成');
+        return redirect()->route('inventories.conversions.index');
     }
 
     public function render()

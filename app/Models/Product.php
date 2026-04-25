@@ -29,7 +29,10 @@ class Product extends Model
 		'is_unique' => 'boolean',
         'is_active' => 'boolean',
     ];
-		
+	
+	/**
+     * 定義 full_display_name 屬性	
+     */	
 	public function getFullDisplayNameAttribute()
     {
         return "[{$this->sku}] {$this->name}";
