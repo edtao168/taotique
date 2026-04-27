@@ -10,7 +10,7 @@
         <x-card title="調撥資訊" shadow class="lg:col-span-2 border-t-4 border-primary">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <x-select 
-                    label="1. 來源倉庫 (從哪裡移出)" 
+                    label="來源倉庫 (從哪裡移出)" 
                     icon="o-arrow-up-tray" 
                     :options="$warehouses" 
                     wire:model.live="from_warehouse_id" 
@@ -19,7 +19,7 @@
                 />
                 
                 <x-select 
-                    label="2. 目標倉庫 (移入哪裡)" 
+                    label="目標倉庫 (移入哪裡)" 
                     icon="o-arrow-down-tray" 
                     :options="$warehouses" 
                     wire:model.live="to_warehouse_id" 
@@ -41,7 +41,7 @@
                 />
 
                 <x-input 
-                    label="4. 調撥數量" 
+                    label="調撥數量" 
                     type="number" 
                     wire:model="quantity" 
                     icon="o-hashtag" 
