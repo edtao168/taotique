@@ -54,15 +54,24 @@
 	</x-header>
 
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 pb-24">
-        
-        
         <div class="lg:col-span-8 space-y-6">
 			{{-- 1. 單據資訊 --}}
             <x-card title="單據資訊" shadow class="border-t-4 border-primary">
                 {{-- 將欄位改為：手機端 1 欄 / 平板 2 欄 / 電腦 4 欄 --}}
 				<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-					<x-choices label="客戶" wire:model="form.customer_id" :options="$customers" single icon="o-users" />
+					<x-choices 
+						id="form-customer-id"
+						name="form[customer_id]"
+						label="客戶" 
+						wire:model="form.customer_id" 
+						:options="$customers" 
+						single 
+						icon="o-users" 
+					/>
+
 					<x-datetime 
+						id="form-sold-at"
+						name="form[sold_at]"
 						label="成交時間" 
 						wire:model="form.sold_at" 
 						icon="o-clock" 
@@ -83,12 +92,53 @@
 						</div>
 					</div>
 				
-					<x-select label="通路" wire:model="form.channel" :options="$shops" option-value="id" option-label="name" icon="o-building-storefront" />
-					<x-select label="付款方式" wire:model="form.payment_method" :options="config('business.payment_methods')" icon="o-banknotes" />
-					<x-select label="業務歸屬倉庫" wire:model="form.warehouse_id" :options="$warehouses" placeholder="請選擇倉庫"  icon="o-home-modern" />
+					<x-choices 
+						id="form-shop-id"
+						name="form[shop_id]"
+						label="分店" 
+						wire:model="form.shop_id" 
+						:options="$shops"
+						single 
+						icon="o-building-storefront"
+					/>
+
+					<x-choices 
+						id="form-channel-id"
+						name="form[channel_id]"
+						label="銷售通路" 
+						wire:model="form.channel_id"
+						:options="$channels"
+						single
+						icon="o-globe-alt"
+					/>
+					
+					<x-select 
+						id="form-payment-method"
+						name="form[payment_method]"
+						label="付款方式" 
+						wire:model="form.payment_method" 
+						:options="config('business.payment_methods')" 
+						icon="o-banknotes" 
+					/>
+
+					<x-select 
+						id="form-warehouse-id"
+						name="form[warehouse_id]"
+						label="業務歸屬倉庫" 
+						wire:model="form.warehouse_id" 
+						:options="$warehouses" 
+						placeholder="請選擇倉庫"  
+						icon="o-home-modern" 
+					/>
 				</div>
 				<div class="mt-4">
-					<x-textarea label="備註" wire:model="form.remark" rows="2"/>
+					<x-textarea 
+						id="form-remark"
+						name="form[remark]"
+						label="備註" 
+						wire:model="form.remark" 
+						rows="2"
+					/>
 				</div>
             </x-card>        
 		
@@ -115,143 +165,9 @@
 
 				<div class="space-y-3">
 					@forelse($items as $index => $item)
-						<div wire:key="sale-row-v1-{{ $index }}-{{ $item['product_id'] ?? 'new' }}" class="group relative p-3 lg:p-4 hover:bg-base-200/40 transition-colors border-b border-base-200 last:border-b-0">
-							
-							{{-- 刪除按鈕 --}}
-							<div class="absolute right-2 top-2 lg:top-1/2 lg:-translate-y-1/2 z-10">
-								<x-button 
-									icon="o-trash" 
-									class="btn-error btn-xs lg:btn-ghost lg:opacity-0 lg:group-hover:opacity-100 transition-all" 
-									wire:click="removeRow({{ $index }})" 
-								/>
-							</div>
-
-							{{-- 手機端：垂直佈局 --}}
-							<div class="block lg:hidden space-y-3">
-								{{-- 商品名稱 --}}
-								<div>
-									<div class="text-xs font-bold opacity-50 mb-1">商品</div>
-									@if(isset($items[$index]['product_id']) && $items[$index]['product_id'] > 0)
-										<div class="flex items-center justify-between p-2 border rounded-lg bg-base-200/50">
-											<span class="font-bold text-sm">{{ $item['name'] }}</span>
-											<x-button icon="o-pencil" class="btn-ghost btn-xs" wire:click="$set('items.{{ $index }}.product_id', null)" />
-										</div>
-									@else
-										<x-choices 
-											wire:model.live="items.{{ $index }}.product_id" 
-											:options="$productOptions"
-											search-function="search"
-											option-label="name"
-											searchable 
-											single
-											debounce="300ms"
-										/>
-									@endif
-								</div>
-
-								{{-- 倉庫 --}}
-								<div>
-									<div class="text-xs font-bold opacity-50 mb-1">發貨倉庫</div>
-									<x-select 
-										wire:model.live="items.{{ $index }}.warehouse_id" 
-										:options="$warehouses"
-										placeholder="請選擇"
-										class="text-sm"
-									/>
-								</div>
-
-								{{-- 單價 & 數量 並排 --}}
-								<div class="grid grid-cols-2 gap-3">
-									<div>
-										<div class="text-xs font-bold opacity-50 mb-1">單價</div>
-										<x-input 
-											wire:model.live.debounce.500ms="items.{{ $index }}.price" 
-											class="font-mono text-right text-sm"
-											placeholder="0"
-										/>
-									</div>
-									<div>
-										<div class="text-xs font-bold opacity-50 mb-1">數量</div>
-										<x-input 
-											type="number" 
-											wire:model.live.debounce.500ms="items.{{ $index }}.quantity" 
-											class="font-mono text-right text-sm"
-											step="0.0001"
-										/>
-									</div>
-								</div>
-
-								{{-- 小計 --}}
-								<div class="flex justify-between items-center pt-2 border-t border-dashed">
-									<span class="text-xs font-bold opacity-50">小計</span>
-									<span class="font-mono font-bold text-primary text-lg">
-										{{ number_format($item['subtotal'] ?? 0, 2) }}
-									</span>
-								</div>
-							</div>
-
-							{{-- PC端：水平 Grid 佈局 --}}
-							<div class="hidden lg:grid grid-cols-12 gap-3 lg:gap-4 items-center">
-								
-								{{-- 商品選擇 (占 5 格) --}}
-								<div class="col-span-5">
-									@if(isset($items[$index]['product_id']) && $items[$index]['product_id'] > 0)
-										<div class="flex items-center justify-between p-2 border rounded-lg bg-base-200/50">
-											<div class="flex flex-col">                
-												<span class="font-bold">{{ $item['name'] }}</span>
-											</div>
-											<x-button icon="o-pencil" class="btn-ghost btn-xs" wire:click="$set('items.{{ $index }}.product_id', null)" />
-										</div>
-									@else
-										<x-choices 
-											wire:model.live="items.{{ $index }}.product_id" 
-											:options="$productOptions"
-											search-function="search"
-											option-label="name"
-											searchable 
-											single
-											debounce="300ms"
-										/>
-									@endif
-								</div>
-
-								{{-- 單價 (占 2 格) --}}
-								<div class="col-span-2">
-									<x-input 
-										wire:model.live.debounce.500ms="items.{{ $index }}.price" 
-										class="font-mono text-right focus:bg-primary/5"
-										placeholder="0"
-									/>
-								</div>
-
-								{{-- 發貨倉庫 (占 2 格) --}}
-								<div class="col-span-2">
-									<x-select 
-										wire:model.live="items.{{ $index }}.warehouse_id" 
-										:options="$warehouses"
-										placeholder="請選擇"
-									/>
-								</div>
-
-								{{-- 數量 (占 1 格) --}}
-								<div class="col-span-1">
-									<x-input 
-										type="number" 
-										wire:model.live.debounce.500ms="items.{{ $index }}.quantity" 
-										class="font-mono text-right px-1"
-										step="0.0001"
-									/>
-								</div>
-
-								{{-- 小計 (占 2 格) --}}
-								<div class="col-span-2 text-right">
-									<span class="font-mono font-black text-primary text-lg lg:text-base">
-										{{ number_format($item['subtotal'] ?? 0, 0) }}
-									</span>
-								</div>
-							</div>
-						</div>
-					@empty
+						<x-sale-row :$index :$item :$warehouses :$productOptions mode="pc" />
+						<x-sale-row :$index :$item :$warehouses :$productOptions mode="mobile" />
+					@empty        
 						<div class="p-12 text-center bg-base-200/20 rounded-b-lg border-dashed border-2">
 							<x-icon name="o-shopping-cart" class="w-12 h-12 mx-auto opacity-20" />
 							<p class="mt-2 opacity-50 italic text-sm">尚未加入任何銷售商品，請開始掃描或搜尋</p>
@@ -283,6 +199,8 @@
 							
 							@foreach(collect(config('business.fee_types'))->where('target', 'customer') as $field => $config)
 								<x-input 
+									id="fee-customer-{{ $field }}"
+									name="fee_customer_{{ $field }}"
 									label="{{ $config['name'] }}" 
 									wire:model.live.debounce.500ms="form.{{ $field }}"
 									prefix="{{ $config['operator'] === 'add' ? '+' : '-' }}"
@@ -307,6 +225,8 @@
 							
 							@foreach(collect(config('business.fee_types'))->where('target', 'seller') as $field => $config)
 								<x-input 
+									id="fee-seller-{{ $field }}"
+									name="fee_seller_{{ $field }}"
 									label="{{ $config['name'] }}" 
 									wire:model.live.debounce.500ms="form.{{ $field }}" 
 									prefix="{{ $config['operator'] === 'add' ? '+' : '-' }}"
@@ -318,7 +238,14 @@
 							@endforeach
 							
 							@if(!isset(config('business.fee_types')['order_adjustment']))
-								<x-input label="帳款調整" wire:model.live.debounce.500ms="form.order_adjustment" prefix="±" class="input-sm text-right font-mono" />
+								<x-input
+									id="order-adjustment"
+									name="order_adjustment"
+									label="帳款調整"
+									wire:model.live.debounce.500ms="form.order_adjustment"
+									prefix="±"
+									class="input-sm text-right font-mono"
+								/>
 							@endif
 						</div>
 					</div>
@@ -344,14 +271,13 @@
 		 x-transition:enter="transition ease-out duration-300"
 		 x-transition:enter-start="opacity-0 transform translate-y-4"
 		 x-transition:leave="transition ease-in duration-300"
-		 x-transition:leave-end="opacity-0 transform translate-y-4"
-		 {{-- 修正處：確保手機端也能顯示 (flex)，並調整在手機端的位置 --}}
+		 x-transition:leave-end="opacity-0 transform translate-y-4"		 
 		 class="flex fixed bottom-20 right-4 lg:bottom-6 lg:right-6 z-50 pointer-events-none">
 		
 		<div class="flex flex-col items-center">
 			{{-- 手機端文字縮小 --}}
 			<span class="text-[10px] lg:text-xs font-bold text-orange-600 bg-orange-50 px-2 py-1 rounded-full shadow-sm mb-1">
-				下滑查看金額
+				下滑查看
 			</span>
 			<div class="bg-orange-500 text-white p-2 lg:p-3 rounded-full shadow-lg animate-bounce">
 				<x-icon name="o-chevron-down" class="w-4 h-4 lg:w-6 lg:h-6" />

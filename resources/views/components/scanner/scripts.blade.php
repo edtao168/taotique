@@ -20,40 +20,26 @@
 			const status = document.getElementById('scan-status');
 			const loading = document.getElementById('camera-loading');
 			
-			if (!video) {
-				console.error('找不到 video 元素');
-				return;
-			}
+			if (!video) return;
 			
 			try {
-				// 檢查基本支援
 				if (!navigator.mediaDevices?.getUserMedia) {
 					throw new Error('瀏覽器不支援相機 API');
 				}
 				
-				// 檢查 HTTPS（生產環境必需）
 				if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
 					throw new Error('相機功能需要 HTTPS 安全連線');
 				}
-				
+
 				this.codeReader = new ZXing.BrowserMultiFormatReader();
 				
-				// 嘗試取得相機列表
-				let devices;
-				try {
-					// 優先嘗試使用 facingMode: environment (這是標準的後置鏡頭約束)
-    let constraints = { 
-        video: { 
-            facingMode: "environment" 
-        } 
-    };
+				// 修正處：正確的約束條件與 Try-Catch 閉合
+				const constraints = { 
+					video: { facingMode: "environment" } 
+				};
 
-				
-				// 使用 getUserMedia 直接取得串流（更可靠）
 				const stream = await navigator.mediaDevices.getUserMedia(constraints);
 				video.srcObject = stream;
-				console.log('📸 視訊流已綁定:', video);
-				console.log('📹 視訊軌道:', stream.getTracks());
 				await video.play();
 				
 				if (loading) loading.classList.add('hidden');
@@ -61,21 +47,14 @@
 				
 				this.isScanning = true;
 				
-				// 使用 ZXing 解碼視訊串流
 				await this.codeReader.decodeFromVideoElement(video, (result, err) => {
 					if (!this.isScanning) return;
-					
 					if (result) {
 						const barcode = result.text;
 						const now = Date.now();
-						
-						if (this.continuousMode && (now - this.lastScanTime < this.scanCooldown)) {
-							return;
-						}
+						if (this.continuousMode && (now - this.lastScanTime < this.scanCooldown)) return;
 						
 						this.lastScanTime = now;
-						if (status) status.textContent = '掃描成功: ' + barcode;
-						
 						if (navigator.vibrate) navigator.vibrate(200);
 						
 						if (onScan) {
@@ -83,16 +62,14 @@
 						} else {
 							Livewire.dispatch('camera-scan-result', { barcode: barcode });
 						}
-						
 						if (!this.continuousMode) this.stop();
 					}
 				});
-				
-			} catch (error) {
+			} catch (error) { // 這裡必須閉合最外層的 try
 				console.error('相機啟動失敗:', error);
 				this.handleCameraError(error, status);
 			}
-		}
+		},
 
 		handleCameraError(error, statusElement) {
 			let errorMsg = '相機啟動失敗';
@@ -126,7 +103,7 @@
 					Livewire.dispatch('camera-failed');
 				}, 2000);
 			}
-		}
+		},
         
         stop() {
             this.isScanning = false;

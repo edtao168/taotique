@@ -3,12 +3,14 @@
 
 namespace App\Livewire\Sales;
 
+use App\Models\Channel;
 use App\Models\Customer;
 use App\Models\Inventory;
 use App\Models\Warehouse; 
 use App\Models\Product;
 use App\Models\Sale;
 use App\Models\Setting;
+use App\Models\Shop;
 use App\Traits\HasBarcodeScanner;
 use App\Traits\HasProductSearch;
 use Illuminate\Support\Facades\DB;
@@ -64,12 +66,13 @@ class Create extends Component
             $this->invoice_number = Sale::generateInvoiceNumber();
             
             $this->form = [                
-                'customer_id'      => 1,
+                'shop_id'          => auth()->user()->shop_id ?? 1,
+				'customer_id'      => 1,
                 'user_id'          => auth()->id() ?? 1,
                 'sold_at'          => now()->format('Y-m-d\TH:i'),
                 'invoice_number'   => $this->invoice_number,
                 'warehouse_id'     => Setting::get('default_warehouse_id', 1),
-                'channel'          => auth()->user()->shop_id ?? 1,
+                'channel_id'          => Channel::active()->first()?->id ?? 1,
                 'payment_method'   => 'cash',
                 'remark'     	   => '',
                 'subtotal'         => '0.00',
@@ -91,12 +94,13 @@ class Create extends Component
         $saleId = $this->sale?->id ?? 'NULL';
         
         return [
-            'form.customer_id'    => 'required|integer|exists:customers,id',
+            'form.shop_id'	      => 'required|integer|exists:shops,id',
+			'form.customer_id'    => 'required|integer|exists:customers,id',
             'form.user_id'	      => 'required|integer|exists:users,id',
             'form.sold_at'        => 'required|date',
             'form.warehouse_id'   => 'required|integer|exists:warehouses,id',
             'form.invoice_number' => 'required|string|unique:sales,invoice_number,' . $saleId . ',id',
-            'form.channel'        => 'required|integer|exists:shops,id',
+            'form.channel_id'        => 'required|integer|exists:channels,id',
             'form.payment_method' => 'required|string',
             'form.remark'  		  => 'nullable|string',
             'items'               => 'required|array|min:1',
@@ -113,11 +117,12 @@ class Create extends Component
     public function validationAttributes()
 	{
 		return [
+			'form.shop_id'        => '分店',
 			'form.customer_id'    => '客戶',
 			'form.sold_at'        => '成交時間',
 			'form.warehouse_id'   => '業務歸屬倉庫',
 			'form.invoice_number' => '銷售單號',
-			'form.channel'        => '通路',
+			'form.channel_id'     => '通路',
 			'items'               => '商品明細',
 			'items.*.product_id'  => '商品',
 			'items.*.quantity'    => '數量',
@@ -252,11 +257,11 @@ class Create extends Component
 		$allowNegative = Setting::get('allow_negative_stock', false);
 
 		try {
-			return DB::transaction(function () use ($allowNegative) {				
+			DB::transaction(function () use ($allowNegative) {				
 				$autoOut = (bool) Setting::get('so_auto_stock_out', true);
 				
 				$saleData = collect($this->form)->only([
-					'customer_id', 'sold_at', 'warehouse_id', 'invoice_number', 'channel', 'payment_method', 'remark', 'subtotal'
+					'shop_id', 'invoice_number', 'customer_id', 'warehouse_id', 'channel_id', 'payment_method', 'remark', 'sold_at'
 				])->toArray();
 
 				// 強制寫入計算後的嚴謹數值
@@ -265,11 +270,7 @@ class Create extends Component
 				$saleData['customer_total'] = $this->customer_total;
 				$saleData['final_net_amount'] = $this->final_net_amount;
 				$saleData['stocked_out_at'] = $this->stockoutWhenSold ? $this->form['sold_at'] : null;
-				
-				// 根據設定決定出庫時間戳,若 autoOut 為 true，
-				// 出庫時間等於成交時間；否則為 null
-				$saleData['stocked_out_at'] = $this->stockoutWhenSold ? $this->form['sold_at'] : null;
-			
+							
 				if ($this->isEdit && $this->sale) {
 					if ($this->sale->is_stocked_out) {
 						foreach ($this->sale->items as $oldItem) {
@@ -279,20 +280,20 @@ class Create extends Component
 								->increment('quantity', $oldItem->quantity);
 						}
 					}
-					// --- 編輯模式 ---
-					// 鎖定單據避免併發衝突
+					// 編輯模式
 					$currentSale = Sale::where('id', $this->sale->id)->lockForUpdate()->first();					
 					$currentSale->update($saleData);
 					$currentSale->items()->delete();
 				} else {
-					// --- 新增模式 ---
+					// 新增模式
 					$currentSale = Sale::create($saleData);
 				}
 
 				// 2. 處理新明細與庫存扣除
 				foreach ($this->items as $item) {
 					$currentSale->items()->create([
-						'shop_id'      => $currentSale->channel,
+						//'shop_id'      => $item['shop_id'] ?? $currentSale->shop_id,
+						//'channel_id'   => $item['channel_id'] ?? $currentSale->channel_id,
 						'product_id'   => $item['product_id'],
 						'warehouse_id' => $item['warehouse_id'],
 						'quantity'     => $item['quantity'],
@@ -307,44 +308,28 @@ class Create extends Component
 							->first();
 
 						if ($inventory) {
-							// 使用 bcsub 確保計算嚴謹性
 							$newQty = bcsub($inventory->quantity, $item['quantity'], 4);
 							$inventory->update(['quantity' => $newQty]);
 						} else {
-
 							// 若不允許負庫存，進行檢查
-							if (!$allowNegative && bccomp($currentQty, $item['quantity'], 4) === -1) {
-								throw new \Exception("商品 [{$item['name']}] 庫存不足 (現有: " . (float)$currentQty . ")");
+							if (!$allowNegative && $item['quantity'] > 0) {
+								throw new \Exception("商品 [{$item['name']}] 無庫存記錄");
 							}
-
-							// 建立銷售明細
-							$currentSale->items()->create([
-								'shop_id'      => $currentSale->channel,
-								'product_id'   => $item['product_id'],
+							// 建立負庫存記錄
+							Inventory::create([
+								'shop_id' => $currentSale->shop_id,
+								//'channel_id' => $item['channel_id'] ?? $currentSale->channel_id,
 								'warehouse_id' => $item['warehouse_id'],
-								'quantity'     => $item['quantity'],
-								'price'        => $item['price'],
-								'subtotal'     => bcmul($item['price'], $item['quantity'], 4),
+								'product_id' => $item['product_id'],
+								'quantity' => bcsub('0', $item['quantity'], 4),
 							]);
-
-							// 扣除庫存
-							if ($inventory) {
-								$inventory->decrement('quantity', $item['quantity']);
-							} else {
-								// 若無庫存記錄則建立 (支援負庫存情況)
-								Inventory::create([
-									'shop_id' => $currentSale->channel,
-									'warehouse_id' => $item['warehouse_id'],
-									'product_id' => $item['product_id'],
-									'quantity' => bcsub('0', $item['quantity'], 4),
-								]);
-							}
 						}
 					}
 				}
 
 				$this->success($this->isEdit ? '銷售單修改成功' : '銷售單建立成功', redirectTo: route('sales.index'));
 			});
+			
 		} catch (\Exception $e) {
 			$this->error('儲存失敗：' . $e->getMessage());
 		}
@@ -367,16 +352,23 @@ class Create extends Component
         ];
         $this->calculateAll();
     }
+	
+	public function updatedSubtotal()
+	{
+		$discount = $this->discount ?? '0';
+		$this->customer_total = bcsub($this->subtotal, $discount, 2);
+	}
 
     public function render()
     {
         return view('livewire.sales.create', [
             'customers' => Customer::all(),
             'warehouses' => Warehouse::where('is_active', true)->get(),
-            'shops' => \App\Models\Shop::all()->map(fn($s) => [
+            'shops' => Shop::all()->map(fn($s) => [
                 'id' => $s->id,
                 'name' => $s->name,
             ]),
+			'channels' => Channel::all(),
         ]);
     }
 }

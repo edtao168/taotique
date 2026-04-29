@@ -150,83 +150,67 @@
 </script>
 
     {{-- 最近銷貨記錄 --}}
-	<div class="bg-white shadow rounded-lg p-4 md:p-6">
-		<div class="flex justify-between items-center mb-4">
-			<h2 class="text-lg font-semibold text-gray-800">最近銷貨記錄</h2>
-			<x-button label="查看全部" link="/sales" class="btn-ghost btn-sm text-primary" />
-		</div>
+	<div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+		{{-- 左側：最近銷售紀錄 (已改為 div 結構) --}}
+		<div class="lg:col-span-3">
+			<x-card title="最近銷售" subtitle="最新的 5 筆交易紀錄" shadow separator>
+				<x-slot:actions>
+					<x-button label="查看全部" icon="o-list-bullet" link="{{ route('sales.index') }}" class="btn-ghost btn-sm" />
+				</x-slot:actions>
 
-		{{-- 1. 電腦端：顯示完整表格 (md 以上) --}}
-		<div class="hidden md:block overflow-x-auto">
-			<table class="w-full">
-				<thead>
-					<tr class="border-b border-gray-100 bg-gray-50/50">
-						<th class="text-left py-3 px-2 text-xs font-bold text-gray-500 uppercase">日期</th>
-						<th class="text-left py-3 px-2 text-xs font-bold text-gray-500 uppercase">客戶</th>
-						<th class="text-left py-3 px-2 text-xs font-bold text-gray-500 uppercase">通路</th>
-						<th class="text-right py-3 px-2 text-xs font-bold text-gray-500 uppercase">顧客付款</th>
-						<th class="text-right py-3 px-2 text-xs font-bold text-gray-500 uppercase">最終進帳</th>
-						<th class="text-center py-3 px-2 text-xs font-bold text-gray-500 uppercase">狀態</th>
-					</tr>
-				</thead>
-				<tbody>
+				<div class="space-y-4">
+					{{-- 列表標頭 (僅在 PC 端顯示) --}}
+					<div class="hidden md:grid grid-cols-12 gap-4 px-4 py-2 text-xs font-bold text-gray-500 uppercase tracking-wider">
+						<div class="col-span-3">單號 / 日期</div>
+						<div class="col-span-3">歸屬分店 / 通路</div>
+						<div class="col-span-2 text-right">買家實付</div>
+						<div class="col-span-2 text-right">最終進帳</div>
+						<div class="col-span-2 text-center">操作</div>
+					</div>
+
+					{{-- 銷售項目卡片 --}}
 					@forelse($recentSales as $sale)
-						<tr class="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
-							<td class="py-3 px-2 text-sm text-gray-600">{{ $sale->created_at->format('Y-m-d') }}</td>
-							<td class="py-3 px-2 text-sm font-medium text-gray-900">{{ $sale->customer->name ?? '未知客戶' }}</td>
-							<td class="py-3 px-2 text-sm text-gray-600">
-								<span class="badge badge-ghost badge-sm">{{ $sale->channel }}</span>
-							</td>
-							<td class="py-3 px-2 text-sm text-right font-mono text-blue-600">NT$ {{ number_format($sale->customer_total) }}</td>
-							<td class="py-3 px-2 text-sm text-right font-mono font-bold text-emerald-600">NT$ {{ number_format($sale->final_net_amount) }}</td>
-							<td class="py-3 px-2 text-center">
-								<span class="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-[10px] font-bold">
-									{{ $sale->status ?? '完成' }}
+						<div class="group grid grid-cols-1 md:grid-cols-12 gap-4 items-center p-4 bg-white dark:bg-base-200 border border-gray-100 dark:border-gray-700 rounded-xl hover:shadow-md transition-all">
+							
+							{{-- 單號與時間 --}}
+							<div class="md:col-span-3">
+								<div class="font-mono font-bold text-primary">{{ $sale->invoice_number }}</div>
+								<div class="text-xs text-gray-400 mt-1">{{ $sale->sold_at->format('Y-m-d H:i') }}</div>
+							</div>
+
+							{{-- 分店與通路 (顯示 Name) --}}
+							<div class="md:col-span-3 flex flex-wrap gap-2">
+								<x-badge :value="$sale->shop->name ?? '未指定分店'" class="badge-ghost badge-sm" />
+								<x-badge :value="$sale->channel->name ?? '未知通路'" class="badge-outline badge-primary badge-sm" />
+							</div>
+
+							{{-- 金額區塊 (手機端會自動排列) --}}
+							<div class="md:col-span-2 text-left md:text-right">
+								<span class="text-xs text-gray-400 md:hidden block">買家實付：</span>
+								<span class="font-mono font-semibold italic text-blue-600">
+									NT$ {{ number_format($sale->customer_total, 0) }}
 								</span>
-							</td>
-						</tr>
+							</div>
+
+							<div class="md:col-span-2 text-left md:text-right">
+								<span class="text-xs text-gray-400 md:hidden block">最終進帳：</span>
+								<span class="font-mono font-bold text-emerald-600">
+									NT$ {{ number_format($sale->final_net_amount, 0) }}
+								</span>
+							</div>
+
+							{{-- 操作 --}}
+							<div class="md:col-span-2 flex justify-end">
+								<x-button icon="o-eye" link="{{ route('sales.index', ['search' => $sale->invoice_number]) }}" class="btn-circle btn-ghost btn-sm" />
+							</div>
+						</div>
 					@empty
-						<tr><td colspan="6" class="text-center py-10 text-gray-400">暫無銷貨記錄</td></tr>
+						<div class="text-center py-10 text-gray-400">
+							目前尚無銷售紀錄
+						</div>
 					@endforelse
-				</tbody>
-			</table>
-		</div>
-
-		{{-- 2. 手機端：顯示卡片列表 (md 以下) --}}
-		<div class="md:hidden space-y-3">
-			@forelse($recentSales as $sale)				
-				<div class="p-4 border border-gray-100 rounded-xl bg-gray-50/30 space-y-3 cursor-pointer hover:bg-gray-100 transition-colors active:scale-[0.98]"
-				>
-					<div class="flex justify-between items-start">
-						<div>
-							<div class="text-xs text-gray-400">{{ $sale->created_at->format('Y-m-d H:i') }}</div>
-							<div class="font-bold text-gray-800">{{ $sale->customer->name ?? '未知客戶' }}</div>
-						</div>
-						{{-- 狀態標籤 --}}
-						<span class="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-[10px] font-bold">
-							{{ $sale->status ?? '完成' }}
-						</span>
-					</div>
-
-					<div class="grid grid-cols-2 gap-2 pt-2 border-t border-gray-100">
-						<div>
-							<div class="text-[10px] text-gray-400 uppercase">顧客付款</div>
-							<div class="text-sm font-mono text-blue-600 font-bold">NT$ {{ number_format($sale->customer_total) }}</div>
-						</div>
-						<div class="text-right">
-							<div class="text-[10px] text-gray-400 uppercase">最終進帳</div>
-							<div class="text-sm font-mono text-emerald-600 font-bold">NT$ {{ number_format($sale->final_net_amount) }}</div>
-						</div>
-					</div>
-
-					<div class="flex justify-between items-center text-[10px]">
-						<span class="text-gray-400">來源通路：<span class="text-gray-600">{{ $sale->channel }}</span></span>
-						<x-icon name="o-chevron-right" class="w-4 h-4 text-gray-300" />
-					</div>
 				</div>
-			@empty
-				<div class="text-center py-10 text-gray-400 text-sm italic">暫無銷貨記錄</div>
-			@endforelse
+			</x-card>
 		</div>
-	</div>
+	</div>	
 </div>

@@ -35,7 +35,10 @@ class Overview extends Component
         return view('livewire.dashboard.overview', [
             'stats' => $stats,
             'monthlyData' => $monthlyData,
-            'recentSales' => Sale::with('customer')->latest()->take(10)->get()
+            'recentSales' => Sale::with(['shop', 'channel', 'customer']) // 務必加上 Eager Loading
+				->latest('sold_at')
+				->take(5)
+				->get(),
         ]);
     }
 

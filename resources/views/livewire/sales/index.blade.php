@@ -32,7 +32,10 @@
 					<x-badge :value="$sale->invoice_number" 
 							 :class="$sale->stocked_out_at ? 'badge-success text-white' : 'badge-warning'"
 							 title="{{ $sale->stocked_out_at ? '已過帳（已扣庫存）' : '未過帳（待扣庫存）' }}" />	
-				@endscope			
+				@endscope
+				@scope('cell_channel_id', $sale)
+					<x-badge :value="$sale->channel->name ?? '未分類'" class="badge-primary badge-outline" />
+				@endscope				
                 @scope('cell_customer_total', $sale)
                     <span class="font-bold text-info">NT$ {{ number_format($sale->customer_total, 0) }}</span>
                 @endscope

@@ -189,7 +189,7 @@ class Index extends Component
         $monthProfit = Sale::whereBetween('sold_at', [$startOfMonth, $endOfMonth])->sum('final_net_amount');
 
         // --- 2. 銷售清單查詢 (合併原 SalesIndex 邏輯) ---
-        $sales = Sale::with(['customer', 'user', 'shop', 'warehouse', 'fees'])
+        $sales = Sale::with(['customer', 'user', 'shop', 'channel','warehouse', 'fees'])
             ->when($this->search, function ($query) {
                 $query->where('invoice_number', 'like', "%{$this->search}%")
                       ->orWhereHas('customer', fn($q) => $q->where('name', 'like', "%{$this->search}%"));
@@ -199,7 +199,8 @@ class Index extends Component
 
         $headers = [
             ['key' => 'invoice_number', 'label' => '銷售單號', 'class' => 'font-mono'],
-            ['key' => 'shop.name', 'label' => '通路/分店', 'class' => 'w-40'],
+            ['key' => 'shop.name', 'label' => '分店', 'class' => 'w-40'],
+			['key' => 'channel.name', 'label' => '銷售通路'],
             ['key' => 'customer.name', 'label' => '客戶'],
             ['key' => 'customer_total', 'label' => '買家實付', 'textAlign' => 'text-right'],
 			['key' => 'final_net_amount', 'label' => '最終進帳', 'textAlign' => 'text-right'],

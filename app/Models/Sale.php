@@ -316,12 +316,12 @@ class Sale extends Model
         return $this->hasMany(SaleItem::class); 
     }
     
-    public function shop()
+    public function shop(): BelongsTo
     {
-        return $this->belongsTo(Shop::class, 'channel', 'id');
+        return $this->belongsTo(Shop::class, 'shop_id');
     }
     
-    public function warehouse()
+    public function warehouse(): BelongsTo
     {
         return $this->belongsTo(Warehouse::class);
     }
@@ -340,4 +340,9 @@ class Sale extends Model
     {
         return $this->hasMany(SalesReturn::class, 'sale_id');
     }
+	
+	public function channel(): BelongsTo
+	{
+		return $this->belongsTo(Channel::class, 'channel_id');
+	}
 }
