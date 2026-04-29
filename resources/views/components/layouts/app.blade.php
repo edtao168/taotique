@@ -86,9 +86,10 @@
 				<x-menu-sub title="基本資料設定" icon="o-cog-6-tooth">
 					<x-menu-item title="商品資料管理" icon="o-cube" link="/products" />
 					<x-menu-item title="商品分類定義" icon="o-tag" :link="route('categories.index')" />
-					<x-menu-item title="材質分類定義" icon="o-tag" :link="route('materials.index')" />
+					<x-menu-item title="材質分類定義" icon="o-photo" :link="route('materials.index')" />
 					<x-menu-item title="營業點管理" icon="o-map-pin" :link="route('shops.index')" />
 					<x-menu-item title="庫別管理" icon="o-building-office" :link="route('warehouses.index')" />
+					<x-menu-item title="通路管理" icon="o-computer-desktop" :link="route('channels.index')" />
 					<x-menu-separator />
 					{{-- 人事與權限分開 --}}
 					<x-menu-item title="夥伴資料維護" icon="o-identification" :link="route('partners.index')" />

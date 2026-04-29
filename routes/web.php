@@ -36,14 +36,15 @@ use App\Livewire\Products\Show as ProductShow;
 use App\Livewire\Products\Edit as ProductEdit;
 
 // 系統設定 (Settings)
-use App\Livewire\Settings\Warehouses\Index as WarehouseIndex;
-use App\Livewire\Settings\Shops\Index as ShopIndex;
+use App\Livewire\Settings\BackupIndex;
+use App\Livewire\Settings\Categories\Index as CategoryIndex;
+use App\Livewire\Settings\Channels\Index as ChannelIndex;
+use App\Livewire\Settings\Materials\Index as MaterialIndex;
 use App\Livewire\Settings\Partners\Index as PartnerIndex;
 use App\Livewire\Settings\Users\UserManagement;
-use App\Livewire\Settings\Categories\Index as CategoryIndex;
-use App\Livewire\Settings\Materials\Index as MaterialIndex;
+use App\Livewire\Settings\Shops\Index as ShopIndex;
 use App\Livewire\Settings\SystemSettings;
-use App\Livewire\Settings\BackupIndex;
+use App\Livewire\Settings\Warehouses\Index as WarehouseIndex;
 
 Route::middleware(['auth'])->group(function () {
     
@@ -102,7 +103,8 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/categories', CategoryIndex::class)->name('categories.index');
 		Route::get('/materials', MaterialIndex::class)->name('materials.index');
 		Route::get('/warehouses', WarehouseIndex::class)->name('warehouses.index');
-		Route::get('/shops', ShopIndex::class)->name('shops.index');        
+		Route::get('/shops', ShopIndex::class)->name('shops.index');
+		Route::get('/channels', ChannelIndex::class)->name('channels.index');		
         Route::get('/partners', PartnerIndex::class)->name('partners.index');
         Route::get('/users', UserManagement::class)->name('users.index');
         // 直接將 Route 指向 Livewire Component，完全跳過 Controller
