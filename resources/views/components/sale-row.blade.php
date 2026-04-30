@@ -61,7 +61,7 @@
                 name="items[{{ $index }}][warehouse_id]"
                 wire:model.live="items.{{ $index }}.warehouse_id" 
                 :options="$warehouses" 
-                class="select-sm" 
+				class="w-full"				
             />
 			<x-input 
                 id="mobile-price-{{ $index }}"
