@@ -62,8 +62,8 @@
                     label="倉庫"
                     name="items[{{ $index }}][warehouse_id]"
                     wire:model.live="items.{{ $index }}.warehouse_id" 
-                    :options="$warehouses" 
-                    inline
+                    :options="$warehouses"
+					class="font-mono"
                 />
             </div>
 
