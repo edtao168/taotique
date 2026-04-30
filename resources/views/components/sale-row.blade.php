@@ -55,30 +55,36 @@
         </div>
     @else
         {{-- 手機版佈局 --}}
-        <div class="grid grid-cols-2 gap-3 mt-2">
-            <x-select 
-                id="mobile-wh-{{ $index }}"
-                name="items[{{ $index }}][warehouse_id]"
-                wire:model.live="items.{{ $index }}.warehouse_id" 
-                :options="$warehouses" 
-				class="w-full"				
-            />
-			<x-input 
-                id="mobile-price-{{ $index }}"
-                name="items[{{ $index }}][price]"
-                label="單價" 
-                wire:model.live.debounce.500ms="items.{{ $index }}.price" 
-                class="text-right font-mono" 
-            />
-            <x-input 
-                id="mobile-qty-{{ $index }}"
-                name="items[{{ $index }}][quantity]"
-                label="數量" 
-                type="number" 
-                step="0.0001" 
-                wire:model.live.debounce.500ms="items.{{ $index }}.quantity" 
-                class="text-right font-mono" 
-            />
+        <div class="mt-3 flex flex-col gap-3">           
+            <div class="w-full">
+                <x-select 
+                    id="mobile-wh-{{ $index }}"
+                    label="倉庫"
+                    name="items[{{ $index }}][warehouse_id]"
+                    wire:model.live="items.{{ $index }}.warehouse_id" 
+                    :options="$warehouses" 
+                    inline
+                />
+            </div>
+
+            <div class="grid grid-cols-2 gap-2">
+                <x-input 
+                    id="mobile-price-{{ $index }}"
+                    name="items[{{ $index }}][price]"
+                    label="單價" 
+                    wire:model.live.debounce.500ms="items.{{ $index }}.price" 
+                    class="text-right font-mono" 
+                />
+                <x-input 
+                    id="mobile-qty-{{ $index }}"
+                    name="items[{{ $index }}][quantity]"
+                    label="數量" 
+                    type="number" 
+                    step="0.0001" 
+                    wire:model.live.debounce.500ms="items.{{ $index }}.quantity" 
+                    class="text-right font-mono" 
+                />
+            </div>
         </div>
         <div class="flex justify-between items-center mt-2">            
             <div class="text-primary font-black">小計: {{ number_format($item['subtotal'] ?? 0, 2) }}</div>
