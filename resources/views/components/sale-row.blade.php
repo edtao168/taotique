@@ -59,7 +59,7 @@
             <div class="w-full">
                 <x-select 
                     id="mobile-wh-{{ $index }}"
-                    label="倉庫"
+                    label="實際出貨倉庫"
                     name="items[{{ $index }}][warehouse_id]"
                     wire:model.live="items.{{ $index }}.warehouse_id" 
                     :options="$warehouses"
