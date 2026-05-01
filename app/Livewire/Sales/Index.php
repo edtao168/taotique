@@ -36,8 +36,7 @@ class Index extends Component
 			->orderBy('id', 'asc')
 			->get();
 
-		// 2. 預設篩選邏輯：若無特定設定，預設選取第一個倉庫（或不限）
-		// 根據您的業務需求，初期預設 store_id 為 1，此處亦可預設 warehouse_id
+		// 2. 預設篩選邏輯：若無特定設定，預設選取第一個倉庫（或不限）	
 		$this->selectedWarehouse = $this->selectedWarehouse ?? null;
 
 		// 3. 初始化日期篩選範圍
