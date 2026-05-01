@@ -46,18 +46,14 @@
         }
     }
 @endphp
-{{-- ✅ 診斷：輸出 mediaList 到 console --}}
-<script>
-    console.log('media-manager mediaList:', @json($mediaList));
-    console.log('mediaGallery function exists:', typeof window.mediaGallery === 'function');
-</script>
-<div class="bg-base-100 rounded-xl shadow-md border border-base-300 flex flex-col overflow-hidden {{ $editable ? 'h-1/2' : 'mt-6' }}">
+
+<div class="bg-base-100 rounded-xl shadow-md border border-base-300 flex flex-col overflow-hidden {{ $editable ? 'h-[85vh] md:h-2/3' : 'mt-6 min-h-[300px]' }}">
 
     <div class="px-5 py-4 border-b border-base-300 bg-base-200/30 flex justify-between items-center">
         <div>
             <h3 class="font-bold text-lg text-base-content">{{ $editable ? '商品媒體管理' : '商品媒體相簿' }}</h3>
             @if($editable)
-                <p class="text-xs text-base-content/60">點擊星號設定首圖</p>
+                <p class="text-xs text-base-content/60">點擊星號設定首圖，AVIF 格式已支援</p>
             @endif
         </div>
         <div class="flex items-center gap-2">
@@ -73,10 +69,10 @@
         </div>
     </div>
 
-    {{-- ✅ 診斷：檢查 mediaGallery 是否存在 --}}
-    <div x-data="typeof window.mediaGallery === 'function' 
-        ? mediaGallery({ images: @js($mediaList), editable: @js($editable) })
-        : { images: @js($mediaList), isOpen: false, currentIndex: 0, currentImage: null, hasPrev: false, hasNext: false, openLightbox: function(i) { console.error('mediaGallery not loaded'); }, close: function() {}, prev: function() {}, next: function() {} }"
+    <div x-data="mediaGallery({
+            images: @js($mediaList),
+            editable: @js($editable)
+         })" 
          class="p-4 {{ $editable ? 'flex-grow overflow-y-auto custom-scrollbar' : '' }}">
 
         <div class="grid {{ $editable ? 'grid-cols-3 gap-3' : 'grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4' }}">
