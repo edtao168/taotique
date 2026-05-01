@@ -31,8 +31,8 @@
             <div class="lg:col-span-1 space-y-4">
                 <x-card title="清點錄入" shadow>
                     {{-- 這裡放掃描或搜尋產品的 Input --}}
-                    <x-choices label="搜尋商品" wire:model.live="product_id" :options="$products" single searchable />
-                    <x-input label="實點數量" type="number" wire:model="actual_quantity" class="mt-4" />
+                    <x-choices label="搜尋商品" wire:model.live="items.product_id" :options="$productOptions" search-function="search" single searchable />
+                    <x-input label="實點數量" type="number" wire:model="actual_quantity" class="font-mono text-right" />
                     <x-slot:actions>
                         <x-button label="更新進度" wire:click="updateItem" class="btn-primary" />
                     </x-slot:actions>
@@ -40,28 +40,82 @@
 
                 <x-card title="盤點狀態" class="bg-base-200">
                     <div class="text-sm">盤點單編號: #{{ $stocktake_id }}</div>
-                    <div class="text-sm font-bold">目標倉庫: {{ $warehouse_id }}</div>
+                    <div class="text-sm font-bold">目標倉庫: {{ $this->currentStocktake?->warehouse?->name ?? '未指定' }}</div>
                     <x-button label="放棄盤點" class="btn-ghost btn-sm text-error mt-4" wire:click="cancelStocktake" />
                 </x-card>
             </div>
 
-            <div class="lg:col-span-2">
-                <x-card title="盤點明細 (漏盤追蹤)" shadow>
-                    {{-- 表格顯示：已點過的顯示數量，未點過的顯示「未清點」紅字 --}}
-                    <x-table :headers="$headers" :rows="$items">
-                        @scope('cell_actual_quantity', $item)
-                            @if(is_null($item->actual_quantity))
-                                <x-badge value="未清點" class="badge-error" />
-                            @else
-                                <span class="font-bold text-success">{{ number_format($item->actual_quantity) }}</span>
-                            @endif
-                        @endscope
-                    </x-table>
-                    <x-slot:actions>
-                        <x-button label="完成盤點並過帳" icon="o-check" wire:click="showFinalizeConfirmation" class="btn-success" />
-                    </x-slot:actions>
-                </x-card>
-            </div>
+			<div class="lg:col-span-2">
+				<x-card title="盤點明細 (漏盤追蹤)" shadow>
+					
+					{{-- PC 端顯示：表格 (x-table) --}}
+					<div class="hidden lg:block">
+						<x-table :headers="$headers" :rows="$items">
+							@scope('cell_system_quantity', $item)
+								{{ number_format($item->system_quantity, 2) }}
+							@endscope
+
+							@scope('cell_actual_quantity', $item)
+								@if(is_null($item->actual_quantity))
+									<x-badge value="未清點" class="badge-error text-white" />
+								@else
+									<span class="font-bold text-success">{{ number_format($item->actual_quantity, 2) }}</span>
+								@endif
+							@endscope
+						</x-table>
+					</div>
+
+					{{-- 手機端顯示：卡片清單 (div + foreach) --}}
+					<div class="lg:hidden space-y-3">
+						@forelse($items as $item)
+							<div class="p-4 border rounded-lg bg-base-100 shadow-sm border-base-300">
+								<div class="flex justify-between items-start mb-2">
+									<div>
+										<div class="font-bold text-lg">{{ $item->product->name }}</div>
+										<div class="text-xs text-gray-500">SKU: {{ $item->product->sku }}</div>
+									</div>
+									@if(is_null($item->actual_quantity))
+										<x-badge value="待點" class="badge-error" />
+									@else
+										<x-badge value="已點" class="badge-success" />
+									@endif
+								</div>
+								
+								<div class="grid grid-cols-2 gap-2 text-sm pt-2 border-t border-dashed">
+									<div>
+										<span class="text-gray-500">帳面：</span>
+										<span class="font-mono">{{ number_format($item->system_quantity, 2) }}</span>
+									</div>
+									<div class="text-right">
+										<span class="text-gray-500">實點：</span>
+										<span class="font-bold {{ is_null($item->actual_quantity) ? 'text-error' : 'text-success' }}">
+											{{ is_null($item->actual_quantity) ? '--' : number_format($item->actual_quantity, 2) }}
+										</span>
+									</div>
+								</div>
+								
+								{{-- 手機端快速選取按鈕（選取該品項以便在上方錄入） --}}
+								<div class="mt-3">
+									<x-button 
+										label="選取此項" 
+										icon="o-cursor-arrow-rays" 
+										class="btn-xs btn-outline btn-block" 
+										wire:click="$set('product_id', {{ $item->product_id }})" 
+									/>
+								</div>
+							</div>
+						@empty
+							<div class="text-center py-10 text-gray-400">
+								暫無盤點明細
+							</div>
+						@endforelse
+					</div>
+
+					<x-slot:actions>
+						<x-button label="完成盤點並過帳" icon="o-check" wire:click="showFinalizeConfirmation" class="btn-success" />
+					</x-slot:actions>
+				</x-card>
+			</div>
         </div>
     @endif
 

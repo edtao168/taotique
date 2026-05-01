@@ -2,77 +2,77 @@
 
 namespace App\Livewire\Inventories;
 
-use App\Models\Product;
-use App\Models\Warehouse;
-use App\Models\Stocktake;
-use App\Models\StocktakeItem;
 use App\Models\Inventory;
 use App\Models\InventoryMovement;
+use App\Models\Product;
+use App\Models\Stocktake;
+use App\Models\StocktakeItem;
+use App\Models\Warehouse;
+use App\Traits\HasBarcodeScanner;
+use App\Traits\HasProductSearch;
+use App\Traits\HasShop;
 use Illuminate\Support\Facades\DB;
 use Livewire\Component;
 use Mary\Traits\Toast;
 
 class Stocktakes extends Component
 {
-    use Toast;
+    use HasBarcodeScanner, HasProductSearch, HasShop, Toast;
+	
+	public array $headers = [
+        ['key' => 'product.sku', 'label' => 'SKU'],
+        ['key' => 'product.name', 'label' => '品名'],
+        ['key' => 'system_quantity', 'label' => '帳面數量'],
+        ['key' => 'actual_quantity', 'label' => '實點數量'],
+    ];
 
-    // 狀態變數
     public ?int $stocktake_id = null; // 當前進行中的盤點單 ID
     public ?int $warehouse_id = null;
     public bool $confirmModal = false;
     public int $missing_count = 0;
-
-    // 輸入變數
     public ?int $product_id = null;
     public $current_quantity = 0; // 系統顯示數量 (快照)
     public $actual_quantity = 0;  // 實際清點數量
-    public string $remark = '';
-    public array $products = [];
+    public string $remark = '';    
+	public array $productOptions = [];
+	public bool $showScanner = false;
+	public ?Stocktake $currentStocktake = null;
 
     /**
      * 初始化：檢查是否有尚未完成的盤點任務
      */
     public function mount()
     {
-        $active = Stocktake::where('status', 'pending')->first();
-        if ($active) {
-            $this->stocktake_id = $active->id;
-            $this->warehouse_id = $active->warehouse_id;
-        }
+        $this->currentStocktake = Stocktake::with('warehouse')
+			->where('status', 'pending')
+			->first();
+
+		if ($this->currentStocktake) {
+			$this->stocktake_id = $this->currentStocktake->id;
+			$this->warehouse_id = $this->currentStocktake->warehouse_id;
+		}
         $this->search();
     }
-
-    /**
-     * 渲染頁面
+	
+	/**
+     * 處理條碼掃描回調
      */
-    public function render()
+	public function onBarcodeScanned(string $barcode, ?int $index = null): void
     {
-        return view('livewire.inventories.stocktakes', [
-            'warehouses' => Warehouse::with('shop')->get(),
-            // 抓取目前盤點單的明細，按最後更新時間排序，方便員工看到剛才點了什麼
-            'items' => $this->stocktake_id 
-                ? StocktakeItem::where('stocktake_id', $this->stocktake_id)
-                    ->with('product')
-                    ->orderBy('updated_at', 'desc')
-                    ->get()
-                : []
-        ]);
-    }
+        $product = Product::where('sku', $barcode)->first();
+        if (!$product) {
+            $this->error("找不到條碼: {$barcode}");
+            return;
+        }
 
-    /**
-     * 商品搜尋 (Mary UI x-choices 調用)
-     */
-    public function search(string $value = '')
-    {
-        $this->products = Product::query()
-            ->where('sku', 'like', "{$value}%")
-            ->orWhere('name', 'like', "%{$value}%")
-            ->take(10)
-            ->get()
-            ->map(fn($p) => [
-                'id' => $p->id,
-                'display_name' => "{$p->sku} - {$p->name}"
-            ])->toArray();
+        if (!$this->stocktake_id) {
+            $this->error("請先啟動盤點任務");
+            return;
+        }
+
+        $this->product_id = $product->id;
+        $this->updatedProductId($product->id);
+        $this->success("已掃描: {$product->name}");
     }
 
     /**
@@ -85,23 +85,24 @@ class Stocktakes extends Component
         DB::transaction(function () {
             // 1. 建立盤點主表
             $stocktake = Stocktake::create([
-                'store_id' => 1, // 初期預設
+                'shop_id' => $this->shopId,
                 'warehouse_id' => $this->warehouse_id,
                 'user_id' => auth()->id(),
                 'status' => 'pending',
             ]);
 
             // 2. 捕捉快照：將該倉庫目前「所有產品」載入明細表
-            // 這樣即便現場沒點到，結案時也能偵測出「漏盤」
-            $inventories = Inventory::where('warehouse_id', $this->warehouse_id)->get();
+            $inventories = Inventory::where('warehouse_id', $this->warehouse_id)
+				->lockForUpdate()
+				->get();
             
             foreach ($inventories as $inv) {
                 StocktakeItem::create([
                     'stocktake_id' => $stocktake->id,
                     'product_id' => $inv->product_id,
                     'system_quantity' => $inv->quantity,
-                    'actual_quantity' => null, // 初始為 null，代表尚未點到
-                    'cost_price' => $inv->cost_price ?? 0,
+                    'actual_quantity' => null,
+                    'cost_price' => $inv->cost_price ?? '0.0000',
                 ]);
             }
 
@@ -122,14 +123,17 @@ class Stocktakes extends Component
                 ->first();
             
             if ($item) {
-                $this->current_quantity = $item->system_quantity;
+                // 若已有點工數則保留，否則預設為系統數[cite: 2]
                 $this->actual_quantity = $item->actual_quantity ?? $item->system_quantity;
+            } else {
+                $this->warning("此商品不在該倉庫的盤點範圍內");
+                $this->product_id = null;
             }
         }
     }
 
     /**
-     * 更新清點結果 (取代舊的 submit)
+     * 更新清點結果
      */
     public function updateItem()
     {
@@ -143,14 +147,9 @@ class Stocktakes extends Component
             ->first();
 
         if ($item) {
-            $item->update([
-                'actual_quantity' => (string)$this->actual_quantity,
-            ]);
-            
+            $item->update(['actual_quantity' => (string)$this->actual_quantity]);            
             $this->success("已更新清點數：{$item->product->name}");
             $this->reset(['product_id', 'actual_quantity', 'current_quantity']);
-        } else {
-            $this->error("此商品不在本次盤點範圍內。");
         }
     }
 
@@ -183,12 +182,12 @@ class Stocktakes extends Component
                     // 1. 更新實體庫存
                     Inventory::updateOrCreate(
                         ['warehouse_id' => $stocktake->warehouse_id, 'product_id' => $item->product_id],
-                        ['quantity' => $finalQty, 'store_id' => $stocktake->store_id]
+                        ['quantity' => $finalQty, 'shop_id' => $stocktake->shop_id]
                     );
 
                     // 2. 紀錄異動流水
                     InventoryMovement::create([
-                        'store_id' => $stocktake->store_id,
+                        'shop_id' => $stocktake->shop_id,
                         'product_id' => $item->product_id,
                         'warehouse_id' => $stocktake->warehouse_id,
                         'quantity' => $diff,
@@ -214,9 +213,32 @@ class Stocktakes extends Component
     public function cancelStocktake()
     {
         if ($this->stocktake_id) {
-            Stocktake::find($this->stocktake_id)->delete();
-            $this->reset(['stocktake_id', 'warehouse_id']);
+            DB::transaction(function () {
+				$stocktake = Stocktake::find($this->stocktake_id);
+				if ($stocktake) {
+					// 刪除主表，明細表若有設定外鍵級聯則會一併刪除
+					$stocktake->delete();
+				}
+			});
+            $this->reset(['stocktake_id', 'warehouse_id', 'product_id', 'actual_quantity']);
             $this->warning("盤點任務已取消，未對庫存產生影響。");
         }
     }
+
+
+    /**
+     * 渲染頁面
+     */
+    public function render()
+    {
+        return view('livewire.inventories.stocktakes', [
+            'warehouses' => Warehouse::all(),
+            'items' => $this->stocktake_id 
+                ? StocktakeItem::where('stocktake_id', $this->stocktake_id)
+                    ->with('product')
+                    ->orderBy('updated_at', 'desc')
+                    ->get()
+                : []
+        ]);
+    }	
 }
