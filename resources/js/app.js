@@ -2,6 +2,7 @@
 console.log('Vite JS loaded');
 
 import Chart from 'chart.js/auto';
+import './components/media-gallery';
 
 // 掛載 Chart 到全域，供 livewire-charts 使用
 window.Chart = Chart;

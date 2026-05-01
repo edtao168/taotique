@@ -5,41 +5,71 @@ namespace App\Traits;
 use App\Models\Product;
 use App\Models\ProductImage;
 use Illuminate\Support\Facades\Storage;
+use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 
 trait HasProductMedia
 {
     /**
-     * 統一處理圖片與影片上傳邏輯
+     * 處理產品媒體上傳 (支援影片與多種格式圖片)
      */
-    public function uploadMedia(Product $product, $photos = [])
+    public function uploadMedia(Product $product, $files = [])
     {
-        if ($photos) {
-            foreach ($photos as $photo) {
-                $path = $photo->store('products/photos', 'public');
-                
-                // 檢查是否已有首圖，若無，則將此張設為首圖
-                $isFirst = !$product->images()->where('is_primary', true)->exists();
+        if (empty($files)) return;
 
-                $product->images()->create([
-                    'path' => $path,
-                    'is_primary' => $isFirst
-                ]);
-            }
+        $files = is_array($files) ? $files : [$files];
+
+        foreach ($files as $file) {
+            if (!($file instanceof TemporaryUploadedFile)) continue;
+
+            // 1. 更嚴謹的副檔名獲取方式[cite: 4]
+            $extension = strtolower($file->guessExtension() ?: $file->getClientOriginalExtension());
+            
+            // 2. 判斷目錄：加入 webm 與更多的影片格式[cite: 4]
+            $videoExtensions = config('business.media.video_extensions');
+            $folder = in_array($extension, $videoExtensions) ? 'products/videos' : 'products/photos';
+            
+            // 3. 執行儲存
+            $path = $file->store($folder, 'public');
+            
+            if (!$path) continue;
+
+            // 4. 併發安全的檢查首圖是否存在[cite: 4]
+            $hasPrimary = $product->images()->where('is_primary', true)->exists();
+
+            // 5. 寫入資料庫
+            $product->images()->create([
+                'path' => $path,
+                'is_primary' => !$hasPrimary
+            ]);
         }
     }
 
     /**
-     * 統一處理刪除邏輯
+     * 刪除媒體記錄並清理實體檔案
      */
     public function deleteMedia(ProductImage $image)
     {
-        // 1. 刪除實體檔案
+        // 刪除實體檔案
         if (Storage::disk('public')->exists($image->path)) {
             Storage::disk('public')->delete($image->path);
         }
 
-        // 2. 刪除資料庫記錄
+        $isPrimary = $image->is_primary;
+        $productId = $image->product_id;
+
+        // 刪除資料庫記錄
         $image->delete();
+
+        // 若刪除的是首圖，自動指派下一張為首圖，維持系統邏輯嚴謹
+        if ($isPrimary) {
+            $nextImage = ProductImage::where('product_id', $productId)
+                ->orderBy('id')
+                ->first();
+            
+            if ($nextImage) {
+                $nextImage->update(['is_primary' => true]);
+            }
+        }
     }
 	
 	/**

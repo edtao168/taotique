@@ -1,14 +1,13 @@
 {{-- 檔案路徑：resources/views/components/media-manager.blade.php --}}
 @props([
     'product' => null,
-    'temp_photos' => [],
+    'temp_media' => [],
     'editable' => false,
 ])
 
 @php
     $mediaList = [];
-    
-    // 1. 取得資料庫既有圖片
+
     if ($product && $product->images) {
         foreach ($product->images()->orderByDesc('is_primary')->orderBy('id')->get() as $img) {
             $ext = strtolower(pathinfo($img->path, PATHINFO_EXTENSION));
@@ -17,61 +16,90 @@
                 'path' => $img->path,
                 'url' => Storage::url($img->path),
                 'is_primary' => (bool)$img->is_primary,
-                // 加入 avif 至影像識別
-                'is_video' => in_array($ext, ['mp4', 'mov', 'avi', 'webm']),
+                'is_video' => in_array($ext, config('business.media.video_extensions')),
                 'is_temp' => false,
             ];
         }
     }
 
-    // 2. 取得尚未儲存的暫存圖片
-    if (!empty($temp_photos)) {
-        foreach ($temp_photos as $idx => $path) {
-            $originalName = $path instanceof \Livewire\Features\SupportFileUploads\TemporaryUploadedFile ? $path->getClientOriginalName() : $path;
+    if (!empty($temp_media)) {
+        foreach ($temp_media as $idx => $path) {
+            $isTempFile = $path instanceof \Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
+            $originalName = $isTempFile ? $path->getClientOriginalName() : $path;
             $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
-            
+
+            $url = '';
+            try {
+                $url = is_string($path) ? Storage::url($path) : $path->temporaryUrl();
+            } catch (\Livewire\Features\SupportFileUploads\FileNotPreviewableException $e) {
+                $url = asset('images/video-placeholder.png'); 
+            }
+
             $mediaList[] = [
                 'id' => 'temp_' . $idx,
                 'path' => $path,
-                'url' => is_string($path) ? Storage::url($path) : $path->temporaryUrl(),
+                'url' => $url,
                 'is_primary' => false, 
-                'is_video' => in_array($ext, ['mp4', 'mov', 'avi', 'webm']),
+                'is_video' => in_array($ext, config('business.media.video_extensions')),
                 'is_temp' => true,
             ];
         }
     }
 @endphp
+{{-- ✅ 診斷：輸出 mediaList 到 console --}}
+<script>
+    console.log('media-manager mediaList:', @json($mediaList));
+    console.log('mediaGallery function exists:', typeof window.mediaGallery === 'function');
+</script>
+<div class="bg-base-100 rounded-xl shadow-md border border-base-300 flex flex-col overflow-hidden {{ $editable ? 'h-1/2' : 'mt-6' }}">
 
-<div class="bg-base-100 rounded-xl shadow-md border border-base-300 flex flex-col overflow-hidden {{ $editable ? 'h-full' : 'mt-6' }}">
-    
     <div class="px-5 py-4 border-b border-base-300 bg-base-200/30 flex justify-between items-center">
         <div>
             <h3 class="font-bold text-lg text-base-content">{{ $editable ? '商品媒體管理' : '商品媒體相簿' }}</h3>
             @if($editable)
-                <p class="text-xs text-base-content/60">點擊星號設定首圖，AVIF 格式已支援</p>
+                <p class="text-xs text-base-content/60">點擊星號設定首圖</p>
             @endif
         </div>
-        @if($editable && !empty($mediaList))
-            <span class="badge badge-primary badge-outline text-xs">共 {{ count($mediaList) }} 檔案</span>
-        @endif
+        <div class="flex items-center gap-2">
+            {{-- 上傳中指示器 --}}
+            <div wire:loading wire:target="temp_media" class="flex items-center gap-1.5 text-primary">
+                <span class="loading loading-spinner loading-xs"></span>
+                <span class="text-xs font-medium">上傳中...</span>
+            </div>
+
+            @if($editable && !empty($mediaList))
+                <span class="badge badge-primary badge-outline text-xs">共 {{ count($mediaList) }} 個檔案</span>
+            @endif
+        </div>
     </div>
 
-    <div x-data="mediaGallery({
-            images: @js($mediaList),
-            editable: @js($editable)
-         })" 
+    {{-- ✅ 診斷：檢查 mediaGallery 是否存在 --}}
+    <div x-data="typeof window.mediaGallery === 'function' 
+        ? mediaGallery({ images: @js($mediaList), editable: @js($editable) })
+        : { images: @js($mediaList), isOpen: false, currentIndex: 0, currentImage: null, hasPrev: false, hasNext: false, openLightbox: function(i) { console.error('mediaGallery not loaded'); }, close: function() {}, prev: function() {}, next: function() {} }"
          class="p-4 {{ $editable ? 'flex-grow overflow-y-auto custom-scrollbar' : '' }}">
-        
+
         <div class="grid {{ $editable ? 'grid-cols-3 gap-3' : 'grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4' }}">
             @forelse($mediaList as $index => $media)
-                <div class="relative group aspect-square rounded-lg overflow-hidden bg-base-200 border border-base-300 shadow-sm transition-all hover:border-primary/50">
+                
+                <div class="relative group aspect-square rounded-lg overflow-hidden bg-base-200 border border-base-300 shadow-sm transition-all hover:border-primary/50"
+                    wire:key="media-{{ $index }}">
                     
+                    <div wire:loading wire:target="deleteImage, deleteTempMedia" 
+                         class="absolute inset-0 z-40 bg-black/60 flex items-center justify-center">
+                        <span class="loading loading-spinner loading-md text-error"></span>
+                    </div>
+
                     @if($media['is_video'])
-                        <video src="{{ $media['url'] }}" class="w-full h-full object-cover"></video>
-                        <div class="absolute inset-0 flex items-center justify-center bg-black/20">
-                            <x-icon name="o-play-circle" class="w-10 h-10 text-white/80" />
+                        {{-- 影片縮圖點擊開啟 Lightbox --}}
+                        <div class="w-full h-full cursor-pointer" @click.stop="openLightbox({{ $index }})">
+                            <video src="{{ $media['url'] }}" class="w-full h-full object-cover"></video>
+                            <div class="absolute inset-0 flex items-center justify-center bg-black/20 pointer-events-none">
+                                <x-icon name="o-play-circle" class="w-10 h-10 text-white/80" />
+                            </div>
                         </div>
                     @else
+                        {{-- 圖片點擊開啟 Lightbox --}}
                         <img src="{{ $media['url'] }}" 
                              loading="lazy" 
                              class="w-full h-full object-cover cursor-zoom-in" 
@@ -95,7 +123,7 @@
                                     title="刪除媒體">
                                 <x-icon name="o-trash" class="w-4 h-4" />
                             </button>
-                            
+
                             @if(!$media['is_primary'])
                                 <button type="button" 
                                         @click.stop="setPrimary('{{ $media['id'] }}', @js($media['is_temp']))" 
@@ -115,14 +143,14 @@
             @endforelse
         </div>
 
-        {{-- Lightbox 保持不變 ... --}}
+        {{-- Lightbox --}}
         <div x-show="isOpen" 
              x-transition.opacity.duration.300ms 
              class="fixed inset-0 z-[9999] bg-black/95 backdrop-blur-sm flex items-center justify-center touch-none" 
              @click.self="close()" 
              @keydown.escape.window="close()" 
              x-trap.inert.noscroll="isOpen">
-            
+
             <button @click="close()" class="absolute top-6 right-6 z-50 p-2 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors">
                 <x-icon name="o-x-mark" class="w-8 h-8" />
             </button>
@@ -136,14 +164,17 @@
                     <x-icon name="o-chevron-left" class="w-8 h-8" />
                 </button>
 
-                <div class="max-w-full max-h-[85vh] overflow-hidden" 
-                     @touchstart="handleTouchStart($event)" 
-                     @touchmove.prevent="handleTouchMove($event)" 
-                     @touchend="handleTouchEnd($event)">
-                    <img :src="currentImage?.url" 
-                         class="max-w-full max-h-[85vh] object-contain rounded-lg select-none transition-transform duration-300" 
-                         :class="{ 'scale-150 cursor-zoom-out': isZoomed, 'cursor-zoom-in': !isZoomed }" 
-                         @dblclick="toggleZoom()" />
+                <div class="relative w-full h-full flex items-center justify-center p-4">
+                    <template x-if="currentImage">
+                        <div class="max-w-5xl w-full flex items-center justify-center">
+                            <template x-if="currentImage.is_video">
+                                <video :src="currentImage.url" controls autoplay class="max-w-full max-h-[85vh] shadow-2xl rounded-lg"></video>
+                            </template>
+                            <template x-if="!currentImage.is_video">
+                                <img :src="currentImage.url" class="max-w-full max-h-[85vh] object-contain rounded-lg" />
+                            </template>
+                        </div>
+                    </template>
                 </div>
 
                 <button x-show="hasNext" @click.stop="next()" class="absolute right-4 md:right-8 z-50 p-3 bg-white/10 hover:bg-white/20 rounded-full text-white transition-all active:scale-95">
@@ -154,106 +185,40 @@
     </div>
 
     @if($editable)
-        <div class="p-5 border-t border-base-300 bg-base-200/20">
-            {{-- 在 accept 中明確加入 image/avif --}}
+        <div class="p-5 border-t border-base-300 bg-base-200/20 relative">
+            {{-- 上傳區塊 loading 遮罩 --}}
+            <div wire:loading wire:target="temp_media" 
+                 class="absolute inset-0 z-50 bg-base-200/80 backdrop-blur-sm flex items-center justify-center rounded-xl">
+                <div class="text-center">
+                    <span class="loading loading-spinner loading-lg text-primary"></span>
+                    <p class="text-sm text-base-content/70 mt-2">正在處理媒體...</p>
+                </div>
+            </div>
+
             <input type="file" 
-                   wire:model="temp_photos" 
+                   wire:model="temp_media" 
                    multiple 
                    accept="image/jpeg,image/png,image/webp,image/avif,video/*" 
                    class="hidden" 
                    id="media-upload-input" 
                    x-ref="fileInput" />
-            
+
             <div x-data="{ dragging: false }" 
                  x-on:dragenter.prevent="dragging = true" 
                  x-on:dragover.prevent="dragging = true" 
                  x-on:dragleave.prevent="dragging = false" 
-                 x-on:drop.prevent="dragging = false; let files = Array.from($event.dataTransfer.files); // 強制轉為陣列
-        if(files.length > 0) {
-            @this.uploadMultiple('temp_photos', files); // 使用 uploadMultiple 明確指定多檔
-        }
-     " 
+                 x-on:drop.prevent="dragging = false; let files = Array.from($event.dataTransfer.files);
+                    if(files.length > 0) {
+                        @this.uploadMultiple('temp_media', files);
+                    }"
                  @click="$refs.fileInput.click()" 
                  :class="dragging ? 'border-primary bg-primary/10 ring-2 ring-primary/20' : 'border-base-300'" 
                  class="p-6 border-2 border-dashed rounded-xl text-center bg-base-100 hover:border-primary transition-all cursor-pointer group">
-                
+
                 <x-icon name="o-cloud-arrow-up" class="w-8 h-8 mx-auto mb-2 text-base-content/30 group-hover:text-primary transition-colors" />
                 <p class="text-sm font-medium text-base-content/70 group-hover:text-primary">點擊或拖曳媒體至此上傳</p>
-                <p class="text-[10px] text-base-content/40 mt-1">支援 AVIF, JPG, PNG, WebP (最大 2MB/張)</p>
+                <p class="text-[10px] text-base-content/40 mt-1">支援 AVIF, JPG, PNG, WebP, MP4, MOV (最大 20MB)</p>
             </div>
         </div>
     @endif
 </div>
-
-<script>
-{{-- JS Gallery 函數保持不變 --}}
-function mediaGallery(config) {
-    return {
-        images: config.images || [],
-        editable: config.editable || false,
-        isOpen: false,
-        currentIndex: 0,
-        currentImage: null,
-        isZoomed: false,
-        touchStartX: 0,
-        touchStartTime: 0,
-        get hasPrev() { return this.currentIndex > 0; },
-        get hasNext() { return this.currentIndex < this.images.length - 1; },
-        openLightbox(index) {
-            this.currentIndex = index;
-            this.currentImage = this.images[index];
-            this.isOpen = true;
-            document.body.style.overflow = 'hidden';
-        },
-        close() {
-            this.isOpen = false;
-            this.isZoomed = false;
-            document.body.style.overflow = '';
-        },
-        prev() {
-            if (this.hasPrev) {
-                this.currentIndex--;
-                this.currentImage = this.images[this.currentIndex];
-                this.isZoomed = false;
-            }
-        },
-        next() {
-            if (this.hasNext) {
-                this.currentIndex++;
-                this.currentImage = this.images[this.currentIndex];
-                this.isZoomed = false;
-            }
-        },
-        toggleZoom() { this.isZoomed = !this.isZoomed; },
-        deleteMedia(id, isTemp) {
-            if (!confirm('確定要刪除此媒體嗎？')) return;
-            if (isTemp) {
-                const index = id.replace('temp_', '');
-                @this.call('deleteTempPhoto', index);
-            } else {
-                @this.call('deleteImage', id);
-            }
-        },
-        setPrimary(id, isTemp) {
-            if (isTemp) {
-                const index = id.replace('temp_', '');
-                @this.call('setTempPrimary', index);
-            } else {
-                @this.call('setPrimary', id);
-            }
-        },
-        handleTouchStart(e) {
-            this.touchStartX = e.touches[0].clientX;
-            this.touchStartTime = Date.now();
-        },
-        handleTouchMove(e) { if (e.touches.length === 2) e.preventDefault(); },
-        handleTouchEnd(e) {
-            const diffX = this.touchStartX - e.changedTouches[0].clientX;
-            const timeDiff = Date.now() - this.touchStartTime;
-            if (Math.abs(diffX) > 50 && timeDiff < 300) {
-                diffX > 0 ? this.next() : this.prev();
-            }
-        }
-    }
-}
-</script>

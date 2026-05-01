@@ -7,7 +7,7 @@ return [
         'directory' => null,   // 預設存放在 livewire-tmp/
         'middleware' => null,  // 預設為 'throttle:60,1'
         
-        'preview_mimes' => ['png', 'gif', 'bmp', 'jpg', 'jpeg', 'mp4', 'mov', 'avi', 'wmv', 'webp', 'avif',],
+        'preview_mimes' => ['png', 'gif', 'bmp', 'jpg', 'jpeg', 'webp', 'avif', 'mp4', 'mov', 'avi', 'wmv', 'asf', 'webm',],
 
         'max_upload_time' => 5, // 分鐘
     ],

@@ -16,17 +16,16 @@ class Create extends Component
     use Toast, WithFileUploads, HasProductMedia;
 
     // 表單欄位
-    public ?string $category_id = null; // 對應選單選中的分類 code
-    public ?string $material_id = null; // 對應選單選中的材質 id
+    public ?string $category_id = null;
+    public ?string $material_id = null;
     public $sku;
     public $name;
     public $price = 0;
     public $unit = 'ea';
     public $remark = '';
     public $min_stock = 0;
-	public $new_photos = [];
-	public $temp_photos = [];     // 臨時接收新上傳
-    public $video;
+    public $new_media = [];
+    public $temp_media = [];
 
     public function render()
     {
@@ -35,21 +34,24 @@ class Create extends Component
             'materials' => MaterialDefinition::orderBy('bb_code')->get(),
         ]);
     }
-	
+
     public function updated($propertyName)
     {
+        // ✅ 使用通用 updated 方法，確保 temp_media 更新時觸發
+        if ($propertyName === 'temp_media') {
+            $this->updatedTempMedia();
+        }
+
         if (in_array($propertyName, ['category_id', 'material_id'])) {
             $this->generateSku();
         }
     }
 
-	public function generateSku()
+    public function generateSku()
     {
         if (!$this->category_id || !$this->material_id) return;
 
-        // 修正：category_definitions 使用 code 查詢而非 id
         $cat = CategoryDefinition::where('code', $this->category_id)->first();
-        // material_definitions 若主鍵是 id 則保持 find，若也是 code 則改用 where
         $mat = MaterialDefinition::find($this->material_id);
 
         if ($cat && $mat) {
@@ -67,24 +69,10 @@ class Create extends Component
             }
 
             $this->sku = $prefix . $newNumber;
-            $this->name = $mat->name.$cat->name;
+            $this->name = $mat->name . $cat->name;
         }
     }
-    
-	/**
-     * 刪除已存在的媒體 (圖片或影片)
-     */
-    public function deleteImage(ProductImage $image)
-    {
-        // 呼叫 Trait 裡的共用方法
-        $this->deleteMedia($image);
-        
-        // 刷新關聯，讓前端立刻看到檔案消失
-        $this->product->load('images');
-        
-        $this->success("媒體已刪除");
-    }
-	
+
     public function save()
     {
         $this->validate([
@@ -93,21 +81,24 @@ class Create extends Component
             'sku' => 'required|unique:products,sku',
             'name' => 'required|min:2',
             'price' => 'required|numeric',
-			'unit' => 'required',
-			'min_stock' => 'required|integer|min:0',			
-			'new_photos.*' => 'nullable|mimes:jpg,jpeg,png,webp,avif|max:2048',
-			'video' => 'nullable|mimetypes:video/mp4,video/quicktime|max:20480',
+            'unit' => 'required',
+            'min_stock' => 'required|integer|min:0',
+            'new_media.*' => [
+                'nullable',
+                'mimetypes:' . config('business.media.media_mimetypes'),
+                'max:' . config('business.media.media_max_kb'),
+            ],
         ]);
-		
+
         $cat = CategoryDefinition::where('code', $this->category_id)->first();
         $mat = MaterialDefinition::find($this->material_id);
-		
+
         if (!$cat || !$mat) {
             $this->error('無效的分類或材質');
             return;
         }
 
-        Product::create([
+        $product = Product::create([
             'sku' => $this->sku,
             'name' => $this->name,
             'price' => $this->price,
@@ -119,38 +110,51 @@ class Create extends Component
             'remark' => $this->remark,
             'is_active' => true,
         ]);
-		
-		$this->uploadMedia($this->product, $this->new_photos, $this->video);
-        
-        $this->reset(['new_photos', 'video']);
+
+        $this->uploadMedia($product, $this->new_media);
+
+        $this->reset(['new_media', 'temp_media']);
         $this->success('商品基本資料建檔成功！', redirectTo: '/products');
     }
-	
-	/**
-	 * 處理多圖上傳的累積邏輯
-	 */
-	public function updatedTempPhotos()
-	{
-		if (!empty($this->temp_photos)) {
-			foreach ($this->temp_photos as $photo) {
-				// 嚴謹檢查：確保是合法上傳物件才放入累積陣列
-				if ($photo instanceof \Livewire\Features\SupportFileUploads\TemporaryUploadedFile) {
-					$this->new_photos[] = $photo;
-				}
-			}
-			// 清空臨時變數，讓底層 File Input 可以重複觸發相同的檔案名
-			$this->temp_photos = []; 
-		}
-	}
 
-	/**
-	 * 如果你在 MediaManager 有實作刪除暫存圖的功能，Create 也需要這個
-	 */
-	public function deleteTempPhoto($index)
-	{
-		if (isset($this->new_photos[$index])) {
-			unset($this->new_photos[$index]);
-			$this->new_photos = array_values($this->new_photos); // 重置索引
-		}
-	}
+    /**
+     * 刪除暫存媒體
+     */
+    public function deleteTempMedia($index)
+    {
+        if (isset($this->new_media[$index])) {
+            unset($this->new_media[$index]);
+            $this->new_media = array_values($this->new_media);
+        }
+    }
+
+    /**
+     * 設定暫存媒體為首圖
+     */
+    public function setTempPrimary($index)
+    {
+        if (isset($this->new_media[$index])) {
+            $target = $this->new_media[$index];
+            unset($this->new_media[$index]);
+            array_unshift($this->new_media, $target);
+            $this->new_media = array_values($this->new_media);
+        }
+    }
+	
+	public function updatedTempMedia()
+    {
+        if (!empty($this->temp_media)) {
+			//$this->isUploading = true;
+			
+            foreach ($this->temp_media as $file) {
+                if ($file instanceof \Livewire\Features\SupportFileUploads\TemporaryUploadedFile) {
+                    $this->new_media[] = $file;
+                }
+            }
+            $this->temp_media = [];
+            //$this->dispatch('temp-media-merged');
+			
+			//$this->isUploading = false;
+        }
+    }
 }

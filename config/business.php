@@ -83,4 +83,10 @@ return [
         'disk' => env('BACKUP_DISK', 'local'),
         'path' => env('BACKUP_PATH', 'taotique-backup'),
     ],
+	
+	'media' => [
+		'video_extensions' => ['mp4', 'mov', 'avi', 'webm', 'wmv', 'asf'],
+		'media_mimetypes'  => 'image/jpg,image/jpeg,image/png,image/webp,image/avif,video/mp4,video/quicktime,video/x-msvideo,video/webm,video/x-ms-wmv,video/x-ms-asf',
+        'media_max_kb'     => 20480,
+	],
 ];
