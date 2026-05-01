@@ -10,8 +10,7 @@ class PurchaseItem extends Model
     /**
      * 允許批次賦值的欄位
      */
-    protected $fillable = [
-        'store_id',
+    protected $fillable = [        
         'purchase_id',
         'product_id',
         'warehouse_id',
