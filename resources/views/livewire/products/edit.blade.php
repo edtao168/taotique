@@ -9,7 +9,7 @@
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
         {{-- 左側：基本資料表單 --}}
-        <div class="lg:col-span-1">
+        <div class="lg:col-span-1 rounded-xl shadow-md border border-base-300">
             <x-card title="基本資訊" shadow border>                
                 <x-form wire:submit="save">
                     <x-input label="商品 SKU" value="{{ $product->sku }}" icon="o-finger-print" readonly class="bg-base-200 font-mono" />

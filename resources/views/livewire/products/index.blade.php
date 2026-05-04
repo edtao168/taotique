@@ -16,7 +16,7 @@
             <x-table :headers="$headers" :rows="$products" @row-click="$wire.showDetail($event.detail.id)" class="cursor-pointer" with-pagination>
                 @scope('cell_image', $product)
                     @if($product->images->first())
-                        <img src="{{ Storage::url($product->images->first()->path) }}" class="w-12 h-12 object-cover rounded-lg shadow-sm" />
+                        <img src="{{ Storage::url($product->images->first()->path) }}?v={{ $product->updated_at->timestamp }}" class="w-12 h-12 object-cover rounded-lg shadow-sm" />
                     @else
                         <div class="w-12 h-12 bg-base-200 rounded-lg flex items-center justify-center text-gray-400">
                             <x-icon name="o-photo" class="w-6 h-6" />
@@ -75,22 +75,19 @@
         @foreach($products as $product)
             <x-card class="shadow-sm border border-base-200" @click="$wire.showDetail({{ $product->id }})">
                 <div class="flex gap-4">
-                    {{-- 左側：縮圖 --}}
                     <div class="relative w-20 h-20 shrink-0">
                         @if($product->images->first())
-                            <img src="{{ Storage::url($product->images->first()->path) }}" class="w-full h-full object-cover rounded-xl" />
+                            <img src="{{ Storage::url($product->images->first()->path) }}?v={{ $product->updated_at->timestamp }}" class="w-full h-full object-cover rounded-xl" />
                         @else
                             <div class="w-full h-full bg-base-200 rounded-xl flex items-center justify-center text-gray-400">
                                 <x-icon name="o-photo" class="w-8 h-8" />
                             </div>
                         @endif
-                        {{-- 庫存警示標籤 --}}
                         @if($product->total_stock <= ($product->min_stock ?? 0))
                             <span class="absolute -top-2 -left-2 badge badge-error badge-sm text-white">低庫存</span>
                         @endif
                     </div>
 
-                    {{-- 右側：資訊 --}}
                     <div class="flex-1 min-w-0">
                         <div class="flex justify-between items-start">
                             <span class="text-xs font-mono text-gray-500">{{ $product->sku }}</span>
@@ -123,7 +120,6 @@
             </x-card>
         @endforeach
 
-        {{-- 手機端優化：改用流式加載按鈕，取代傳統分頁器 --}}
         <div class="py-6 flex flex-col items-center gap-2">
             @if($products->hasMorePages())
                 <x-button label="載入更多" wire:click="loadMore" class="w-full btn-primary" />
@@ -166,92 +162,11 @@
             </div>
         @endif
 
-        {{-- 媒體相簿：統一使用 mediaGallery Lightbox --}}
+        {{-- ✅ 媒體相簿：統一使用 x-media-manager 組件 --}}
         @if($selectedProduct?->images && $selectedProduct->images->count() > 0)
-            @php
-                $mediaList = [];
-                foreach($selectedProduct->images as $media) {
-                    $ext = strtolower(pathinfo($media->path, PATHINFO_EXTENSION));
-                    $mediaList[] = [
-                        'id' => $media->id,
-                        'url' => Storage::url($media->path),
-                        'is_video' => in_array($ext, config('business.media.video_extensions')),
-                        'is_primary' => (bool)$media->is_primary,
-                        'is_temp' => false,
-                    ];
-                }
-            @endphp
-
-            <x-card title="商品媒體相簿" shadow separator>
-                <div class="grid grid-cols-2 gap-3" 
-                     x-data="mediaGallery({ images: @js($mediaList), editable: false })">
-
-                    @foreach($mediaList as $index => $media)
-                        <div class="relative aspect-square rounded-xl overflow-hidden cursor-pointer hover:ring-2 hover:ring-primary transition-all"
-                             @click="openLightbox({{ $index }})">
-                            @if($media['is_video'])
-                                <video src="{{ $media['url'] }}" class="w-full h-full object-cover bg-black"></video>
-                                <div class="absolute inset-0 flex items-center justify-center bg-black/30">
-                                    <div class="w-10 h-10 bg-white/90 rounded-full flex items-center justify-center shadow-lg">
-                                        <x-icon name="o-play" class="w-5 h-5 text-black ml-0.5" />
-                                    </div>
-                                </div>
-                            @else
-                                <img src="{{ $media['url'] }}" class="w-full h-full object-cover" loading="lazy" />
-                            @endif
-
-                            @if($media['is_primary'])
-                                <div class="absolute top-1 left-1">
-                                    <div class="badge badge-warning gap-1 px-1.5 py-1 shadow-sm border-none">
-                                        <x-icon name="o-star" class="w-3 h-3 fill-current" />
-                                        <span class="text-[10px] font-bold">首圖</span>
-                                    </div>
-                                </div>
-                            @endif
-                        </div>
-                    @endforeach
-
-                    {{-- Lightbox 彈窗（與 media-manager 共用元件） --}}
-                    <div x-show="isOpen" 
-                         x-transition.opacity.duration.300ms 
-                         class="fixed inset-0 z-[9999] bg-black/95 backdrop-blur-sm flex items-center justify-center touch-none" 
-                         @click.self="close()" 
-                         @keydown.escape.window="close()" 
-                         x-trap.inert.noscroll="isOpen">
-
-                        <button @click="close()" class="absolute top-6 right-6 z-50 p-2 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors">
-                            <x-icon name="o-x-mark" class="w-8 h-8" />
-                        </button>
-
-                        <div class="absolute top-6 left-6 z-50 px-4 py-1.5 bg-white/10 rounded-full text-white text-sm font-medium">
-                            <span x-text="currentIndex + 1"></span> / <span x-text="images.length"></span>
-                        </div>
-
-                        <div class="relative w-full h-full flex items-center justify-center p-4">
-                            <button x-show="hasPrev" @click.stop="prev()" class="absolute left-4 md:left-8 z-50 p-3 bg-white/10 hover:bg-white/20 rounded-full text-white transition-all active:scale-95">
-                                <x-icon name="o-chevron-left" class="w-8 h-8" />
-                            </button>
-
-                            <div class="relative w-full h-full flex items-center justify-center p-4">
-                                <template x-if="currentImage">
-                                    <div class="max-w-5xl w-full flex items-center justify-center">
-                                        <template x-if="currentImage.is_video">
-                                            <video :src="currentImage.url" controls autoplay class="max-w-full max-h-[85vh] shadow-2xl rounded-lg"></video>
-                                        </template>
-                                        <template x-if="!currentImage.is_video">
-                                            <img :src="currentImage.url" class="max-w-full max-h-[85vh] object-contain rounded-lg" />
-                                        </template>
-                                    </div>
-                                </template>
-                            </div>
-
-                            <button x-show="hasNext" @click.stop="next()" class="absolute right-4 md:right-8 z-50 p-3 bg-white/10 hover:bg-white/20 rounded-full text-white transition-all active:scale-95">
-                                <x-icon name="o-chevron-right" class="w-8 h-8" />
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </x-card>
+            <x-media-manager 
+                :product="$selectedProduct" 
+                :editable="false" />
         @else
             <div class="text-center py-10 text-gray-400">
                 <x-icon name="o-photo" class="w-12 h-12 mx-auto mb-2 opacity-20" />

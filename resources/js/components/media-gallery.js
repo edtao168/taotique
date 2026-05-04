@@ -5,32 +5,53 @@
  * 支援圖片與影片預覽、觸控滑動、鍵盤導航
  * 
  * @param {Object} config - 設定物件
- * @param {Array} config.images - 媒體陣列 [{ id, url, is_video, is_primary, is_temp }]
+ * @param {Array} config.initialImages - 初始媒體陣列 [{ id, url, is_video, is_primary, is_temp }]
  * @param {boolean} config.editable - 是否可編輯（顯示刪除/設首圖按鈕）
  * @returns {Object} Alpine.js 元件物件
  */
 window.mediaGallery = function(config) {
     return {
-        images: config.images || [],
+        // 統一資料源：所有媒體（資料庫 + 暫存）都存在這裡
+        allMedia: config.initialImages || [],
         editable: config.editable || false,
         isOpen: false,
         currentIndex: 0,
-        currentImage: null,
         isZoomed: false,
         touchStartX: 0,
         touchStartTime: 0,
+
+        get currentImage() {
+            return this.allMedia[this.currentIndex] || null;
+        },
 
         get hasPrev() { 
             return this.currentIndex > 0; 
         },
 
         get hasNext() { 
-            return this.currentIndex < this.images.length - 1; 
+            return this.currentIndex < this.allMedia.length - 1; 
+        },
+
+        // 依 ID 移除媒體
+        removeMediaById(id) {
+            const index = this.allMedia.findIndex(m => m.id == id);
+            if (index !== -1) {
+                this.allMedia.splice(index, 1);
+                if (this.isOpen && this.currentIndex >= this.allMedia.length) {
+                    this.currentIndex = Math.max(0, this.allMedia.length - 1);
+                }
+            }
+        },
+
+        // 替換整個媒體列表（由 Livewire re-render 後呼叫）
+        syncMediaList(newList) {
+            if (!Array.isArray(newList)) return;
+            this.allMedia = newList;
         },
 
         openLightbox(index) {
+            if (index < 0 || index >= this.allMedia.length) return;
             this.currentIndex = index;
-            this.currentImage = this.images[index];
             this.isOpen = true;
             document.body.style.overflow = 'hidden';
         },
@@ -44,7 +65,6 @@ window.mediaGallery = function(config) {
         prev() {
             if (this.hasPrev) {
                 this.currentIndex--;
-                this.currentImage = this.images[this.currentIndex];
                 this.isZoomed = false;
             }
         },
@@ -52,7 +72,6 @@ window.mediaGallery = function(config) {
         next() {
             if (this.hasNext) {
                 this.currentIndex++;
-                this.currentImage = this.images[this.currentIndex];
                 this.isZoomed = false;
             }
         },
@@ -61,20 +80,31 @@ window.mediaGallery = function(config) {
             this.isZoomed = !this.isZoomed; 
         },
 
-        deleteMedia(id, isTemp) {
+        deleteMedia(id, isTemp, index) {
             if (!confirm('確定要刪除此媒體嗎？')) return;
+
+            // 前端即時移除，避免縮略圖殘留
+            this.removeMediaById(id);
+
+            // 再呼叫 Livewire 後端刪除
             if (isTemp) {
-                const index = id.replace('temp_', '');
-                this.$wire.call('deleteTempMedia', index);
+                const tempIndex = id.toString().replace('temp_', '');
+                this.$wire.call('deleteTempMedia', tempIndex);
             } else {
                 this.$wire.call('deleteImage', id);
             }
         },
 
         setPrimary(id, isTemp) {
+            // 前端即時更新首圖標記
+            this.allMedia.forEach(m => m.is_primary = false);
+            const target = this.allMedia.find(m => m.id == id);
+            if (target) target.is_primary = true;
+
+            // 同步到 Livewire
             if (isTemp) {
-                const index = id.replace('temp_', '');
-                this.$wire.call('setTempPrimary', index);
+                const tempIndex = id.toString().replace('temp_', '');
+                this.$wire.call('setTempPrimary', tempIndex);
             } else {
                 this.$wire.call('setPrimary', id);
             }

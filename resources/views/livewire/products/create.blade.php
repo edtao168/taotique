@@ -7,7 +7,7 @@
     </x-header>
 
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-		<div class="lg:col-span-1">
+		<div class="lg:col-span-1 rounded-xl shadow-md border border-base-300">
             <x-card title="基本資訊" shadow border>
 				<x-form wire:submit="save" class="space-y-3">
 					{{-- 分類與材質並列 --}}
