@@ -81,6 +81,23 @@
 					</x-menu-sub>
 
 					<x-menu-separator />
+					
+					<x-menu-sub title="帳務管理" icon="o-currency-dollar">
+						{{-- 使用冒號綁定 PHP route() 函數 --}}
+						<x-menu-item title="手動記帳" icon="o-pencil-square" :link="route('accountings.journals.create')" />
+						<x-menu-item title="日記帳流水" icon="o-book-open" :link="route('accountings.journals.index')" />
+						<x-menu-item title="會計科目表" icon="o-list-bullet" :link="route('accounts.index')" />
+						<x-menu-item title="自動過帳規則" icon="o-adjustments-horizontal" :link="route('accounting_rules.index')" />
+					</x-menu-sub>
+					{{-- 
+					<x-menu-separator />
+
+					<x-menu-sub title="私人記帳" icon="o-user">
+						<x-menu-item title="記一筆" icon="o-pencil-square" :link="route('personal.ledgers.create')" />
+						<x-menu-item title="流水帳" icon="o-book-open" :link="route('personal.ledgers.index')" />
+					</x-menu-sub>
+						--}}
+					<x-menu-separator />
 
 					{{-- 4. 基本資料設定 --}}
 					<x-menu-sub title="基本資料設定" icon="o-cog-6-tooth">

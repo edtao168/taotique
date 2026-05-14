@@ -45,7 +45,11 @@ export default { // Laravel 12 建議使用 export default
 					"--rounded-btn": "0rem",   // 宋代美學較為方正俐落
 				},
 			},
-			"light", // 保留一個預設主題作為備援
+			// "light", // 保留一個預設主題作為備援
 		],
+		defaultTheme: "song_dynasty",  // 強制使用
+        darkTheme: "song_dynasty",
+        logs: false
     },
+	plugins: [daisyui, forms, typography],
 }

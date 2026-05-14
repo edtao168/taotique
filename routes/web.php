@@ -35,7 +35,14 @@ use App\Livewire\Products\Create as ProductCreate;
 use App\Livewire\Products\Show as ProductShow;
 use App\Livewire\Products\Edit as ProductEdit;
 
+// 日記賬
+use App\Livewire\Accountings\JournalCorrect;
+use App\Livewire\Accountings\JournalCreate;
+use App\Livewire\Accountings\JournalIndex;
+
 // 系統設定 (Settings)
+use App\Livewire\Settings\AccountingRules\Index as AccountingRuleIndex;
+use App\Livewire\Settings\Accounts\Index as AccountIndex;
 use App\Livewire\Settings\BackupIndex;
 use App\Livewire\Settings\Categories\Index as CategoryIndex;
 use App\Livewire\Settings\Channels\Index as ChannelIndex;
@@ -98,6 +105,22 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/{product}/edit', ProductEdit::class)->name('edit');
     });
 	
+	// --- 日記賬 (Journals) ---
+	Route::prefix('accountings')->name('accountings.')->group(function () {
+		Route::get('/journals', JournalIndex::class)->name('journals.index');
+		Route::get('/journals/create', JournalCreate::class)->name('journals.create');
+		Route::get('/journals/{journal}/edit', JournalCreate::class)->name('journals.edit');
+		Route::get('/journals/{journal}/correct', JournalCorrect::class)->name('journals.correct');
+	});
+	
+	// --- 個人記帳 (Personal Journals) ---
+	/* Route::prefix('personal')->name('personal.')->group(function () {
+		Route::get('/ledgers', Personal\LedgerIndex::class)->name('ledgers.index');
+		Route::get('/ledgers/create', Personal\LedgerCreate::class)->name('ledgers.create');
+		Route::get('/ledgers/{ledger}/edit', Personal\LedgerCreate::class)->name('ledgers.edit');
+		Route::get('/stats', Personal\CategoryStats::class)->name('stats');
+	}); */
+	
     // --- 系統設定 (Settings) ---
     Route::prefix('settings')->group(function () {
         Route::get('/categories', CategoryIndex::class)->name('categories.index');
@@ -107,6 +130,8 @@ Route::middleware(['auth'])->group(function () {
 		Route::get('/channels', ChannelIndex::class)->name('channels.index');		
         Route::get('/partners', PartnerIndex::class)->name('partners.index');
         Route::get('/users', UserManagement::class)->name('users.index');
+		Route::get('/accounting-rules', AccountingRuleIndex::class)->name('accounting_rules.index');
+		Route::get('/accounts', AccountIndex::class)->name('accounts.index');
         // 直接將 Route 指向 Livewire Component，完全跳過 Controller
 		Route::get('/', SystemSettings::class)->name('settings.system')->middleware(['auth']);
     });
