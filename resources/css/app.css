@@ -1,0 +1,50 @@
+/* 1. 引入 Tailwind CSS v4 */
+@import "tailwindcss";
+
+/* 2. 必須引入 DaisyUI (這是 Mary UI 的基礎) */
+/* 註：如果 npm 安裝了 daisyui，v4 建議直接 import 它的 CSS 或使用兼容插件 */
+@plugin "daisyui"; 
+@plugin "@tailwindcss/typography";
+
+/* 3. 設定掃描路徑 (務必包含 Mary UI 的 vendor 路徑) */
+@source "../../resources/**/*.blade.php";
+@source "../../app/Livewire/**/*.php";
+@source "../../vendor/robsontenorio/mary/src/View/Components/**/*.php"; 
+@source "../../vendor/livewire/flux/stubs/**/*.blade.php";
+
+/* 4. Flux UI 樣式 (如果你同時有在使用 Flux) */
+@import "../../vendor/livewire/flux/dist/flux.css";
+
+@theme {
+    --color-brand: #3b82f6;
+}
+
+/* 5. 修正圖標過大的強制補丁 (如果編譯後依然過大) */
+@layer base {
+    svg {
+        @apply w-5 h-5 inline-block; /* 強制限制 Mary UI 圖標預設大小 */
+    }
+	
+	/* 1. 統一所有輸入框的對齊基準 */
+    input.text-right {
+        @apply font-mono; /* 金額建議使用等寬字型 */
+        display: inline-flex !important;
+        align-items: center !important; /* 強制 Flex 置中 */
+        line-height: 1 !important;      /* 移除多餘行高 */
+        padding-top: 0 !important;
+        padding-bottom: 0 !important;
+        height: 2.5rem;                 /* 確保高度固定 */
+    }
+
+    /* 2. 修正 Mary UI 的 Input 容器內距 */
+    .mary-input-wrapper input {
+        vertical-align: middle;
+    }
+
+    /* 3. 針對 Chrome 的數字控制按鈕進行移除，避免空間擠壓 */
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+    }
+}

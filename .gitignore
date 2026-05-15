@@ -1,0 +1,24 @@
+# 环境配置
+.env
+.env.*
+config/local.php
+config/production.php
+
+# 依赖和缓存
+node_modules/
+vendor/
+cache/
+logs/
+*.log
+tmp/
+temp/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 系统文件
+.DS_Store
+Thumbs.db
