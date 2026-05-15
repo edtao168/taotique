@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 {{-- 檔案路徑：resources/views/components/scanner.blade.php --}}
 <div x-data="{
     scanner: null,
@@ -12,4 +13,20 @@
     }
 }" x-init="$watch('$wire.showScanner', value => value && startScanner())">
     <div id="reader" class="w-full"></div>
+=======
+{{-- 檔案路徑：resources/views/components/scanner.blade.php --}}
+<div x-data="{
+    scanner: null,
+    async startScanner() {
+        const config = { fps: 10, qrbox: { width: 250, height: 150 } };
+        this.scanner = new Html5QrcodeScanner('reader', config, false);
+        this.scanner.render((decodeText) => {
+            $wire.handleScannedBarcode(decodeText);
+            this.scanner.clear();
+            $wire.showScanner = false;
+        });
+    }
+}" x-init="$watch('$wire.showScanner', value => value && startScanner())">
+    <div id="reader" class="w-full"></div>
+>>>>>>> b29039cfb5a4a2683aedba9883af961633089c73
 </div>
