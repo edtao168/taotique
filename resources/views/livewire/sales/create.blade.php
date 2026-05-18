@@ -2,14 +2,11 @@
 <div x-data="{ 
         atBottom: false,
         checkScroll() {
-            // 修正計算公式：處理手機端瀏覽器工具列縮放問題
             let scrollHeight = Math.max(
                 document.body.scrollHeight, document.documentElement.scrollHeight,
                 document.body.offsetHeight, document.documentElement.offsetHeight,
                 document.body.clientHeight, document.documentElement.clientHeight
             );
-            
-            // 判斷是否接近底部 (預留 150px 緩衝區)
             this.atBottom = (window.innerHeight + window.scrollY) >= (scrollHeight - 150);
         }
      }" 
@@ -17,7 +14,6 @@
      @scroll.window.debounce.50ms="checkScroll()">
 	 
     <x-header separator progress-indicator>
-	    {{-- 驗證錯誤顯示 --}}
 		@if($errors->any())
 			<div class="alert alert-error mb-4 shadow-lg">
 				<x-icon name="o-exclamation-triangle" class="w-6 h-6" />
@@ -57,28 +53,22 @@
         <div class="lg:col-span-8 space-y-6">
 			{{-- 1. 單據資訊 --}}
             <x-card title="單據資訊" shadow class="border-t-4 border-primary">
-                {{-- 將欄位改為：手機端 1 欄 / 平板 2 欄 / 電腦 4 欄 --}}
 				<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
 					<x-choices 
-						id="form-customer-id"
-						name="form[customer_id]"
 						label="客戶" 
-						wire:model="form.customer_id" 
+						wire:model.live="form.customer_id" 
 						:options="$customers" 
 						single 
 						icon="o-users" 
 					/>
 
 					<x-datetime 
-						id="form-sold-at"
-						name="form[sold_at]"
 						label="成交時間" 
-						wire:model="form.sold_at" 
+						wire:model.live="form.sold_at" 
 						icon="o-clock" 
 						type="datetime-local"
 					/>
 					
-					{{-- 顯示目前系統設定狀態，讓操作員知曉 --}}						
 					@php
 						$isAuto = (bool) App\Models\Setting::get('so_auto_stock_out', true);
 					@endphp
@@ -93,39 +83,31 @@
 					</div>
 				
 					<x-choices 
-						id="form-shop-id"
-						name="form[shop_id]"
 						label="分店" 
-						wire:model="form.shop_id" 
+						wire:model.live="form.shop_id" 
 						:options="$shops"
 						single 
 						icon="o-building-storefront"
 					/>
 
 					<x-choices 
-						id="form-channel-id"
-						name="form[channel_id]"
 						label="銷售通路" 
-						wire:model="form.channel_id"
+						wire:model.live="form.channel_id"
 						:options="$channels"
 						single
 						icon="o-globe-alt"
 					/>
 					
 					<x-select 
-						id="form-payment-method"
-						name="form[payment_method]"
 						label="付款方式" 
-						wire:model="form.payment_method" 
+						wire:model.live="form.payment_method" 
 						:options="config('business.payment_methods')" 
 						icon="o-banknotes" 
 					/>
 
 					<x-select 
-						id="form-warehouse-id"
-						name="form[warehouse_id]"
 						label="業務歸屬倉庫" 
-						wire:model="form.warehouse_id" 
+						wire:model.live="form.warehouse_id" 
 						:options="$warehouses" 
 						placeholder="請選擇倉庫"  
 						icon="o-home-modern" 
@@ -133,17 +115,15 @@
 				</div>
 				<div class="mt-4">
 					<x-textarea 
-						id="form-remark"
-						name="form[remark]"
 						label="備註" 
-						wire:model="form.remark" 
+						wire:model.live="form.remark" 
 						rows="2"
 					/>
 				</div>
-            </x-card>        
-		
+            </x-card>         phot
+
 			{{-- 2. 商品明細 --}}		
-			<x-card title="銷售明細" shadow separator class="mb-4 lg:mb-0 border-t-4 border-primary">
+			<x-card shadow separator class="mb-4 lg:mb-0 border-t-4 border-primary">
 				<x-slot:title>
 					<div class="flex justify-between items-center w-full">
 						<span class="font-bold text-xl text-base-content">銷售明細</span>
@@ -165,8 +145,11 @@
 
 				<div class="space-y-3">
 					@forelse($items as $index => $item)
-						<x-sale-row :$index :$item :$warehouses :$productOptions mode="pc" />
-						<x-sale-row :$index :$item :$warehouses :$productOptions mode="mobile" />
+                        {{-- 關鍵：外部隔離層提供絕對唯一的識別，確保 DOM 狀態在響應式切換下不會被 OCI 解構洗掉 --}}
+                        <div wire:key="sale-row-block-{{ $index }}-{{ $item['product_id'] ?? 'new' }}">
+						    <x-sale-row :$index :$item :$warehouses :$productOptions mode="pc" />
+						    <x-sale-row :$index :$item :$warehouses :$productOptions mode="mobile" />
+                        </div>
 					@empty        
 						<div class="p-12 text-center bg-base-200/20 rounded-b-lg border-dashed border-2">
 							<x-icon name="o-shopping-cart" class="w-12 h-12 mx-auto opacity-20" />
@@ -185,13 +168,11 @@
         <div class="lg:col-span-4 space-y-6">
             <x-card title="結算" shadow class="bg-base-100 border-t-4 border-primary">
                 <div class="space-y-4">
-                    {{-- 第一列：小計 --}}
                     <div class="flex justify-between items-center p-2 bg-base-200/50 rounded-lg">
                         <span class="font-bold opacity-70">小計</span>
-                        <span class="font-mono text-right">NT$ {{ number_format($form['subtotal'] ?? 0, 0) }}</span>
+                        <span class="font-mono text-right">NT$ {{ number_format((float) ($form['subtotal'] ?? 0), 2) }}</span>
                     </div>
 
-                    {{-- 第二列：雙欄對照 --}}                  
 					<div class="grid grid-cols-2 gap-4 text-xs">
 						{{-- 左側：買家區塊 --}}
 						<div class="space-y-3">
@@ -199,10 +180,8 @@
 							
 							@foreach(collect(config('business.fee_types'))->where('target', 'customer') as $field => $config)
 								<x-input 
-									id="fee-customer-{{ $field }}"
-									name="fee_customer_{{ $field }}"
-									label="{{ $config['name'] }}" 
 									wire:model.live.debounce.500ms="form.{{ $field }}"
+									label="{{ $config['name'] }}" 
 									prefix="{{ $config['operator'] === 'add' ? '+' : '-' }}"
 									icon="{{ $config['icon'] ?? '' }}"
 									class="input-sm text-right font-mono {{ $config['operator'] === 'sub' ? 'text-error' : '' }}"
@@ -214,7 +193,7 @@
 							<div class="pt-2 border-t border-dashed">
 								<div class="text-[10px] opacity-50">買家實付</div>
 								<div class="text-lg font-bold text-blue-600 font-mono">
-									NT$ {{ number_format($form['customer_total'] ?? 0, 2) }}
+									NT$ {{ number_format((float) ($form['customer_total'] ?? 0), 2) }}
 								</div>
 							</div>
 						</div>
@@ -225,10 +204,8 @@
 							
 							@foreach(collect(config('business.fee_types'))->where('target', 'seller') as $field => $config)
 								<x-input 
-									id="fee-seller-{{ $field }}"
-									name="fee_seller_{{ $field }}"
-									label="{{ $config['name'] }}" 
 									wire:model.live.debounce.500ms="form.{{ $field }}" 
+									label="{{ $config['name'] }}" 
 									prefix="{{ $config['operator'] === 'add' ? '+' : '-' }}"
 									icon="{{ $config['icon'] ?? '' }}"
 									class="input-sm text-right font-mono {{ $config['operator'] === 'sub' ? 'text-warning' : '' }}"
@@ -239,10 +216,8 @@
 							
 							@if(!isset(config('business.fee_types')['order_adjustment']))
 								<x-input
-									id="order-adjustment"
-									name="order_adjustment"
-									label="帳款調整"
 									wire:model.live.debounce.500ms="form.order_adjustment"
+									label="帳款調整"
 									prefix="±"
 									class="input-sm text-right font-mono"
 								/>
@@ -252,11 +227,10 @@
 
                     <div class="divider my-0"></div>
 
-                    {{-- 第三列：賣家實收 --}}
                     <div class="p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl border border-emerald-100">
                         <div class="text-[15px] text-emerald-600 font-bold tracking-widest uppercase mb-1">最終訂單進帳</div>
                         <div class="text-4xl font-black text-emerald-600 font-mono">
-                            NT$ {{ number_format($form['final_net_amount'] ?? 0, 0) }}
+                            NT$ {{ number_format((float) ($form['final_net_amount'] ?? 0), 2) }}
                         </div>
                     </div>
 
@@ -266,7 +240,6 @@
         </div>
     </div>
 
-    {{-- 滾動提示 --}}
 	<div x-show="!atBottom" 
 		 x-transition:enter="transition ease-out duration-300"
 		 x-transition:enter-start="opacity-0 transform translate-y-4"
@@ -275,7 +248,6 @@
 		 class="flex fixed bottom-20 right-4 lg:bottom-6 lg:right-6 z-50 pointer-events-none">
 		
 		<div class="flex flex-col items-center">
-			{{-- 手機端文字縮小 --}}
 			<span class="text-[10px] lg:text-xs font-bold text-orange-600 bg-orange-50 px-2 py-1 rounded-full shadow-sm mb-1">
 				下滑查看
 			</span>

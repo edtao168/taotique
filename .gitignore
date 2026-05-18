@@ -12,6 +12,10 @@ logs/
 *.log
 tmp/
 temp/
+/composer.phar
+/public/hot
+/storage/*.session
+/storage/framework/sessions/*
 
 # IDE
 .vscode/
