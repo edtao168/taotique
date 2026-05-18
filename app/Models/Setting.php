@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 
 class Setting extends Model
 {
@@ -11,14 +12,10 @@ class Setting extends Model
     public $incrementing = false;
     public $timestamps = true;
     protected $fillable = ['key', 'value', 'group', 'type', 'description'];
-
-    // 重要：移除 JSON cast，我們手動處理
-    // protected function casts(): array
-    // {
-    //     return [
-    //         'value' => 'json',
-    //     ];
-    // }
+	
+	protected $casts = [
+        'value' => 'json',
+    ];
 
     /**
      * 通用取得設定值
@@ -29,11 +26,21 @@ class Setting extends Model
         
         return Cache::remember($cacheKey, 3600, function () use ($key, $default) {
             $setting = self::find($key);
+            
             if (!$setting) {
                 return $default;
             }
-
-            return $setting->getDecodedValue($default);
+            
+            // Laravel cast 已經自動還原型別（包含字串、陣列、數字、布林值）
+            $value = $setting->value;
+            $type = $setting->type ?? 'string';
+            
+            return match($type) {
+                'boolean' => filter_var($value, FILTER_VALIDATE_BOOLEAN),
+                'integer' => (int) $value,
+                'float'   => (float) $value,
+                default   => $value, // json 陣列與 string 字串由 cast 處理即可
+            };
         });
     }
     
@@ -86,17 +93,14 @@ class Setting extends Model
             // 自動判斷 type
             $type = self::detectType($value);
             
-            // 重要：將值編碼為 JSON 字串
-            $jsonString = self::encodeToJsonString($value);
-            
             if ($setting) {
-                $setting->value = $jsonString;
+                $setting->value = $value;
                 $setting->type = $type;
                 $setting->save();
             } else {
                 $setting = self::create([
                     'key' => $key,
-                    'value' => $jsonString,
+                    'value' => $value,
                     'type' => $type,
                     'group' => 'core'
                 ]);
@@ -169,9 +173,8 @@ class Setting extends Model
      * 取得布林值
      */
     public static function getBool(string $key, bool $default = false): bool
-    {
-        $value = self::get($key, $default);
-        return filter_var($value, FILTER_VALIDATE_BOOLEAN);
+    {        
+        return filter_var(self::get($key, $default), FILTER_VALIDATE_BOOLEAN);
     }
     
     /**
@@ -180,21 +183,5 @@ class Setting extends Model
     public static function isEnabled(string $key): bool
     {
         return self::getBool($key, false);
-    }
-    
-    /**
-     * Accessor
-     */
-    public function getValueAttribute()
-    {
-        return $this->getDecodedValue();
-    }
-    
-    /**
-     * Mutator
-     */
-    public function setValueAttribute($value)
-    {
-        $this->attributes['value'] = self::encodeToJsonString($value);
-    }
+    }    
 }
