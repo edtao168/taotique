@@ -136,6 +136,9 @@ class Create extends Component
         ];
     }
 
+	/**
+     * 自動生成如「客戶 是必填的」這樣的訊息。
+     */
     public function validationAttributes()
     {
         return [
@@ -261,88 +264,9 @@ class Create extends Component
         $this->calculateAll();
     }
     
-    public function save()
-    {
-        $this->validate();
-        $allowNegative = Setting::get('allow_negative_stock', false);
-
-        try {
-            // 高頻併發控制：交易隔離
-            DB::transaction(function () use ($allowNegative) {				
-                $saleData = collect($this->form)->only([
-                    'shop_id', 'invoice_number', 'customer_id', 'warehouse_id', 'channel_id', 'payment_method', 'remark', 'sold_at'
-                ])->toArray();
-
-                $saleData['user_id'] = auth()->id() ?? $this->form['user_id'];
-                $saleData['subtotal'] = $this->items_subtotal;
-                $saleData['customer_total'] = $this->customer_total;
-                $saleData['final_net_amount'] = $this->final_net_amount;
-                
-                // 修正：移除資料表不存在的 is_stocked_out 欄位寫入，純由時間戳記演繹狀態
-                $saleData['stocked_out_at'] = $this->stockoutWhenSold ? $this->form['sold_at'] : null;
-                            
-                if ($this->isEdit && $this->sale) {
-                    // 若編輯前原先單據已有出庫時間戳記，先執行嚴謹庫存回補
-                    if (!is_null($this->sale->stocked_out_at)) {
-                        foreach ($this->sale->items as $oldItem) {
-                            Inventory::where('product_id', $oldItem->product_id)
-                                ->where('warehouse_id', $oldItem->warehouse_id)
-                                ->lockForUpdate() // 行級鎖定
-                                ->increment('quantity', $oldItem->quantity);
-                        }
-                    }
-                    $currentSale = Sale::where('id', $this->sale->id)->lockForUpdate()->first();					
-                    $currentSale->update($saleData);
-                    $currentSale->items()->delete();
-                } else {
-                    $currentSale = Sale::create($saleData);
-                }
-
-                // 2. 處理新明細與庫存扣除
-                foreach ($this->items as $item) {
-                    $currentSale->items()->create([
-                        'shop_id'      => $currentSale->shop_id, // 多店預留包含 shop_id
-                        'product_id'   => $item['product_id'],
-                        'warehouse_id' => $item['warehouse_id'],
-                        'quantity'     => $item['quantity'],
-                        'price'        => $item['price'],
-                        'subtotal'     => bcmul($item['price'], $item['quantity'], 4),
-                    ]);
-                    
-                    if ($this->stockoutWhenSold) {
-                        $inventory = Inventory::where('product_id', $item['product_id'])
-                            ->where('warehouse_id', $item['warehouse_id'])
-                            ->lockForUpdate() // 強制併發 lockForUpdate
-                            ->first();
-
-                        if ($inventory) {
-                            $newQty = bcsub($inventory->quantity, $item['quantity'], 4);
-                            if (!$allowNegative && $newQty < 0) {
-                                throw new \Exception("商品 [{$item['name']}] 庫存不足，且系統不允許負庫存");
-                            }
-                            $inventory->update(['quantity' => $newQty]);
-                        } else {
-                            if (!$allowNegative) {
-                                throw new \Exception("商品 [{$item['name']}] 無庫存記錄");
-                            }
-                            Inventory::create([
-                                'shop_id' => $currentSale->shop_id,
-                                'warehouse_id' => $item['warehouse_id'],
-                                'product_id' => $item['product_id'],
-                                'quantity' => bcsub('0', $item['quantity'], 4),
-                            ]);
-                        }
-                    }
-                }
-
-                $this->success($this->isEdit ? '銷售單修改成功' : '銷售單建立成功', redirectTo: route('sales.index'));
-            });
-            
-        } catch (\Exception $e) {
-            $this->error('儲存失敗：' . $e->getMessage());
-        }
-    }
-
+    /**
+     * 处理扫描到的条码
+     */
     public function onBarcodeScanned(string $barcode, ?int $index = null): void
     {
         $product = Product::where('barcode', $barcode)->first();
@@ -352,15 +276,162 @@ class Create extends Component
         }
 
         $this->items[] = [
-            'product_id'   => $product->id,
-            'warehouse_id' => (int) ($this->form['warehouse_id'] ?? 1),
-            'name'         => $product->name,
-            'quantity'     => '1.0000',
-            'price'        => (string) $product->price,
-            'subtotal'     => (string) $product->price,
+            'product_id' => $product->id,
+            'name'       => $product->name,
+            'quantity'   => 1,
+            'price'      => $product->price,
+            'subtotal'   => $product->price,
         ];
         $this->calculateAll();
     }
+	
+	public function updatedSubtotal()
+	{
+		$discount = $this->discount ?? '0';
+		$this->customer_total = bcsub($this->subtotal, $discount, 2);
+	}
+
+    public function save()
+	{
+		$this->validate();
+		$allowNegative = Setting::get('allow_negative_stock', false);
+
+		try {
+			DB::transaction(function () use ($allowNegative) {
+				// 1. 先檢查庫存（在鎖定前）
+				if ($this->stockoutWhenSold) {
+					foreach ($this->items as $item) {
+						$product = Product::find($item['product_id']);
+						if (!$product) {
+							throw new \Exception("商品不存在");
+						}
+						
+						$inventory = Inventory::where('product_id', $item['product_id'])
+							->where('warehouse_id', $item['warehouse_id'])
+							->first();
+						
+						$currentQty = $inventory ? (float) $inventory->quantity : 0;
+						$needQty = (float) $item['quantity'];
+						
+						if (!$allowNegative && ($currentQty - $needQty) < -0.0001) {
+							throw new \Exception("商品 [{$product->full_display_name}] 庫存不足，目前庫存：{$currentQty}，需要：{$needQty}");
+						}
+					}
+				}
+				
+				// 2. 準備銷售單數據
+				$saleData = collect($this->form)->only([
+					'shop_id', 'invoice_number', 'customer_id', 'warehouse_id', 
+					'channel_id', 'payment_method', 'remark', 'sold_at'
+				])->toArray();
+
+				$saleData['user_id'] = auth()->id() ?? $this->form['user_id'];
+				$saleData['subtotal'] = (float) $this->items_subtotal;
+				$saleData['customer_total'] = (float) $this->customer_total;
+				$saleData['final_net_amount'] = (float) $this->final_net_amount;
+				$saleData['stocked_out_at'] = $this->stockoutWhenSold ? $this->form['sold_at'] : null;
+							
+				// 3. 處理編輯模式的庫存回補（使用較安全的樂觀鎖）
+				if ($this->isEdit && $this->sale) {
+					if (!is_null($this->sale->stocked_out_at)) {
+						foreach ($this->sale->items as $oldItem) {
+							$inventory = Inventory::where('product_id', $oldItem->product_id)
+								->where('warehouse_id', $oldItem->warehouse_id)
+								->first();
+							
+							if ($inventory) {
+								$newQty = (float) $inventory->quantity + (float) $oldItem->quantity;
+								$inventory->update(['quantity' => $newQty]);
+							}
+						}
+					}
+					
+					$currentSale = Sale::find($this->sale->id);
+					if (!$currentSale) {
+						throw new \Exception("銷售單不存在");
+					}
+					$currentSale->update($saleData);
+					$currentSale->items()->delete();
+				} else {
+					$currentSale = Sale::create($saleData);
+				}
+
+				// 4. 處理新明細與庫存扣除（使用逐筆更新避免死鎖）
+				foreach ($this->items as $item) {
+					$currentSale->items()->create([
+						'shop_id'      => $currentSale->shop_id,
+						'product_id'   => $item['product_id'],
+						'warehouse_id' => $item['warehouse_id'],
+						'quantity'     => (float) $item['quantity'],
+						'price'        => (float) $item['price'],
+						'subtotal'     => (float) $item['price'] * (float) $item['quantity'],
+					]);
+					
+					if ($this->stockoutWhenSold) {
+						// 改用樂觀鎖或重試機制
+						$maxRetries = 3;
+						$retryCount = 0;
+						
+						while ($retryCount < $maxRetries) {
+							try {
+								$inventory = Inventory::where('product_id', $item['product_id'])
+									->where('warehouse_id', $item['warehouse_id'])
+									->first();
+								
+								if ($inventory) {
+									$oldQty = (float) $inventory->quantity;
+									$newQty = $oldQty - (float) $item['quantity'];
+									
+									if (!$allowNegative && $newQty < -0.0001) {
+										throw new \Exception("商品庫存不足");
+									}
+									
+									// 使用條件更新避免併發問題
+									$updated = Inventory::where('product_id', $item['product_id'])
+										->where('warehouse_id', $item['warehouse_id'])
+										->where('quantity', $oldQty)  // 樂觀鎖條件
+										->update(['quantity' => $newQty]);
+									
+									if ($updated) {
+										break; // 更新成功
+									}
+								} else {
+									if (!$allowNegative) {
+										throw new \Exception("商品無庫存記錄");
+									}
+									Inventory::create([
+										'shop_id' => $currentSale->shop_id,
+										'warehouse_id' => $item['warehouse_id'],
+										'product_id' => $item['product_id'],
+										'quantity' => -1 * (float) $item['quantity'],
+									]);
+									break;
+								}
+								
+								$retryCount++;
+								if ($retryCount >= $maxRetries) {
+									throw new \Exception("更新庫存失敗，請稍後重試");
+								}
+								
+								usleep(50000); // 等待 50ms 後重試
+							} catch (\Exception $e) {
+								if ($retryCount >= $maxRetries - 1) {
+									throw $e;
+								}
+								$retryCount++;
+								usleep(50000);
+							}
+						}
+					}
+				}
+
+				$this->success($this->isEdit ? '銷售單修改成功' : '銷售單建立成功', redirectTo: route('sales.index'));
+			});
+			
+		} catch (\Exception $e) {
+			$this->error('儲存失敗：' . $e->getMessage());
+		}
+	}
 
     public function render()
     {
