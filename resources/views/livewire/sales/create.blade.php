@@ -56,7 +56,7 @@
 				<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
 					<x-choices 
 						label="客戶" 
-						wire:model.live="form.customer_id" 
+						wire:model="form.customer_id" 
 						:options="$customers" 
 						single 
 						icon="o-users" 
@@ -84,7 +84,7 @@
 				
 					<x-choices 
 						label="分店" 
-						wire:model.live="form.shop_id" 
+						wire:model="form.shop_id" 
 						:options="$shops"
 						single 
 						icon="o-building-storefront"
@@ -92,7 +92,7 @@
 
 					<x-choices 
 						label="銷售通路" 
-						wire:model.live="form.channel_id"
+						wire:model="form.channel_id"
 						:options="$channels"
 						single
 						icon="o-globe-alt"
@@ -107,7 +107,7 @@
 
 					<x-select 
 						label="業務歸屬倉庫" 
-						wire:model.live="form.warehouse_id" 
+						wire:model="form.warehouse_id" 
 						:options="$warehouses" 
 						placeholder="請選擇倉庫"  
 						icon="o-home-modern" 
