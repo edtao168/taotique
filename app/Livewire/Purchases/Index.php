@@ -35,7 +35,7 @@ class Index extends Component
 			
 			$this->selectedPurchase = null;
             
-            $this->success("採購單 {$purchase->purchase_number} 已成功入庫");
+            $this->success("採購單 {$purchase->purchase_number} 已成功入庫並完成會計結轉");
         } catch (\Exception $e) {
             $this->error('入庫失敗：' . $e->getMessage());
         }
@@ -62,9 +62,10 @@ class Index extends Component
 			DB::transaction(function () use ($purchase) {
 				if ($this->shouldSyncInventory) {
 					foreach ($purchase->items as $item) {
-						$inventory = Inventory::where('product_id', $item->product_id)
-							->where('warehouse_id', $item->warehouse_id)
-							->lockForUpdate()
+						$inventory = Inventory::where('shop_id', $purchase->shop_id ?? 1)
+                            ->where('product_id', $item->product_id)
+                            ->where('warehouse_id', $item->warehouse_id)
+                            ->lockForUpdate()
 							->first();
 
 						if ($inventory) {
@@ -84,7 +85,7 @@ class Index extends Component
 
 			$this->selectedPurchase = null;
 			$this->drawer = false;
-			$this->success('採購單已刪除');
+			$this->success('採購單已刪除，庫存已同步回滾。');
 			
 		} catch (\Exception $e) {
 			$this->error('刪除失敗：' . $e->getMessage());
@@ -97,7 +98,7 @@ class Index extends Component
      */
     public function showDetail(int $id): void
     {
-        $purchase = Purchase::with(['supplier', 'items.product', 'items.warehouse', 'user'])
+        $purchase = Purchase::with(['shop','supplier', 'items.product', 'items.warehouse', 'user'])
 			->find($id);
 
 		if (!$purchase) {
@@ -123,7 +124,9 @@ class Index extends Component
     public function render()
     {
         $headers = [            
-            ['key' => 'purchase_number', 'label' => '單號', 'class' => 'font-semibold'],
+            ['key' => 'purchase_number', 'label' => '單號', 'class' => ''],
+			['key' => 'shop_name', 'label' => '分店'],
+			['key' => 'warehouse_name', 'label' => '歸屬倉庫'],
             ['key' => 'supplier_name', 'label' => '供應商', 'sortBy' => 'supplier_id'],
             ['key' => 'purchased_at', 'label' => '日期'],
             ['key' => 'total_amount', 'label' => '原幣總額', 'textAlign' => 'text-right'],
@@ -131,7 +134,7 @@ class Index extends Component
             ['key' => 'actions', 'label' => '', 'sortable' => false],
         ];
 
-        $purchases = Purchase::with('supplier')
+        $purchases = Purchase::with('shop','supplier', 'warehouse')
             ->when($this->search, function ($query) {
                 $query->where('purchase_number', 'like', "%{$this->search}%")
                       ->orWhereHas('supplier', fn($q) => $q->where('name', 'like', "%{$this->search}%"));

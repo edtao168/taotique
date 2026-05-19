@@ -1,6 +1,30 @@
 <?php
 
 return [
+	// 🎯 採購專用付款方式（新增微信支付，將預設應付帳款語意調整為大陸廠商應付）
+    'purchase_methods' => [
+        'wechat_pay'  => ['name' => '微信支付', 'icon' => 'o-chat-bubble-left-right', 'default_account' => '101207'],
+        'cash_twd'    => ['name' => '現金-新台幣', 'icon' => 'o-banknotes', 'default_account' => '100101'],
+        'bank_cathay' => ['name' => '國泰世華-新台幣', 'icon' => 'o-arrow-path', 'default_account' => '100201'],
+        'china_ap'    => ['name' => '應付-大陸廠商 (賒帳/月結)', 'icon' => 'o-clock', 'default_account' => '220201'],
+    ],
+
+    // 🎯 銷售專用收款方式（保持台灣通路多元零售特性）
+    'sale_methods' => [
+        'cash'        => ['name' => '現金', 'icon' => 'o-banknotes'],
+        'shopee_pay'  => ['name' => '蝦皮錢包', 'icon' => 'o-shopping-bag'],
+        'transfer'    => ['name' => '銀行轉帳', 'icon' => 'o-arrow-path'],
+        'taiwan_pay'  => ['name' => '台灣Pay', 'icon' => 'o-wallet'],
+        'credit_card' => ['name' => '信用卡', 'icon' => 'o-credit-card-outline'],
+        'line_pay'    => ['name' => 'Line Pay', 'icon' => 'o-wallet'],
+    ],
+
+    // 🎯 會計自動結轉核心規則矩陣
+    'accounting_rules' => [
+        'purchase_inbound' => [
+            'debit_code' => '1405', // 借方固定：1405 庫存商品
+        ]
+    ],
     'payment_methods' => [
         ['id' => 'cash', 'name' => '現金', 'icon' => 'o-banknotes'],
         ['id' => 'shopee_pay', 'name' => '蝦皮錢包', 'icon' => 'o-shopping-bag'],

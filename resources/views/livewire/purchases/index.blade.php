@@ -15,24 +15,52 @@
         <x-card shadow>
             <x-table :headers="$headers" :rows="$purchases" @row-click="$wire.showDetail($event.detail.id)" class="cursor-pointer" with-pagination>
                 @scope('cell_purchase_number', $purchase)
-                    <x-badge :value="$purchase->purchase_number" class="badge-neutral font-mono" />
+                    @php
+                        if ($purchase->hasReturnRecords()) {
+                            $badgeClass = 'badge-outline-dark ';
+                            $statusTitle = '已退貨';
+                        } elseif ($purchase->stocked_in_at) {
+                            $badgeClass = 'badge-success';
+                            $statusTitle = '已過帳（已入庫）';
+                        } else {
+                            $badgeClass = 'badge-warning';
+                            $statusTitle = '未過帳（待入庫）';
+                        }
+                    @endphp
+                    <x-badge :value="$purchase->purchase_number" 
+                             :class="$badgeClass . ' font-mono'"
+                             title="{{ $statusTitle }}" />  
                 @endscope
-				@scope('cell_purchase_number', $purchase)
-					<x-badge :value="$purchase->purchase_number" 
-							 :class="$purchase->stocked_in_at ? 'badge-success text-white' : 'badge-warning'"
-							 title="{{ $purchase->stocked_in_at ? '已過帳（已入庫）' : '未過帳（待入庫）' }}" />	
-				@endscope
-				@scope('cell_purchased_at', $purchase)
+				@scope('cell_shop_name', $purchase)
+                    <span class="text-xs font-semibold text-gray-600">{{ $purchase->shop?->name ?? '未指定分店' }}</span>
+                @endscope
+				@scope('cell_warehouse_name', $purchase)
+                    <span class="text-xs font-medium text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">{{ $purchase->warehouse?->name ?? '未指定倉庫' }}</span>
+                @endscope
+                @scope('cell_purchased_at', $purchase)
                     {{ $purchase->purchased_at->format('Y-m-d') }}
                 @endscope
                 @scope('cell_supplier_name', $purchase)
                     {{ $purchase->supplier?->name ?? 'N/A' }}
                 @endscope
-				@scope('cell_total_amount', $purchase)
-					<span class="font-bold text-blue-700">{{ $purchase->currency }} {{ number_format($purchase->total_amount, 0) }}</span>
+				@scope('cell_payment_method', $purchase)
+                    @php
+                        $method = config("business.purchase_methods.{$purchase->payment_method}");
+                    @endphp
+                    @if($method)
+                        <span class="inline-flex items-center gap-1 text-xs font-medium">
+                            <x-icon name="{{ $method['icon'] }}" class="w-4 h-4 text-gray-500" />
+                            {{ $method['name'] }}
+                        </span>
+                    @else
+                        <span class="text-gray-400 text-xs font-mono">{{ $purchase->payment_method }}</span>
+                    @endif
+                @endscope
+                @scope('cell_total_amount', $purchase)
+                    <span class="font-bold text-blue-700">{{ $purchase->currency }} {{ number_format($purchase->total_amount, 0) }}</span>
                 @endscope
                 @scope('cell_total_twd', $purchase)
-                    <span class="font-bold">NT$ {{ number_format($purchase->total_twd, 0) }}</span>			
+                    <span class="font-bold">NT$ {{ number_format($purchase->total_twd, 0) }}</span>         
                 @endscope
             </x-table>
         </x-card>
@@ -43,14 +71,37 @@
         @foreach($purchases as $purchase)
             <div class="border rounded-xl p-4 bg-base-100 active:bg-base-200 transition-colors shadow-sm" @click="$wire.showDetail({{ $purchase->id }})">
                 <div class="flex justify-between items-start mb-2">
-                    <x-badge :value="$purchase->purchase_number" class="badge-neutral badge-sm font-mono" />
+                    <div class="flex items-center gap-1.5">
+                        <x-badge :value="$purchase->purchase_number" class="badge-neutral badge-sm font-mono" />
+                        @if($purchase->stocked_in_at)
+                            <x-badge value="已入庫" class="badge-success badge-xs" />
+                        @else
+                            <x-badge value="待過帳" class="badge-warning badge-xs" />
+                        @endif
+						<span class="text-[11px] text-gray-400 font-medium">[{{ $purchase->shop?->name ?? '預設門市' }}]</span>
+						<span class="text-[11px] text-slate-500 font-mono">({{ $purchase->warehouse?->name ?? '無倉庫' }})</span>
+                    </div>
                     <span class="text-[10px] text-gray-500">{{ $purchase->purchased_at->format('Y-m-d') }}</span>
                 </div>
                 <div class="flex justify-between items-center">
                     <div>
                         <p class="font-bold text-base">{{ $purchase->supplier?->name ?? '未知供應商' }}</p>
+						<div class="flex items-center gap-1 mt-1 text-[11px] text-gray-400">
+                            <x-icon name="{{ config('business.purchase_methods.'.$purchase->payment_method.'.icon', 'o-wallet') }}" class="w-3 h-3" />
+                            <span>{{ config('business.purchase_methods.'.$purchase->payment_method.'.name', $purchase->payment_method) }}</span>
+                            <span class="mx-1">•</span>
+                            <span>{{ $purchase->currency }} @ {{ number_format($purchase->exchange_rate, 2) }}</span>
+                        </div>
                         <p class="text-xs text-gray-400">{{ $purchase->currency }} @ {{ $purchase->exchange_rate }}</p>
                     </div>
+					<div class="mt-1 flex flex-wrap gap-1">
+                            @php
+                                $mobileWarehouseNames = $purchase->items->map(fn($item) => $item->warehouse?->name)->filter()->unique();
+                            @endphp
+                            @foreach($mobileWarehouseNames as $wName)
+                                <span class="px-1 text-[10px] bg-gray-100 text-gray-500 rounded font-mono">{{ $wName }}</span>
+                            @endforeach
+                        </div>
                     <div class="text-right">
                         <p class="text-blue-700 font-black text-lg">NT$ {{ number_format($purchase->total_twd, 0) }}</p>
                     </div>
@@ -95,6 +146,17 @@
                         <div>
                             <p class="text-[10px] text-gray-400 font-bold">幣別/匯率</p>
                             <p class="text-sm font-mono">{{ $selectedPurchase->currency }} / {{ $selectedPurchase->exchange_rate }}</p>
+                        </div>
+						<div>
+                            <p class="text-[10px] text-gray-400 font-bold">付款管道（會計定錨）</p>
+                            <span class="inline-flex items-center gap-1 font-semibold text-success text-xs">
+                                <x-icon name="{{ config('business.purchase_methods.'.$selectedPurchase->payment_method.'.icon', 'o-wallet') }}" class="w-4 h-4" />
+                                {{ config('business.purchase_methods.'.$selectedPurchase->payment_method.'.name', $selectedPurchase->payment_method) }}
+                            </span>
+                        </div>
+                        <div>
+                            <p class="text-[10px] text-gray-400 font-bold">分店</p>
+                            <p class="badge badge-sm badge-neutral">{{ $purchase->shop?->name ?? 1 }}</p>
                         </div>
                         <div>
                             <p class="text-[10px] text-gray-400 font-bold">經辦人</p>
@@ -177,8 +239,8 @@
             <x-slot:actions>
                 <div class="flex gap-3 w-full border-t pt-4 bg-base-100">
                     <x-button label="返回" icon="o-arrow-uturn-left" :link="route('purchases.index')" class="btn-success flex-1" />
-					@if(!$isLocked)							
-						<x-button label="修改" icon="o-pencil" :link="route('purchases.edit', $selectedPurchase->id)" class="btn-primary flex-1" />
+					@if(!$isLocked)						
+						
 						@if($selectedPurchase->stocked_in_at)
 							<x-button 
 								label="退貨" 
@@ -187,14 +249,15 @@
 								class="btn-outline-dark flex-1"	
 							/>							
 						@else
-							<x-button 
+							<x-button label="修改" icon="o-pencil" :link="route('purchases.edit', $selectedPurchase->id)" class="btn-primary flex-1" />
+						<x-button 
 								label="入庫" 
 								icon="o-archive-box-arrow-down" 
 								class="btn-warning flex-1" 
 								wire:click="processStockIn({{ $selectedPurchase->id }})"
-								wire:confirm="確定要執行出庫扣減庫存嗎？"
+								wire:confirm="確定要執行入庫增加庫存嗎？這將會同步產生日記帳傳票且無法撤回。"
 								spinner />
-							<x-button label="刪除" icon="o-trash" wire:click="delete({{ $selectedPurchase->id }})" wire:confirm="確定要刪除此單據並回補庫存嗎？" class="btn-error btn-outline flex-1" />									
+							<x-button label="刪除" icon="o-trash" wire:click="delete({{ $selectedPurchase->id }})" wire:confirm="確定要刪除此單據並扣除庫存嗎？" class="btn-error btn-outline flex-1" />									
 						@endif								
 					@endif
                 </div>
