@@ -26,7 +26,8 @@ class JournalCreate extends Component
 	public ?string $selected_account = ''; // 允許 null
 	public ?string $amount = '';
 	public ?string $currentAccountName = '';
-	
+	public ?string $event_type = null;
+    public array $eventTypeOptions = [];
     public array $generated_lines = [];    
     public array $paymentOptions = [];
     public array $accountOptions = [];
@@ -37,8 +38,8 @@ class JournalCreate extends Component
     public function mount(Journal $journal = null): void
     {
         $this->entry_date = now()->format('Y-m-d');
+		$this->loadEventTypes();
         $this->loadPaymentOptions();
-        $this->loadAccountOptions();
 
         if ($journal && $journal->exists) {
             if ($journal->status !== 'draft') {
@@ -50,6 +51,77 @@ class JournalCreate extends Component
             $this->isEdit = true;
             $this->loadJournalData($journal);
         }
+    }
+	
+	    /**
+     * 載入可用的業務類型
+     */
+    protected function loadEventTypes(): void
+    {
+        $this->eventTypeOptions = AccountingRule::where('is_active', true)
+            ->get()
+            ->map(fn($rule) => [
+                'id' => $rule->event_type,
+                'name' => $this->getEventTypeLabel($rule->event_type),
+            ])
+            ->toArray();
+    }
+    
+    protected function getEventTypeLabel(string $eventType): string
+    {
+        return match($eventType) {
+            'retail_sale' => '實體店銷售',
+            'online_sale' => '線上銷售',
+            'expense' => '費用支出',
+            'purchase' => '採購進貨',
+            default => $eventType,
+        };
+    }
+    
+    /**
+     * 當業務類型改變時，重新載入科目選單
+     */
+    public function updatedEventType()
+    {
+        $this->selected_account = '';
+        $this->currentAccountName = '';
+        $this->loadAccountOptionsByEventType();
+        $this->refreshEntryPreview();
+    }
+    
+    /**
+     * 根據業務類型載入可用的科目
+     */
+    protected function loadAccountOptionsByEventType(): void
+    {
+        if (empty($this->event_type)) {
+            $this->accountOptions = [];
+            return;
+        }
+        
+        $rule = AccountingRule::where('event_type', $this->event_type)
+            ->where('is_active', true)
+            ->first();
+            
+        if (!$rule) {
+            $this->accountOptions = [];
+            return;
+        }
+        
+        $accountIds = AccountingRuleLine::where('accounting_rule_id', $rule->id)
+            ->where('is_active', true)
+            ->pluck('account_id')
+            ->toArray();
+            
+        $this->accountOptions = Account::whereIn('id', $accountIds)
+            ->where('is_active', true)
+            ->whereRaw('LENGTH(code) = 6')
+            ->get()
+            ->map(fn($a) => [
+                'id' => (string)$a->code,
+                'name' => "【{$a->code}】{$a->name}"
+            ])
+            ->toArray();
     }
 
     // ==============================================
@@ -79,9 +151,10 @@ class JournalCreate extends Component
 
         // 防呆：缺一不可
         if (
-            empty($this->selected_account)
-            || empty($this->payment_method)
-            || bccomp($this->amount, '0', 4) <= 0
+            empty($this->event_type) ||
+			empty($this->selected_account) ||
+            empty($this->payment_method) ||
+            bccomp($this->amount, '0', 4) <= 0
         ) {
             return;
         }
@@ -95,6 +168,18 @@ class JournalCreate extends Component
             return;
         }
 
+		// 驗證費用科目是否有規則
+		try {
+            $target->validateForEventType($this->event_type, [
+                'amount' => (float)$this->amount,
+            ]);
+        } catch (\RuntimeException $e) {
+            $this->error($e->getMessage());
+            $this->selected_account = '';
+            $this->currentAccountName = '';
+            return;
+        }
+	
         // 自動判斷收入/費用
         $this->entry_type = $target->isIncomeAccount() ? 'income' : 'expense';
 
@@ -181,42 +266,68 @@ class JournalCreate extends Component
     public function autoMatchAccount()
 	{
 		$desc = trim($this->description);
-		if (mb_strlen($desc) < 2) return;
+		if (mb_strlen($desc) < 2 || empty($this->event_type)) return;
 
 		// 1. 歷史匹配：透過 JournalItem 關聯到 journals 表搜尋摘要
-		$history = JournalItem::whereHas('journal', function ($q) use ($desc) {
-				// 這裡必須明確指定在 journals 表搜尋，且排除草稿
-				$q->where('description', 'like', '%' . $desc . '%');
+		$history = JournalItem::whereHas('journal', function ($q) use ($desc) { $q				
+				->where('description', 'like', '%' . $desc . '%')
+				->where('status', 'posted')
+				->where('reference_type', $this->event_type);
 			})
 			->with('account')
 			->latest()
 			->first();
 
 		if ($history && $history->account) {
-			$this->selected_account = (string)$history->account->code;
-			$this->currentAccountName = $history->account->name;
-			// 觸發 Toast 通知確認執行成功
-			$this->info('🧠 歷史匹配成功：' . $this->currentAccountName);
-			return;
+			// 確認科目仍屬於此業務類型
+			if ($this->isAccountValidForEventType($history->account)) {
+				$this->selected_account = (string)$history->account->code;
+				$this->currentAccountName = $history->account->name;
+				$this->info('🧠 歷史匹配成功：' . $this->currentAccountName);
+				return;
+			}
 		}
 
 		// 2. 規則匹配 (AccountingRule)
-		$rules = AccountingRule::all();
-		foreach ($rules as $rule) {
-			if (str_contains($desc, $rule->keyword)) {
-				$account = Account::where('code', $rule->account_id)->first();
-				if ($account) {
-					$this->selected_account = (string)$account->code;
-					$this->currentAccountName = $account->name;
-					$this->info('📜 規則匹配成功：' . $this->currentAccountName);
-					return;
-				}
+		$rule = AccountingRule::where('event_type', $this->event_type)
+			->where('is_active', true)
+			->first();
+			
+		if ($rule) {
+			// 可以根據摘要關鍵字進一步篩選
+			// 或者直接取該業務類型最常用的科目
+			$firstLine = AccountingRuleLine::where('accounting_rule_id', $rule->id)
+				->whereHas('account', function($q) use ($desc) {
+					$q->where('name', 'like', '%' . $desc . '%');
+				})
+				->first();
+				
+			if ($firstLine && $firstLine->account) {
+				$this->selected_account = (string)$firstLine->account->code;
+				$this->currentAccountName = $firstLine->account->name;
+				$this->info('📜 規則匹配成功：' . $this->currentAccountName);
+				return;
 			}
 		}
 
 		// 無匹配時清空
 		$this->selected_account = '';
 		$this->currentAccountName = '未匹配，請手動選';
+	}
+	
+	protected function isAccountValidForEventType(Account $account): bool
+	{
+		if (empty($this->event_type)) return false;
+		
+		$rule = AccountingRule::where('event_type', $this->event_type)
+			->where('is_active', true)
+			->first();
+			
+		if (!$rule) return false;
+		
+		return AccountingRuleLine::where('accounting_rule_id', $rule->id)
+			->where('account_id', $account->id)
+			->exists();
 	}
 
     // ==============================================
@@ -225,12 +336,26 @@ class JournalCreate extends Component
     public function save()
     {
         $this->validate([
-            'entry_date'        => 'required|date',
+            'event_type'        => 'required|exists:accounting_rules,event_type',
+			'entry_date'        => 'required|date',
             'description'       => 'required|max:500',
             'amount'            => 'required|numeric|min:0.0001',
             'selected_account'  => 'required|exists:accounts,code',
             'payment_method'    => 'required|exists:accounts,code',
         ]);
+		
+		// 儲存前再次驗證
+		$target = Account::where('code', $this->selected_account)->first();
+		if ($target && in_array($target->type, ['cost', 'profit'])) {
+			try {
+                $target->validateForEventType($this->event_type, [
+                    'amount' => (float)$this->amount,
+                ]);
+			} catch (\RuntimeException $e) {
+				$this->error($e->getMessage());
+				return;
+			}
+		}
 
         if (empty($this->generated_lines)) {
             $this->error('請確認科目、金額、資金帳戶，生成分錄後再儲存');

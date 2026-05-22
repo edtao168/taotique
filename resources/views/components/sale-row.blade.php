@@ -12,8 +12,7 @@
             </div>
         @else
             <x-choices
-				label="商品"
-                id="{{ $mode }}-product-{{ $index }}"
+				id="{{ $mode }}-product-{{ $index }}"
                 name="items[{{ $index }}][product_id]"
                 wire:model.live="items.{{ $index }}.product_id"
                 :options="$productOptions"

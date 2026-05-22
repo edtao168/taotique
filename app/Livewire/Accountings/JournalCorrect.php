@@ -19,6 +19,7 @@ class JournalCorrect extends Component
 
     public Journal $originalJournal;
     public ?int $originalJournalId = null;
+	public ?string $event_type = null;
 
     // 更正表單
     public string $entry_date = '';
@@ -73,6 +74,9 @@ class JournalCorrect extends Component
     protected function loadOriginalData(): void
     {
         $this->originalJournal->load('items.account');
+		
+		// 取得原始分錄的業務類型
+		$this->event_type = $this->originalJournal->reference_type;
 
         $this->entry_date = now()->format('Y-m-d');
         $this->description = '[更正] ' . $this->originalJournal->description;
@@ -169,7 +173,7 @@ class JournalCorrect extends Component
 		$paymentAccount = Account::where('code', $this->payment_method)->first();
 		$targetAccount = Account::where('code', $this->selected_account)->first();
 		if (!$paymentAccount || !$targetAccount) return;
-
+		
 		// 取得原始資料
 		$firstItem = $this->originalJournal->items->first();
 		$originalTargetCode = $firstItem ? $firstItem->account->code : '';
@@ -186,6 +190,21 @@ class JournalCorrect extends Component
 		$isPaymentChanged = $originalPaymentCode !== $this->payment_method;
 		$isAmountChanged  = bccomp($this->amount, $this->originalAmount, 4) !== 0;
 
+		// 驗證新科目是否適用於原始業務類型
+		if (($isAmountChanged || $isAccountChanged) && in_array($targetAccount->type, ['cost', 'profit'])) {
+			try {
+				// 使用原始分錄的業務類型進行驗證
+				$targetAccount->validateForEventType($this->event_type, [
+					'amount' => (float)$this->amount,
+				]);
+			} catch (\RuntimeException $e) {
+				$this->error($e->getMessage());
+				$this->diff_lines = [];
+				$this->generated_lines = [];
+				return;
+			}
+		}
+	
 		if (!$isAccountChanged && !$isPaymentChanged && !$isAmountChanged) {
 			return;
 		}
@@ -348,6 +367,24 @@ class JournalCorrect extends Component
             $this->error('金額無變更，無需更正');
             return;
         }
+		
+		 // 驗證更正後的科目規則
+		$targetAccount = Account::where('code', $this->selected_account)->first();
+		if ($targetAccount && in_array($targetAccount->type, ['cost', 'profit'])) {
+			$isAmountChanged = bccomp($this->amount, $this->originalAmount, 4) !== 0;
+			$isAccountChanged = $targetAccount->code !== $this->originalJournal->items->first()->account->code;
+        
+			if ($isAmountChanged || $isAccountChanged) {
+				try {
+					$targetAccount->validateForEventType($this->event_type, [
+						'amount' => (float)$this->amount,
+					]);
+				} catch (\RuntimeException $e) {
+					$this->error($e->getMessage());
+					return;
+				}
+			}
+		}
 
         try {
             DB::transaction(function () {

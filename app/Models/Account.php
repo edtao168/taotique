@@ -269,4 +269,75 @@ class Account extends Model
             default => '一般會計科目',
         };
     }
+
+	/**
+	 * 驗證此費用科目是否適用於指定的業務類型
+	 * 
+	 * @param string $eventType 業務類型 (如 'retail_sale', 'online_sale', 'expense')
+	 * @param array $options 選項，例如 ['amount' => 1000]
+	 * @throws \RuntimeException
+	 */
+	public function validateForEventType(string $eventType, array $options = []): void
+	{
+		// 只檢查費用/成本/損益科目
+		if (!in_array($this->type, ['cost', 'profit'])) {
+			return;
+		}
+		
+		// 取得該業務類型的規則
+		$rule = AccountingRule::where('event_type', $eventType)
+			->where('is_active', true)
+			->first();
+		
+		if (!$rule) {
+			$eventLabel = $this->getEventTypeLabel($eventType);
+			throw new \RuntimeException("業務類型「{$eventLabel}」尚未設定過帳規則");
+		}
+		
+		// 檢查此科目是否在該規則中
+		$hasRule = AccountingRuleLine::where('accounting_rule_id', $rule->id)
+			->where('account_id', $this->id)
+			->exists();
+			
+		if (!$hasRule) {
+			$eventLabel = $this->getEventTypeLabel($eventType);
+			throw new \RuntimeException("科目「{$this->name}」不適用於「{$eventLabel}」業務");
+		}
+		
+		// 可選：檢查金額限制（如果 rule_lines 有定義）
+		if (isset($options['amount'])) {
+			// 可以從 rule_line 取得金額限制
+			$ruleLine = AccountingRuleLine::where('accounting_rule_id', $rule->id)
+				->where('account_id', $this->id)
+				->first();
+				
+			// 假設有 min_amount, max_amount 欄位（目前沒有，先註解）
+			// if ($ruleLine && $ruleLine->max_amount && $options['amount'] > $ruleLine->max_amount) {
+			//     throw new \RuntimeException("金額超過限制");
+			// }
+		}
+	}
+
+	/**
+	 * 取得業務類型的中文標籤
+	 */
+	protected function getEventTypeLabel(string $eventType): string
+	{
+		return match($eventType) {
+			'retail_sale' => '實體店銷售',
+			'online_sale' => '線上銷售',
+			'expense' => '費用支出',
+			'purchase' => '採購進貨',
+			default => $eventType,
+		};
+	}
+
+	/**
+	 * @deprecated 使用 validateForEventType() 代替
+	 */
+	public function validateExpenseRule(array $options = []): void
+	{
+		// 這個方法已棄用，因為需要 eventType 參數
+		throw new \RuntimeException('請使用 validateForEventType($eventType, $options) 方法');
+	}
 }

@@ -227,12 +227,13 @@
 							<x-button 
 								label="出庫" 
 								icon="o-archive-box-arrow-down" 
-								class="btn-warning flex-1" 
-								wire:click="processStockOut({{ $selectedSale->id }})"
-								wire:confirm="確定要執行出庫扣減庫存嗎？"
-								spinner />
+								class="btn-warning flex-1"
+								wire:click="submitStockOut({{ $selectedSale->id }})"
+								wire:confirm="確定要執行出庫扣減庫存嗎？這將會同步產生會計日記帳與主營成本結轉！"
+								spinner 
+							/>
 							<x-button label="刪除" icon="o-trash" wire:click="delete({{ $selectedSale->id }})" wire:confirm="確定要刪除此單據並回補庫存嗎？" class="btn-error btn-outline flex-1" />									
-						@endif								
+						@endif							
 					@endif
 				</div>				
 			</x-slot:actions>

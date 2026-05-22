@@ -9,6 +9,7 @@ use App\Models\Inventory;
 use App\Models\Warehouse; 
 use App\Models\Product;
 use App\Models\Sale;
+use App\Models\SaleItem;
 use App\Models\Setting;
 use App\Models\Shop;
 use App\Traits\HasBarcodeScanner;
@@ -42,12 +43,14 @@ class Create extends Component
         'remark'           => '',
         'subtotal'         => '0.0000',
         'customer_total'   => '0.0000',
-        'final_net_amount' => '0.0000',
+        'final_net_amount' => '0.0000',		
     ];
 
     public string $items_subtotal = '0.0000';
     public string $customer_total = '0.0000';
     public string $final_net_amount = '0.0000';
+	
+	public array $fees = [];
 
     public function mount(?Sale $sale = null)
     {
@@ -183,20 +186,14 @@ class Create extends Component
 
         foreach ($feeConfigs as $key => $config) {
             $val = (string)($this->form[$key] ?? '0.0000');
-            $op = $config['operator'];
             
             if ($config['target'] === 'customer') {
-                $cTotal = ($op === 'add') ? bcadd($cTotal, $val, 4) : bcsub($cTotal, $val, 4);
+                $cTotal = ($config['operator'] === 'add') ? bcadd($cTotal, $val, 4) : bcsub($cTotal, $val, 4);
             } elseif ($config['target'] === 'seller') {
-                $sNet = ($op === 'add') ? bcadd($sNet, $val, 4) : bcsub($sNet, $val, 4);
+                $sNet = ($config['operator'] === 'add') ? bcadd($sNet, $val, 4) : bcsub($sNet, $val, 4);
             }
         }
-
-        if (isset($this->form['order_adjustment'])) {
-            $adj = (string)$this->form['order_adjustment'];
-            $sNet = bcadd($sNet, $adj, 4);
-        }
-
+        
         $this->customer_total = $cTotal;
         $this->final_net_amount = $sNet;
         
@@ -291,142 +288,82 @@ class Create extends Component
 		$this->customer_total = bcsub($this->subtotal, $discount, 2);
 	}
 
-    public function save()
+    /**
+     * 核心儲存邏輯 (涵蓋新增、修改、併發重試、負庫存控制與全自動會計過帳)
+     */
+	public function save()
 	{
 		$this->validate();
-		$allowNegative = Setting::get('allow_negative_stock', false);
 
 		try {
+			$allowNegative = (bool) Setting::get('allow_negative_inventory', false);
+
 			DB::transaction(function () use ($allowNegative) {
-				// 1. 先檢查庫存（在鎖定前）
-				if ($this->stockoutWhenSold) {
-					foreach ($this->items as $item) {
-						$product = Product::find($item['product_id']);
-						if (!$product) {
-							throw new \Exception("商品不存在");
-						}
-						
-						$inventory = Inventory::where('product_id', $item['product_id'])
-							->where('warehouse_id', $item['warehouse_id'])
-							->first();
-						
-						$currentQty = $inventory ? (float) $inventory->quantity : 0;
-						$needQty = (float) $item['quantity'];
-						
-						if (!$allowNegative && ($currentQty - $needQty) < -0.0001) {
-							throw new \Exception("商品 [{$product->full_display_name}] 庫存不足，目前庫存：{$currentQty}，需要：{$needQty}");
-						}
-					}
-				}
 				
-				// 2. 準備銷售單數據
-				$saleData = collect($this->form)->only([
-					'shop_id', 'invoice_number', 'customer_id', 'warehouse_id', 
-					'channel_id', 'payment_method', 'remark', 'sold_at'
-				])->toArray();
+				// 1. 建立或更新主表
+				$currentSale = $this->isEdit ? $this->sale : new Sale();
+				$currentSale->fill([
+					'shop_id'          => $this->form['shop_id'] ?? 1,
+					'customer_id'      => $this->form['customer_id'],
+					'user_id'          => auth()->id() ?? $this->form['user_id'],
+					'sold_at'          => $this->form['sold_at'] ?? now(),
+					'invoice_number'   => $this->isEdit ? $currentSale->invoice_number : Sale::generateInvoiceNumber(),
+					'warehouse_id'     => $this->form['warehouse_id'],
+					'channel_id'       => $this->form['channel_id'],
+					'payment_method'   => $this->form['payment_method'],
+					'remark'           => $this->form['remark'] ?? '',
+					'subtotal'         => $this->form['subtotal'],
+					'customer_total'   => $this->form['customer_total'],
+					'final_net_amount' => $this->form['final_net_amount'],
+				]);
+				$currentSale->save();
 
-				$saleData['user_id'] = auth()->id() ?? $this->form['user_id'];
-				$saleData['subtotal'] = (float) $this->items_subtotal;
-				$saleData['customer_total'] = (float) $this->customer_total;
-				$saleData['final_net_amount'] = (float) $this->final_net_amount;
-				$saleData['stocked_out_at'] = $this->stockoutWhenSold ? $this->form['sold_at'] : null;
-							
-				// 3. 處理編輯模式的庫存回補（使用較安全的樂觀鎖）
-				if ($this->isEdit && $this->sale) {
-					if (!is_null($this->sale->stocked_out_at)) {
-						foreach ($this->sale->items as $oldItem) {
-							$inventory = Inventory::where('product_id', $oldItem->product_id)
-								->where('warehouse_id', $oldItem->warehouse_id)
-								->first();
-							
-							if ($inventory) {
-								$newQty = (float) $inventory->quantity + (float) $oldItem->quantity;
-								$inventory->update(['quantity' => $newQty]);
-							}
-						}
-					}
-					
-					$currentSale = Sale::find($this->sale->id);
-					if (!$currentSale) {
-						throw new \Exception("銷售單不存在");
-					}
-					$currentSale->update($saleData);
+				// 2. 擷取修改前的舊數量（若為修改模式）
+				$oldItemsQty = [];
+				if ($this->isEdit) {
+					$oldItemsQty = SaleItem::where('sale_id', $currentSale->id)
+						->pluck('quantity', 'product_id')
+						->toArray();
 					$currentSale->items()->delete();
-				} else {
-					$currentSale = Sale::create($saleData);
 				}
 
-				// 4. 處理新明細與庫存扣除（使用逐筆更新避免死鎖）
+				// 3. 重新建立明細
 				foreach ($this->items as $item) {
 					$currentSale->items()->create([
-						'shop_id'      => $currentSale->shop_id,
-						'product_id'   => $item['product_id'],
-						'warehouse_id' => $item['warehouse_id'],
-						'quantity'     => (float) $item['quantity'],
-						'price'        => (float) $item['price'],
-						'subtotal'     => (float) $item['price'] * (float) $item['quantity'],
+						'shop_id'        => $currentSale->shop_id,
+						'warehouse_id'   => $item['warehouse_id'],
+						'product_id'     => $item['product_id'],
+						'quantity'       => $item['quantity'],
+						'price'          => $item['price'],
+						'subtotal'       => bcmul($item['quantity'], $item['price'], 4),
 					]);
+				}
+
+				// 4. 處理費用
+				$currentSale->fees()->delete();
+				$feeConfigs = config('business.fee_types', []);
+				foreach ($feeConfigs as $feeType => $config) {
+					$amount = $this->form[$feeType] ?? '0.0000';
 					
-					if ($this->stockoutWhenSold) {
-						// 改用樂觀鎖或重試機制
-						$maxRetries = 3;
-						$retryCount = 0;
-						
-						while ($retryCount < $maxRetries) {
-							try {
-								$inventory = Inventory::where('product_id', $item['product_id'])
-									->where('warehouse_id', $item['warehouse_id'])
-									->first();
-								
-								if ($inventory) {
-									$oldQty = (float) $inventory->quantity;
-									$newQty = $oldQty - (float) $item['quantity'];
-									
-									if (!$allowNegative && $newQty < -0.0001) {
-										throw new \Exception("商品庫存不足");
-									}
-									
-									// 使用條件更新避免併發問題
-									$updated = Inventory::where('product_id', $item['product_id'])
-										->where('warehouse_id', $item['warehouse_id'])
-										->where('quantity', $oldQty)  // 樂觀鎖條件
-										->update(['quantity' => $newQty]);
-									
-									if ($updated) {
-										break; // 更新成功
-									}
-								} else {
-									if (!$allowNegative) {
-										throw new \Exception("商品無庫存記錄");
-									}
-									Inventory::create([
-										'shop_id' => $currentSale->shop_id,
-										'warehouse_id' => $item['warehouse_id'],
-										'product_id' => $item['product_id'],
-										'quantity' => -1 * (float) $item['quantity'],
-									]);
-									break;
-								}
-								
-								$retryCount++;
-								if ($retryCount >= $maxRetries) {
-									throw new \Exception("更新庫存失敗，請稍後重試");
-								}
-								
-								usleep(50000); // 等待 50ms 後重試
-							} catch (\Exception $e) {
-								if ($retryCount >= $maxRetries - 1) {
-									throw $e;
-								}
-								$retryCount++;
-								usleep(50000);
-							}
-						}
+					// 只儲存非零金額的費用
+					if (bccomp($amount, '0', 4) !== 0) {
+						$currentSale->fees()->create([
+							'shop_id'  => $currentSale->shop_id,
+							'fee_type' => $feeType,
+							'amount'   => $amount,
+							'note'     => $config['name'] ?? $feeType,
+						]);
 					}
 				}
 
-				$this->success($this->isEdit ? '銷售單修改成功' : '銷售單建立成功', redirectTo: route('sales.index'));
+				// 5. 【直接呼叫厚 Model 核心】優雅、內聚、絕不重複
+				if ($this->stockoutWhenSold) {
+					// 將設定與舊數量快照直接傳入 Model 執行
+					$currentSale->processStockOut($allowNegative, $oldItemsQty);
+				}
 			});
+
+			$this->success($this->isEdit ? '銷售單修改成功' : '銷售單建立成功', redirectTo: route('sales.index'));
 			
 		} catch (\Exception $e) {
 			$this->error('儲存失敗：' . $e->getMessage());

@@ -29,48 +29,17 @@ class Index extends Component
         'is_active' => 'boolean',
     ];
 	
-	public function render()
-	{
-		// 1. 取得並格式化幣別選項 (修正重點)
-		$currencies = config('business.currencies', []);
-		$currencyOptions = collect($currencies)->map(function ($config, $code) {
-			return [
-				'id'   => $code,
-				'name' => ($config['name'] ?? $code) . ' (' . ($config['symbol'] ?? '') . ')'
-			];
-		})->values()->toArray();
-
-		// 2. 格式化科目類型選項
-		$typeOptions = collect(Account::typeOptions())->map(fn($label, $id) => [
-			'id' => $id,
-			'name' => $label
-		])->values()->toArray();
-
-		$headers = [
-			['key' => 'code', 'label' => '代碼', 'class' => 'w-32 font-mono text-primary'],
-			['key' => 'name', 'label' => '科目名稱'],
-			['key' => 'type_label', 'label' => '類型', 'class' => 'w-24'],
-			['key' => 'currency', 'label' => '幣別', 'class' => 'w-16'],
-			['key' => 'status', 'label' => '狀態', 'class' => 'w-20'],
-			['key' => 'actions', 'label' => '', 'class' => 'w-20', 'sortable' => false],
-		];
-
-		$rows = Account::query()
-			->with('parent')
-			->when($this->search, fn($q) => $q->where('code', 'like', "%{$this->search}%")
-				->orWhere('name', 'like', "%{$this->search}%"))
-			->when($this->type, fn($q) => $q->where('type', $this->type))
-			->orderBy('code')
-			->get();
-
-		return view('livewire.settings.accounts.index', [
-			'rows' => $rows,
-			'headers' => $headers,
-			'typeOptions' => $typeOptions,
-			'currencyOptions' => $currencyOptions, // 傳遞格式化後的幣別
-			'parentAccounts' => Account::where('level', 1)->where('is_active', true)->get(),
-		]);
-	}
+	/**
+     * 新增科目初始化
+     */
+    public function create()
+    {
+        $this->reset(['code', 'name', 'type_value', 'parent_id', 'editingItem']);
+        $this->is_monetary = false;
+        $this->currency = 'TWD';
+        $this->is_active = true;
+        $this->myModal = true;
+    }	
 
     public function edit(Account $item)
     {
@@ -133,5 +102,56 @@ class Index extends Component
     {
         $item->update(['is_active' => !$item->is_active]);
         $this->success($item->is_active ? '已啟用' : '已停用');
-    }
+    }	
+	
+	public function render()
+	{
+		// 1. 取得並格式化幣別選項 (修正重點)
+		$currencies = config('business.currencies', []);
+		$currencyOptions = collect($currencies)->map(function ($config, $code) {
+			return [
+				'id'   => $code,
+				'name' => ($config['name'] ?? $code) . ' (' . ($config['symbol'] ?? '') . ')'
+			];
+		})->values()->toArray();
+
+		// 2. 格式化科目類型選項
+		$typeOptions = collect(Account::typeOptions())->map(fn($label, $id) => [
+			'id' => $id,
+			'name' => $label
+		])->values()->toArray();
+
+		$headers = [
+			['key' => 'code', 'label' => '代碼', 'class' => 'w-32 font-mono text-primary'],
+			['key' => 'name', 'label' => '科目名稱'],
+			['key' => 'type_label', 'label' => '類型', 'class' => 'w-24'],
+			['key' => 'currency', 'label' => '幣別', 'class' => 'w-16'],
+			['key' => 'status', 'label' => '狀態', 'class' => 'w-20'],
+			['key' => 'actions', 'label' => '', 'class' => 'w-20', 'sortable' => false],
+		];
+
+		$rows = Account::query()
+			->with('parent')
+			->when($this->search, fn($q) => $q->where('code', 'like', "%{$this->search}%")
+				->orWhere('name', 'like', "%{$this->search}%"))
+			->when($this->type, fn($q) => $q->where('type', $this->type))
+			->orderBy('code')
+			->get();
+			
+		$parentAccounts = Account::where('level', 1)
+			->where('is_active', true)
+			->get()
+			->map(fn($account) => [
+				'id' => $account->id,			
+				'name' => "{$account->code} - {$account->name}",
+			]);
+
+		return view('livewire.settings.accounts.index', [
+			'rows' => $rows,
+			'headers' => $headers,
+			'typeOptions' => $typeOptions,
+			'currencyOptions' => $currencyOptions,
+			'parentAccounts' => $parentAccounts,
+		]);
+	}
 }

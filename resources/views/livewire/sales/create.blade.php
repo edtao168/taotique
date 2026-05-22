@@ -34,7 +34,7 @@
 				</div>
 				<div>
 					<h1 class="text-2xl font-bold tracking-tight text-base-content">
-						{{ $isEdit ? '修改銷售單' : '銷售出庫作業' }}
+						{{ $isEdit ? '修改銷售單' : '新增銷售單' }}
 					</h1>
 					<div class="flex items-center gap-2 mt-1">
 						<span class="badge badge-outline badge-sm font-mono opacity-70">{{ $isEdit ? $sale->invoice_number : $invoice_number }}</span>
@@ -120,7 +120,7 @@
 						rows="2"
 					/>
 				</div>
-            </x-card>         phot
+            </x-card>
 
 			{{-- 2. 商品明細 --}}		
 			<x-card shadow separator class="mb-4 lg:mb-0 border-t-4 border-primary">
@@ -145,7 +145,6 @@
 
 				<div class="space-y-3">
 					@forelse($items as $index => $item)
-                        {{-- 關鍵：外部隔離層提供絕對唯一的識別，確保 DOM 狀態在響應式切換下不會被 OCI 解構洗掉 --}}
                         <div wire:key="sale-row-block-{{ $index }}-{{ $item['product_id'] ?? 'new' }}">
 						    <x-sale-row :$index :$item :$warehouses :$productOptions mode="pc" />
 						    <x-sale-row :$index :$item :$warehouses :$productOptions mode="mobile" />

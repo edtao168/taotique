@@ -6,6 +6,7 @@ namespace App\Livewire\Sales;
 use App\Models\Inventory;
 use App\Models\Product;
 use App\Models\Sale;
+use App\Models\Setting;
 use App\Models\Warehouse;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -46,11 +47,11 @@ class Index extends Component
 
 		// 4. 如果是從特定銷售單跳轉過來（選填）
 		// 確保 selectedSale 結構完整以供 Drawer 渲染
-		if ($this->selectedSale) {
+		/* if ($this->selectedSale) {
 			$this->selectedWarehouse = $this->selectedSale->warehouse_id;
-		}
+		} */
 	}
-	
+		
 	/**
 	 * 處理倉庫篩選異動
 	 */
@@ -64,8 +65,36 @@ class Index extends Component
      */
     public function showDetail($id)
     {
-        $this->selectedSale = Sale::with(['customer', 'items.product', 'user', 'shop', 'warehouse'])->find($id);
+        $this->selectedSale = Sale::with(['customer', 'items.product', 'user', 'shop', 'warehouse', 'fees'])->find($id);
         $this->drawer = true;
+    }
+	
+	/**
+     * 【修正衝突】：Livewire 動作方法改名為 submitStockOut
+     * 內部純粹調用 Model 厚邏輯，不再包含任何重複的方法定義
+     */
+    public function submitStockOut(int $saleId)
+    {        
+        try {
+            $sale = Sale::find($saleId);
+            if (!$sale) {
+                throw new \Exception("找不到該銷售單據");
+            }
+
+            // 1. 從系統設定讀取是否允許負庫存開關
+            $allowNegative = (bool) Setting::get('allow_negative_inventory', false);
+            
+            // 2. 呼叫 Model 層的厚邏輯（列表頁直接出庫，代表非修改單據狀態，舊明細傳空陣列）
+            $sale->processStockOut($allowNegative, []);
+            
+            // 3. 重置前端控制狀態並重新整理
+            $this->drawer = false;
+            $this->selectedSale = null;
+            
+            $this->success("銷售單 {$sale->invoice_number} 已成功完成出庫、日記帳自動過帳與成本結轉！");
+        } catch (\Exception $e) {
+            $this->error('出庫失敗：' . $e->getMessage());
+        }
     }
 
     /**

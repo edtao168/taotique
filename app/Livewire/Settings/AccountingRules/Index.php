@@ -35,35 +35,7 @@ class Index extends Component
         'lines.*.ratio' => 'required|numeric|min:0',
     ];
 
-    public function render()
-    {
-        $headers = [
-            ['key' => 'event_type', 'label' => '事件類型', 'class' => 'font-mono'],
-            ['key' => 'lines_summary', 'label' => '分錄摘要'],
-            ['key' => 'status', 'label' => '狀態', 'class' => 'w-20'],
-            ['key' => 'actions', 'label' => '', 'sortable' => false],
-        ];
-
-        $rows = AccountingRule::with('lines.account')
-            ->when($this->search, fn($q) => $q->where('event_type', 'like', "%{$this->search}%"))
-            ->orderBy('event_type')
-            ->get();
-
-        return view('livewire.settings.accounting-rules.index', [
-            'rows' => $rows,
-            'headers' => $headers,
-            'accounts' => Account::where('is_active', true)->orderBy('code')->get(),
-            'amountSources' => collect(AmountSource::cases())->map(fn($case) => [
-                'value' => $case->value,
-                'label' => $case->label(),
-            ]),
-            // 修正點：定義 entryTypes 格式供 Mary UI x-select 使用
-            'entryTypes' => [
-                ['id' => 'debit', 'name' => '借方'],
-                ['id' => 'credit', 'name' => '貸方'],
-            ]
-        ]);
-    }
+    
 
     public function create()
     {
@@ -155,5 +127,43 @@ class Index extends Component
     {
         $item->update(['is_active' => !$item->is_active]);
         $this->success($item->is_active ? '已啟用' : '已停用');
+    }
+	
+	public function render()
+    {
+        $headers = [
+            ['key' => 'event_type', 'label' => '事件類型', 'class' => 'font-mono'],
+            ['key' => 'lines_summary', 'label' => '分錄摘要'],
+            ['key' => 'status', 'label' => '狀態', 'class' => 'w-20'],
+            ['key' => 'actions', 'label' => '', 'sortable' => false],
+        ];
+
+        $rows = AccountingRule::with('lines.account')
+            ->when($this->search, fn($q) => $q->where('event_type', 'like', "%{$this->search}%"))
+            ->orderBy('event_type')
+            ->get();
+
+        $accounts = Account::where('is_active', true)
+        ->orderBy('code')
+        ->get()
+        ->map(fn($account) => [
+            'id' => $account->id,
+            'name' => "{$account->code} - {$account->name}",  // 關鍵：code + name
+            'code' => $account->code,
+        ]);
+
+		return view('livewire.settings.accounting-rules.index', [
+			'rows' => $rows,
+			'headers' => $headers,
+			'accounts' => $accounts,
+			'amountSources' => collect(AmountSource::cases())->map(fn($case) => [
+				'value' => $case->value,
+				'label' => $case->label(),
+			]),
+			'entryTypes' => [
+				['id' => 'debit', 'name' => '借方'],
+				['id' => 'credit', 'name' => '貸方'],
+			]
+        ]);
     }
 }

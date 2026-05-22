@@ -4,111 +4,49 @@
 namespace App\Traits;
 
 use App\Models\Journal;
-use App\Models\JournalItem;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
+use App\Services\AccountingService;
+use Illuminate\Support\Facades\App;
 
 /**
- * 費曼註釋：讓採購/銷售/退貨等 Model 共用會計結轉邏輯
- * 遵循《小企業會計準則》— 採購入庫：借庫存商品 / 貸應付帳款
+ * 費曼註釋：精簡後的會計 Trait
+ * 
+ * 所有業務 Model 使用此 Trait 後，只需：
+ * 1. 定義 getAccountingRules(string $eventType): array
+ * 2. 在適當時機呼叫 $this->postJournal($eventType)
+ * 
+ * 具體分錄邏輯全部委託給 AccountingService，確保：
+ * - 冪等性統一控制
+ * - 借貸平衡統一驗證
+ * - DB Transaction 統一包裹
+ * - 來源追溯統一格式
  */
 trait HasAccounting
 {
     /**
-     * 產生採購入庫的會計分錄
+     * 統一過帳入口
      * 
-     * @param string $entryDate 入庫日期
-     * @param int $inventoryAccountId 庫存商品科目ID (預設1405)
-     * @param int $payableAccountId 應付帳款科目ID (預設2202)
+     * @param string $eventType 事件類型（如 'purchase', 'sale_revenue', 'sale_cost'）
      * @return Journal|null
+     * @throws \RuntimeException
      */
-    public function createPurchaseJournal(
-        string $entryDate,
-        int $inventoryAccountId = 1405,
-        int $payableAccountId = 2202
-    ): ?Journal {
-        // 冪等性：檢查是否已產生
-        if ($this->journal()->exists()) {
-            Log::warning('採購單已產生過日記帳', ['purchase_id' => $this->id]);
-            return $this->journal;
-        }
+    public function postJournal(string $eventType): ?Journal
+    {
+        // 取得規則陣列（由各 Model 實作）
+        $rules = $this->getAccountingRules($eventType);
 
-        // 取得總成本（本幣）
-        $totalCost = $this->total_twd ?? $this->calculateTotalTwd();
-        
-        if (bccomp($totalCost, '0', 4) <= 0) {
-            Log::error('採購單總成本為0，無法產生日記帳', ['purchase_id' => $this->id]);
+        if (empty($rules)) {
+            \Illuminate\Support\Facades\Log::warning("{$eventType} 無會計規則，跳過過帳");
             return null;
         }
 
-        return DB::transaction(function () use ($entryDate, $inventoryAccountId, $payableAccountId, $totalCost) {
-            // 1. 建立 Journal 主表
-            $journal = $this->journal()->create([
-                'shop_id'        => $this->shop_id ?? 1,
-                'currency'       => $this->currency,
-                'exchange_rate'  => $this->exchange_rate,
-                'entry_date'     => $entryDate,
-                'description'    => "採購入庫 - {$this->purchase_number}",
-                'reference_type' => 'purchase',
-                'reference_id'   => $this->id,
-                'status'         => Journal::STATUS_POSTED, // 採購入庫直接過帳
-                'created_by'     => auth()->user()?->name ?? 'System',
-            ]);
-
-            // 2. 借方：庫存商品
-            $journal->items()->create([
-                'account_id' => $inventoryAccountId,
-                'debit'      => $totalCost,
-                'credit'     => '0.0000',
-                'currency'   => $this->currency,
-                'exchange_rate' => $this->exchange_rate,
-                'shop_id'    => $this->shop_id ?? 1,
-            ]);
-
-            // 3. 貸方：應付帳款（或現金）
-            $journal->items()->create([
-                'account_id' => $payableAccountId,
-                'debit'      => '0.0000',
-                'credit'     => $totalCost,
-                'currency'   => $this->currency,
-                'exchange_rate' => $this->exchange_rate,
-                'shop_id'    => $this->shop_id ?? 1,
-            ]);
-
-            // 4. 平衡檢查
-            if (!$journal->isBalanced()) {
-                throw new \RuntimeException('採購入庫分錄不平衡，請檢查運算邏輯');
-            }
-
-            Log::info('採購單會計分錄產生成功', [
-                'purchase_id' => $this->id,
-                'journal_id'  => $journal->id,
-                'amount'      => $totalCost
-            ]);
-
-            return $journal;
-        }, 3);
-    }
-
-    /**
-     * 計算總成本（本幣）- 含費用分攤
-     */
-    protected function calculateTotalTwd(): string
-    {
-        // 商品小計（本幣）
-        $subtotal = '0.0000';
-        foreach ($this->items as $item) {
-            $itemCost = bcmul($item->cost_twd ?? '0', $item->quantity ?? '0', 4);
-            $subtotal = bcadd($subtotal, $itemCost, 4);
-        }
-
-        // 加上運費/稅金/其他，減去折扣
-        $total = bcadd($subtotal, $this->shipping_fee ?? '0', 4);
-        $total = bcadd($total, $this->tax ?? '0', 4);
-        $total = bcadd($total, $this->other_fees ?? '0', 4);
-        $total = bcsub($total, $this->discount ?? '0', 4);
-
-        return $total;
+        // 委託 AccountingService 執行
+        $service = App::make(AccountingService::class);
+        
+        return $service->postFromRules(
+            source: $this,
+            referenceType: $eventType,
+            rules: $rules
+        );
     }
 
     /**
@@ -118,4 +56,12 @@ trait HasAccounting
     {
         return $this->morphOne(Journal::class, 'reference');
     }
+
+    /**
+     * 取得會計規則陣列（由各 Model 實作）
+     * 
+     * @param string $eventType 事件類型
+     * @return array 規則陣列
+     */
+    abstract public function getAccountingRules(string $eventType): array;
 }

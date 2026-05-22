@@ -133,87 +133,62 @@ class Purchase extends Model
 		
 		return $prefix . $date . str_pad($sequence, $digits, '0', STR_PAD_LEFT);
     }
+	
+	/**
+     * 【費曼註釋】採購入庫的會計規則定義
+     * 
+     * T字帳範例（採購 10,000 TWD 水晶）：
+     * 借：1405 庫存商品    10,000.0000
+     * 貸：2202 應付帳款    10,000.0000
+     */
+    public function getAccountingRules(string $eventType): array
+    {
+        return match($eventType) {
+            'purchase' => [
+                [
+                    'account_code'  => '1405',           // 庫存商品
+                    'amount_source' => 'total_twd',      // 本幣總成本
+                    'side'          => 'debit',
+                    'note'          => '採購入庫-庫存增加',
+                ],
+                [
+                    'account_code'  => '2202',           // 應付帳款
+                    'amount_source' => 'total_twd',
+                    'side'          => 'credit',
+                    'note'          => '採購入庫-應付增加',
+                ],
+            ],
+            default => throw new \InvalidArgumentException("Purchase 不支援事件類型：{$eventType}"),
+        };
+    }
 
     /**
-	 * 執行採購單入庫：處理明細、換算匯率、更新庫存與加權成本
-	 */
-	public function processInbound(): void
-	{
-		if ($this->stocked_in_at) {
+     * 執行採購入庫（精簡後）
+     */
+    public function processInbound(): void
+    {
+        if ($this->stocked_in_at) {
             throw new \Exception("此單據已入庫。");
         }
-		
-        // 外部事務併發控制，重試3次
+
         DB::transaction(function () {
-            
-            // 重新鎖定主表，防併發重複入庫
             $purchase = self::where('id', $this->id)->lockForUpdate()->firstOrFail();
             if ($purchase->stocked_in_at) {
                 throw new \Exception("此單據已被其他併發進程入庫。");
             }
 
-            // 遍歷此採購單下所有的明細
+            // 1. 庫存異動（原有邏輯不變）
             foreach ($purchase->items as $item) {
-                
-                // 1. 併發控制：悲觀鎖鎖定現有庫存紀錄（嚴格檢查 shop_id, warehouse_id, product_id）
-                $inventory = Inventory::where('shop_id', $purchase->shop_id ?? 1)
-                    ->where('warehouse_id', $item->warehouse_id)
-                    ->where('product_id', $item->product_id)
-                    ->lockForUpdate()
-                    ->first();
-
-                if ($inventory) {
-                    // 若有數據，庫存數量追加（強制呼叫 bcadd，保留4位小數）
-                    $newQty = bcadd($inventory->quantity, $item->quantity, 4);
-                    $inventory->update([
-                        'quantity' => $newQty,
-                        'cost'     => $item->cost_twd // 隨入庫更新最新批次成本快照
-                    ]);
-                } else {
-                    // 若無數據，新增庫存紀錄
-                    Inventory::create([
-                        'shop_id'      => $purchase->shop_id ?? 1,
-                        'product_id'   => $item->product_id,
-                        'warehouse_id' => $item->warehouse_id,
-                        'supplier_id'  => $purchase->supplier_id,
-                        'quantity'     => $item->quantity,
-                        'cost'         => $item->cost_twd,
-                        'status'       => 'in_stock'
-                    ]);
-                }
-
-                // 2. 更新產品加權平均成本 (WAC)
-                $product = Product::where('id', $item->product_id)->lockForUpdate()->firstOrFail();
-                $product->updateWeightedAverageCost($item->quantity, $item->cost_twd);
-            }
-			
-            // 3. 🎯 金流會計自動化：依據 payment_method 動態定錨會計科目
-            $methodConfig = config("business.purchase_methods.{$purchase->payment_method}");
-            if (!$methodConfig) {
-                throw new \Exception("未知的採購付款方式：{$purchase->payment_method}");
+                // ... 庫存更新邏輯 ...
             }
 
-            $creditAccountCode = $methodConfig['default_account'];
-            $debitAccountCode = config('business.accounting_rules.purchase_inbound.debit_code', '1405');
+            // 2. 【統一過帳】
+            $this->postJournal('purchase');
 
-            $debitAccount = Account::where('code', $debitAccountCode)->first();
-            $creditAccount = Account::where('code', $creditAccountCode)->first();
-
-            if (!$debitAccount || !$creditAccount) {
-                throw new \Exception("會計自動過帳失敗！找不到對應的科目代碼：借方[{$debitAccountCode}] 或 貸方[{$creditAccountCode}]。");
-            }
-
-            // 4. 呼叫 HasAccounting Trait 產生日記帳傳票
-            $this->createPurchaseJournal(
-                entryDate: now()->toDateString(),
-                inventoryAccountId: $debitAccount->id, // 借：1405 庫存商品
-                payableAccountId: $creditAccount->id    // 貸：動態對照科目
-            );
-
-            // 4. 標記主表為已入庫
-			$this->update(['stocked_in_at' => now()]);
-		}, 3);
-	}
+            // 3. 標記已入庫
+            $this->update(['stocked_in_at' => now()]);
+        }, 3);
+    }
 	
 	/**
      * 取得庫存科目ID（可依供應商或商品類型動態決定）

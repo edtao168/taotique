@@ -5,8 +5,10 @@
 
 namespace App\Services;
 
+use App\Models\Account;
 use App\Models\Journal;
 use App\Models\JournalItem;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -21,6 +23,14 @@ class AccountingService
             'number_field' => 'purchase_number',
         ],
         'sale' => [
+            'model' => \App\Models\Sale::class,
+            'number_field' => 'invoice_number',
+        ],
+		'sale_revenue' => [  // 銷售收入確認
+            'model' => \App\Models\Sale::class,
+            'number_field' => 'invoice_number',
+        ],
+        'sale_cost' => [     // 銷售成本結轉
             'model' => \App\Models\Sale::class,
             'number_field' => 'invoice_number',
         ],
@@ -94,6 +104,8 @@ class AccountingService
             'correct' => '更正分錄',
             'purchase' => '採購進貨',
             'sale' => '銷售出貨',
+			'sale_revenue' => '銷售收入確認',
+            'sale_cost' => '銷售成本結轉',
             'purchase_return' => '採購退回',
             'sale_return' => '銷售退回',
             'conversion' => '拆裝組合',
@@ -145,7 +157,7 @@ class AccountingService
             }
 
             $journal = Journal::create([
-                'shop_id' => 1, // [TECH-DEBT] 未來從 auth()->user()->shop_id 取得
+                'shop_id'  => auth()->user()->shop_id ?? 1,
                 'currency' => $currency,
                 'exchange_rate' => $exchangeRate,
                 'entry_date' => $entryDate ?? now()->format('Y-m-d'),
@@ -167,6 +179,7 @@ class AccountingService
                     'currency' => $currency,
                     'exchange_rate' => $exchangeRate,
                     'sort_order' => $index,
+					'note' => $entry['note'] ?? null,
                 ]);
             }
 
@@ -263,6 +276,306 @@ class AccountingService
         }, 3);
     }
 
+    // ==============================================
+    // 新增：規則引擎方法（取代 JournalBuilder）
+    // ==============================================
+
+    /**
+     * 從規則陣列產生分錄並直接寫入
+     * 
+     * 【費曼註釋：統一入口，所有業務 Model 呼叫此方法】
+     * 
+     * @param Model $source 來源單據 Model
+     * @param string $referenceType 參考類型（如 'purchase', 'sale_revenue'）
+     * @param array $rules 規則陣列
+     * @return Journal
+     */
+    public function postFromRules(Model $source, string $referenceType, array $rules): Journal
+    {
+        // 1. 解析規則為 entries
+        $entries = $this->buildEntriesFromRules($source, $rules);
+
+        // 2. 產生摘要
+        $description = $this->buildDescription($source, $referenceType);
+
+        // 3. 呼叫原有核心方法
+        return $this->createAutoJournal(
+            referenceType: $referenceType,
+            referenceId: $source->id,
+            description: $description,
+            entries: $entries,
+            currency: $source->currency ?? 'TWD',
+            exchangeRate: (string) ($source->exchange_rate ?? '1.0000'),
+            entryDate: $source->sold_at?->format('Y-m-d') 
+                ?? $source->purchased_at?->format('Y-m-d') 
+                ?? now()->format('Y-m-d')
+        );
+    }
+
+    /**
+     * 解析規則陣列為 entries
+     * 
+     * 規則格式：
+     * [
+     *   'account_code'  => '5001',           // 科目代碼（優先）或 account_id
+     *   'account_id'    => 123,              // 直接指定科目 ID
+     *   'amount_source' => 'subtotal',       // 金額來源
+     *   'side'          => 'credit',         // 'debit' 或 'credit'
+     *   'condition'     => 'amount > 0',     // 條件（可選）
+     *   'note'          => '主營業務收入',    // 摘要（可選）
+     * ]
+     * 
+     * amount_source 支援：
+     * - 'subtotal' → $source->subtotal
+     * - 'customer_total' → $source->customer_total
+     * - 'items.sum:unit_cost_twd*quantity' → 明細加總
+     * - 'fees.shipping' → 費用關聯
+     * - 'expression:customer_total - subtotal' → 運算式
+     */
+    private function buildEntriesFromRules(Model $source, array $rules): array
+    {
+        $entries = [];
+
+        foreach ($rules as $rule) {
+            // 條件判斷
+            if (isset($rule['condition']) && !$this->evaluateCondition($source, $rule['condition'])) {
+                continue;
+            }
+
+            // 解析金額
+            if (isset($rule['amount'])) {
+				$amount = (string) $rule['amount'];
+			} elseif (isset($rule['amount_source'])) {
+				$amount = $this->resolveAmount($source, $rule['amount_source']);
+				
+				// 應用比例（如果有）
+				if (isset($rule['ratio']) && bccomp($rule['ratio'], '1.0000', 4) !== 0) {
+					$amount = bcmul($amount, (string) $rule['ratio'], 4);
+				}
+			} else {
+				throw new \RuntimeException("規則缺少 amount 或 amount_source：" . json_encode($rule));
+			}
+            
+            if (bccomp($amount, '0', 4) === 0) {
+                continue;
+            }
+
+            // 解析科目
+            $accountId = $this->resolveAccountId($rule);
+            if (!$accountId) {
+                throw new \RuntimeException("規則無法解析科目：" . json_encode($rule));
+            }
+
+            $entries[] = [
+                'account_id' => $accountId,
+                'debit' => $rule['side'] === 'debit' ? $amount : '0.0000',
+                'credit' => $rule['side'] === 'credit' ? $amount : '0.0000',
+                'note' => $rule['note'] ?? null,
+            ];
+        }
+
+        // 前置平衡檢查（在 createAutoJournal 會再次檢查，這裡提早發現規則錯誤）
+        $this->validateBalance($entries);
+
+        return $entries;
+    }
+
+    /**
+     * 解析金額來源
+     */
+    private function resolveAmount(Model $source, string $sourceSpec): string
+    {
+        // 明細加總模式
+        if (str_starts_with($sourceSpec, 'items.sum:')) {
+            $field = str_replace('items.sum:', '', $sourceSpec);
+            return $this->sumItems($source, $field);
+        }
+
+        // 費用關聯模式
+        if (str_starts_with($sourceSpec, 'fees.')) {
+            $feeType = str_replace('fees.', '', $sourceSpec);
+            return (string) ($source->fees()->where('fee_type', $feeType)->sum('amount') ?? '0');
+        }
+
+        // 運算式模式
+        if (str_starts_with($sourceSpec, 'expression:')) {
+            $expr = str_replace('expression:', '', $sourceSpec);
+            return $this->evaluateExpression($source, $expr);
+        }
+
+        // 直接欄位
+        return (string) ($source->{$sourceSpec} ?? '0');
+    }
+
+    /**
+     * 加總明細欄位（支援複合運算）
+     */
+    private function sumItems(Model $source, string $field): string
+    {
+        $total = '0.0000';
+        
+        // 確保關聯已載入，避免 N+1
+        if (!$source->relationLoaded('items')) {
+            $source->load('items');
+        }
+
+        foreach ($source->items as $item) {
+            if (str_contains($field, '*')) {
+                [$a, $b] = explode('*', $field);
+                $val = bcmul(
+                    (string) ($item->{$a} ?? '0'),
+                    (string) ($item->{$b} ?? '0'),
+                    4
+                );
+            } else {
+                $val = (string) ($item->{$field} ?? '0');
+            }
+            
+            $total = bcadd($total, $val, 4);
+        }
+
+        return $total;
+    }
+
+    /**
+     * 簡易運算式求值
+     * [TECH-DEBT] 未來應改用正規解析器或引入數學庫
+     */
+    private function evaluateExpression(Model $source, string $expr): string
+    {
+        // 替換變數為實際值：$subtotal → 1234.56
+        $expr = preg_replace_callback('/\$(\w+)/', function ($matches) use ($source) {
+            return (string) ($source->{$matches[1]} ?? '0');
+        }, $expr);
+
+        // 安全檢查：僅允許數字與運算符
+        if (!preg_match('/^[\d\s\+\-\*\/\(\)\.]+$/', $expr)) {
+            throw new \RuntimeException("非法運算式：{$expr}");
+        }
+
+        // [TECH-DEBT] 簡易實作：使用 eval（生產環境應替換為安全解析器）
+        // 此處因正規表達式已過濾危險字元，風險可控
+        $result = eval("return {$expr};");
+        
+        return number_format((float) $result, 4, '.', '');
+    }
+
+    /**
+     * 條件判斷
+     */
+    private function evaluateCondition(Model $source, string $condition): bool
+    {
+        if (preg_match('/^(\w+)\s*([><=!]+)\s*(.+)$/', $condition, $matches)) {
+            $left = $this->resolveAmount($source, $matches[1]);
+            $op = $matches[2];
+            $right = trim($matches[3]);
+
+            return match($op) {
+                '>'  => bccomp($left, $right, 4) > 0,
+                '<'  => bccomp($left, $right, 4) < 0,
+                '>=' => bccomp($left, $right, 4) >= 0,
+                '<=' => bccomp($left, $right, 4) <= 0,
+                '==' => bccomp($left, $right, 4) === 0,
+                '!=' => bccomp($left, $right, 4) !== 0,
+                default => false,
+            };
+        }
+
+        return true;
+    }
+
+    /**
+     * 解析科目 ID（防禦式）
+     * 
+     * 【費曼註釋：這是 code → id 的唯一轉換點，必須嚴格防禦】
+     * 
+     * 規則陣列支援兩種寫法：
+     * 1. 'account_code' => '1405'  ← 推薦：人類可讀、穩定
+     * 2. 'account_id' => 42        ← 進階：動態計算後的 ID
+     * 
+     * 生產環境必須使用 account_code，因為：
+     * - 科目表重新編號時，code 不變，id 會變
+     * - 跨環境（dev/staging/prod）同步時，code 一致，id 不一致
+     * - 審計追蹤時，code 可讀，id 無意義
+     * 
+     * @throws \RuntimeException 科目找不到、重複、或已停用
+     */
+    private function resolveAccountId(array $rule): int  // 回傳 int，不再允許 null
+    {
+        // 優先級 1：直接指定 ID（進階用法，如動態計算後的科目）
+        if (!empty($rule['account_id'])) {
+            $account = Account::find($rule['account_id']);
+            
+            if (!$account) {
+                throw new \RuntimeException(
+                    "規則指定的 account_id={$rule['account_id']} 不存在"
+                );
+            }
+            
+            if (!$account->is_active) {
+                throw new \RuntimeException(
+                    "規則指定的 account_id={$rule['account_id']} [{$account->code}] 已停用"
+                );
+            }
+            
+            return (int) $account->id;
+        }
+
+        // 優先級 2：透過 code 解析（標準用法）
+        if (!empty($rule['account_code'])) {
+            $code = $rule['account_code'];
+            
+            // 嚴格查詢：code 必須唯一
+            $accounts = Account::where('code', $code)->get();
+            
+            if ($accounts->isEmpty()) {
+                throw new \RuntimeException(
+                    "會計科目代碼 [{$code}] 不存在，請檢查科目表或規則配置"
+                );
+            }
+            
+            if ($accounts->count() > 1) {
+                // [費曼註釋：code 重複是資料品質問題，必須立即暴露]
+                $ids = $accounts->pluck('id')->implode(', ');
+                throw new \RuntimeException(
+                    "會計科目代碼 [{$code}] 重複，找到 {$accounts->count()} 筆（id: {$ids}）。" .
+                    "請立即修正科目表，code 必須唯一。"
+                );
+            }
+            
+            $account = $accounts->first();
+            
+            if (!$account->is_active) {
+                throw new \RuntimeException(
+                    "會計科目 [{$code}] {$account->name} 已停用，無法用於分錄"
+                );
+            }
+            
+            return (int) $account->id;
+        }
+
+        // 兩者都未指定
+        throw new \RuntimeException(
+            "規則缺少 account_code 或 account_id：" . json_encode($rule)
+        );
+    }
+
+    /**
+     * 產生摘要
+     */
+    private function buildDescription(Model $source, string $referenceType): string
+    {
+        $number = match(true) {
+            $source instanceof \App\Models\Purchase => $source->purchase_number,
+            $source instanceof \App\Models\Sale => $source->invoice_number,
+            default => '#' . $source->id,
+        };
+
+        $label = $this->getSourceTypeLabel($referenceType);
+
+        return "{$label} - {$number}";
+    }
+	
     /**
      * [費曼註釋：計算原始分錄與更正後分錄的差額，只回傳有變化的項目]
      */
