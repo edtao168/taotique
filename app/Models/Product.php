@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class Product extends Model
 {
@@ -29,7 +30,15 @@ class Product extends Model
 		'is_unique' => 'boolean',
         'is_active' => 'boolean',
     ];
-	
+	public function getCostAttribute($value)
+{
+    Log::info('Product::getCostAttribute called', [
+        'product_id' => $this->id,
+        'value' => $value,
+        'original' => $this->getOriginal('cost')
+    ]);
+    return $value;
+}
 	/**
      * 定義 full_display_name 屬性	
      */	

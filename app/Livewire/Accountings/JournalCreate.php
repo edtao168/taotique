@@ -1,7 +1,12 @@
 <?php
 
 namespace App\Livewire\Accountings;
-
+/*
+核心定位
+底層：依據中國《小企业会计准则》+ 現代ERP規範
+UI：一人店、老闆不懂會計 → 極簡、自動化
+原則：能自動就不要讓老闆摻合
+*/
 use App\Models\Account;
 use App\Models\AccountingRule;
 use App\Models\Journal;

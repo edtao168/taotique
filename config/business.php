@@ -34,53 +34,82 @@ return [
 		['id' => 'line_pay', 'name' => 'Line Pay', 'icon' => 'o-wallet'],
         
     ],
-        
+    
 	'fee_types' => [
-		// --- 影響「買家支付總額 (customer_total)」的項目 ---
+		// 買家相關（影響 customer_total）
 		'shipping_fee_customer' => [
-			'name'     => '買家支付運費',
-			'target'   => 'customer', // 影響買家
-			'operator' => 'add',      // 加項：小計 + 運費
-			'icon'     => 'o-truck',
+			'name'          => '買家支付運費',
+			'target'        => 'customer',
+			'operator'      => 'add',
+			'icon'          => 'o-truck',
+			'account_code'  => '224101',      // 其他應付款
+			'side'          => 'credit',
 		],
-		'discount' => [
-			'name'     => '賣場折扣',
-			'target'   => 'customer', // 影響買家
-			'operator' => 'sub',      // 減項：小計 - 折扣
-			'icon'     => 'o-tag',
-		],
+		
 		'platform_coupon' => [
-			'name'     => '平台優惠券',
-			'target'   => 'customer', 
-			'operator' => 'sub',      
-			'icon'     => 'o-ticket',
+			'name'          => '平台優惠券',
+			'target'        => 'customer',
+			'operator'      => 'sub',
+			'icon'          => 'o-ticket',
+			'account_code'  => '112202',    // 應收帳款-平台補貼
+			'side'          => 'debit',
 		],
 
-		// --- 影響「賣家淨進帳 (final_net_amount)」的項目 ---
+		// ========== 同時影響買賣雙方 ==========
+		'seller_discount' => [
+			'name'          => '賣家折扣',
+			'target'        => 'both',       // 同時影響買賣雙方
+			'operator'      => 'sub',
+			'icon'          => 'o-tag',
+			'account_code'  => '500110',    // 銷貨折讓
+			'side'          => 'debit',
+		],
+		
+		// 賣家相關（影響 final_net_amount）
 		'shipping_fee_platform' => [
-			'name'     => '平台代付運費',
-			'target'   => 'seller',
-			'operator' => 'sub',      
-			'icon'     => 'o-paper-airplane',
-		],
-		'platform_fee' => [
-			'name'     => '平台成交手續費',
-			'target'   => 'seller',
-			'operator' => 'sub',
-			'icon'     => 'o-calculator',
+			'name'          => '平台代付運費',
+			'target'        => 'seller',
+			'operator'      => 'sub',
+			'icon'          => 'o-paper-airplane',
+			'account_code'  => '560106',    // 運輸費
+			'side'          => 'debit',
 		],		
-		'order_adjustment' => [
-			'name'     => '帳款調整',
-			'target'   => 'seller',
-			'operator' => 'add',
-			'icon'     => 'o-adjustments-horizontal',
+		
+		'platform_fee' => [
+			'name'          => '手續費',
+			'target'        => 'seller',
+			'operator'      => 'sub',
+			'icon'          => 'o-calculator',
+			'account_code'  => '560105',
+			'side'          => 'debit',
 		],
+		
 		'commission' => [
-			'name'     => '佣金',
-			'target'   => 'seller',
-			'operator' => 'sub',
-			'icon'     => 'o-banknotes',
+			'name'          => '佣金',
+			'target'        => 'seller',
+			'operator'      => 'sub',
+			'icon'          => 'o-user-group',
+			'account_code'  => '560111',
+			'side'          => 'debit',
 		],
+		
+		'order_adjustment' => [
+			'name'          => '帳款調整',
+			'target'        => 'seller',
+			'operator'      => 'sub',
+			'icon'          => 'o-adjustments-horizontal',
+			'account_code'  => '560108',
+			'side'          => 'debit',
+		],
+		
+		'tax' => [
+			'name'          => '銷項稅額',
+			'target'        => 'seller',
+			'operator'      => 'sub',
+			'icon'          => 'o-building-library',
+			'account_code'  => '222103',
+			'side'          => 'credit',
+		],		
 	],
 	
 	// 退貨費用類型

@@ -81,14 +81,7 @@
                                     </div>
                                 </div>
                             @endforeach
-                        </div>
-                        
-                        
-                        @if($journal->source_number)
-                            <div class="text-xs text-info mt-2 pl-4">
-                                📎 {{ $journal->source_type_label }} #{{ $journal->source_number }}
-                            </div>
-                        @endif
+                        </div>                        
                     </div>
                 </div>
             @endforeach

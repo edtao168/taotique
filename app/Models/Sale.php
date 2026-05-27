@@ -13,350 +13,363 @@ use Illuminate\Support\Facades\Log;
 class Sale extends Model
 {
     use HasAccounting;
-	
-	protected $guarded = [];
+    
+    protected $guarded = [];
     
     protected $casts = [
         'shop_id'          => 'integer',
         'sold_at'          => 'datetime:Y-m-d H:i:s',
         'stocked_out_at'   => 'datetime:Y-m-d H:i:s',
         'exchange_rate'    => 'decimal:4',
-		'subtotal' => 'decimal:4',
-        'customer_total' => 'decimal:4',
+        'subtotal'         => 'decimal:4',
+        'customer_total'   => 'decimal:4',
         'final_net_amount' => 'decimal:4',
     ];
-
-    // 快取費用類型配置
+    
     private static ?array $feeTypesCache = null;
-	
+    private const DECIMAL_PRECISION = 4;
+    
+    // ==============================================
+    // Accessors
+    // ==============================================
+    
+    public function getCalculatedFinalNetAmountAttribute(): string
+    {
+        return $this->calculateAmountByTarget('seller');
+    }
+    
+    public function getCalculatedCustomerTotalAttribute(): string
+    {
+        return $this->calculateAmountByTarget('customer');
+    }
+    
+    public function getSoldDateAttribute(): string
+    {
+        return $this->sold_at->format('Y-m-d');
+    }
+    
+    public function getSoldTimeAttribute(): string
+    {
+        return $this->sold_at->format('H:i');
+    }
+    
+    public function getPaymentMethodNameAttribute(): string
+    {
+        return collect(config('business.payment_methods'))
+            ->firstWhere('id', $this->payment_method)['name'] ?? $this->payment_method;
+    }
+    
     /**
-     * 獲取銷售事件的會計規則
-     * 🎯 完全參照 AccountingRule 架構，回歸資料庫動態配置
+     * 根據目標計算金額（買家/賣家）
      */
-	public function getAccountingRules(string $eventType): array
+    private function calculateAmountByTarget(string $target): string
+    {
+        $amount = $this->subtotal;
+        $feeConfigs = config('business.fee_types', []);
+        
+        foreach ($feeConfigs as $key => $config) {
+            if ($config['target'] === $target || $config['target'] === 'both') {
+                $val = (string)($this->$key ?? '0.0000');
+                $amount = $config['operator'] === 'add' 
+                    ? bcadd($amount, $val, self::DECIMAL_PRECISION)
+                    : bcsub($amount, $val, self::DECIMAL_PRECISION);
+            }
+        }
+        
+        return $amount;
+    }
+    
+    // ==============================================
+    // Accounting Rules
+    // ==============================================
+    
+    public function getAccountingRules(string $eventType): array
+    {
+        $eventTypeKey = match($eventType) {
+            'sale_revenue' => $this->getRevenueRuleType(),
+			'sale_fee'     => $this->getFeeRuleType(),
+			'sale_cost'    => 'sale_cost',
+            default        => $eventType,
+        };
+        
+        $rule = AccountingRule::where('event_type', $eventTypeKey)
+            ->where('shop_id', $this->shop_id)
+            ->where('is_active', true)
+            ->with(['lines' => fn($q) => $q->orderBy('sort_order')])
+            ->first();
+        
+        if (!$rule) {
+            throw new \RuntimeException("找不到會計規則：{$eventTypeKey}");
+        }
+        
+        return $rule->lines->toArray();
+    }
+    
+    private function getRevenueRuleType(): string
 	{
-		// 成本規則統一用 sale_cost
-		if ($eventType === 'sale_cost') {
-			return $this->buildDynamicCostRules();
-		} 
-		// 收入規則根據渠道動態選擇
-		else if ($eventType === 'sale_revenue') {
-			$ruleEventType = $this->getRevenueRuleType();
-		}
-		else {
-			$ruleEventType = $eventType;
-		}
+		$channel = $this->channel?->code;
 		
-		$rule = AccountingRule::where('event_type', $ruleEventType)
-			->where('shop_id', $this->shop_id ?? 1)
-			->where('is_active', true)
-			->with(['lines' => function($q) {
-				$q->where('is_active', true)->orderBy('sort_order');
-			}])
-			->first();
-
-		if (!$rule) {
-			throw new \RuntimeException("找不到會計規則：{$ruleEventType}");
-		}
-
-		$formattedRules = [];
-		foreach ($rule->lines as $line) {
-			$formattedRules[] = [
-				'account_code' => $line->account->code,
-				'amount_source' => $line->amount_source,
-				'side' => $line->entry_type,
-				'ratio' => (string) ($line->ratio ?? '1.0000'),
-			];
-		}
-
-		return $formattedRules;
-	}
-	
-	/**
-	 * 動態產生成本規則（從庫存系統即時計算）
-	 */
-	private function buildDynamicCostRules(): array
-	{
-		// 計算總成本
-		$totalCost = $this->calculateTotalCost();
-		
-		if (bccomp($totalCost, '0', 4) === 0) {
-			// 沒有成本資料，不產生分錄
-			return [];
-		}
-		
-		// 直接回傳帶金額的規則（不用 amount_source）
-		return [
-			[
-				'account_code' => '5401',  // 主營業務成本
-				'amount' => $totalCost,
-				'side' => 'debit',
-				'note' => '銷售成本結轉',
-			],
-			[
-				'account_code' => '1405',   // 庫存商品
-				'amount' => $totalCost,
-				'side' => 'credit',
-				'note' => '庫存商品出庫',
-			],
-		];
-	}
-
-	/**
-	 * 計算銷售總成本
-	 */
-	private function calculateTotalCost(): string
-	{
-		$totalCost = '0.0000';
-		
-		foreach ($this->items as $item) {
-			// 從 Product 取得成本
-			$unitCost = $item->product->cost ?? 0;
-			
-			$itemCost = bcmul((string) $unitCost, (string) $item->quantity, 4);
-			$totalCost = bcadd($totalCost, $itemCost, 4);
-		}
-		
-		return $totalCost;
-	}
-
-	/**
-	 * 根據銷售渠道決定使用哪個收入規則
-	 */
-	private function getRevenueRuleType(): string
-	{
-		// 可根據 channel_id 或 payment_method 判斷
-		$channel = $this->channel?->code ?? $this->payment_method;
-		
-		return match($channel) {
-			'retail', 'cash' => 'sale_revenue_cash_retail',
-			'shopee', 'shopee_pay' => 'sale_revenue_shopee',
-			'facebook' => 'sale_revenue_facebook',
-			'live' => 'sale_revenue_live',
-			default => 'sale_revenue_cash_retail',
+		return match(true) {
+			$channel === 'shopee' || $this->payment_method === 'shopee_pay' => 'sale_revenue_shopee',
+			$channel === 'facebook_live' => 'sale_revenue_facebook',
+			$channel === 'live' => 'sale_revenue_live',
+			default => 'sale_revenue_retail',  // 實體店（不分付款方式）
 		};
 	}
 
+	private function getFeeRuleType(): string
+	{
+		$channel = $this->channel?->code;
+		
+		return match(true) {
+			$channel === 'shopee' || $this->payment_method === 'shopee_pay' => 'sale_fee_shopee',
+			$channel === 'facebook_live' => 'sale_fee_facebook',
+			$channel === 'live' => 'sale_fee_live',
+			default => 'sale_fee_retail',  // 實體店（不分付款方式）
+		};
+	}
+    
+    // ==============================================
+    // Stock Management
+    // ==============================================
+    
     /**
-     * 收入確認規則
-     * 
-     * T字帳範例（售價 1,000，運費 60，手續費 30）：
-     * 借：1121 應收帳款      1,030  (1,000 + 60 - 30)
-     * 借：5601 銷售費用         30  (平台手續費)
-     * 貸：5001 主營收入      1,000
-     * 貸：2241 代收運費         60
+     * 執行銷售出庫
      */
-    private function buildRevenueRules(): array
-    {
-        $rules = [];
-
-        // 1. 借方：應收帳款/現金（買家實付）
-        $rules[] = [
-            'account_code'  => $this->resolvePaymentAccountCode(),
-            'amount_source' => 'customer_total',
-            'side'          => 'debit',
-            'note'          => '銷售收入-應收/現金',
-        ];
-
-        // 2. 貸方：主營業務收入
-        $rules[] = [
-            'account_code'  => '5001',
-            'amount_source' => 'subtotal',
-            'side'          => 'credit',
-            'note'          => '銷售收入-主營收入',
-        ];
-
-        // 3. 動態費用項目
-        $feeConfigs = config('business.fee_types', []);
-        foreach ($feeConfigs as $feeType => $config) {
-            $amount = (string) ($this->$feeType ?? '0.0000');
-            if (bccomp($amount, '0', 4) === 0) continue;
-
-            // 決定借貸方向與科目
-            [$side, $code] = $this->resolveFeeDirectionAndCode($feeType, $config);
-
-            $rules[] = [
-                'account_code'  => $code,
-                'amount_source' => "fees.{$feeType}",
-                'side'          => $side,
-                'note'          => $config['name'] ?? $feeType,
-            ];
-        }
-
-        return $rules;
-    }
-
-    /**
-     * 成本結轉規則
-     * 
-     * T字帳範例（成本 400）：
-     * 借：5401 主營業務成本    400
-     * 貸：1405 庫存商品        400
-     */
-    private function buildCostRules(): array
-    {
-        return [
-            [
-                'account_code'  => '5401',
-                'amount_source' => 'items.sum:unit_cost_twd*quantity',
-                'side'          => 'debit',
-                'note'          => '銷售成本結轉',
-            ],
-            [
-                'account_code'  => '1405',
-                'amount_source' => 'items.sum:unit_cost_twd*quantity',
-                'side'          => 'credit',
-                'note'          => '庫存商品出庫',
-            ],
-        ];
-    }
-
-    /**
-     * 解析付款方式對應科目代碼
-     */
-    private function resolvePaymentAccountCode(): string
-    {
-        return match ($this->payment_method ?? 'default') {
-            'cash'  => '1001',
-            'bank'  => '1002',
-            'line_pay', 'shopee', 'ecpay', 'credit_card' => '1122',
-            default => '1121',
-        };
-    }
-
-    /**
-     * 解析費用方向與科目代碼
-     * 
-     * 回傳: [$side, $accountCode]
-     */
-    private function resolveFeeDirectionAndCode(string $feeType, array $config): array
-    {
-        // 從配置讀取自定義科目
-        $code = $config['account_code'] ?? match ($feeType) {
-            'shipping'          => '2241',
-            'tax'               => '2221',
-            'platform_fee'      => '5601',
-            'payment_fee'       => '5601',
-            'coupon_discount'   => '5001',
-            default             => '6602',
-        };
-
-        // 決定方向
-        $side = match(true) {
-            $config['target'] === 'customer' && $config['operator'] === 'sub' => 'debit',   // 折扣沖收入
-            $config['target'] === 'seller' && $config['operator'] === 'add' => 'debit',     // 費用
-            $config['target'] === 'seller' && $config['operator'] === 'sub' => 'credit',   // 補貼
-            $config['target'] === 'customer' && $config['operator'] === 'add' => 'credit',  // 代收
-            default => 'debit',
-        };
-
-        return [$side, $code];
-    }
-	
-	/**
-     * 執行銷售出庫（精簡後）
-     */
-    public function processStockOut(bool $allowNegative = false, array $oldItemsQty = []): void
+    public function processStockOut(bool $allowNegative = false): void
     {
         if ($this->stocked_out_at) {
             throw new \Exception("銷售單 {$this->invoice_number} 已出庫。");
         }
-
-        DB::transaction(function () use ($allowNegative, $oldItemsQty) {
-            // 1. 庫存異動 + 成本快照（原有邏輯不變）
-            foreach ($this->items as $item) {
-                // ... 庫存扣減與成本快照 ...
-            }
-
-            // 2. 【統一過帳】收入確認
-            $this->postJournal('sale_revenue');
-
-            // 3. 【統一過帳】成本結轉
-            $this->postJournal('sale_cost');
-
-            // 4. 標記已出庫
-            $this->update(['stocked_out_at' => now()]);
-        }, 3);
+        
+        if ($this->hasReturnRecords()) {
+            throw new \Exception("銷售單 {$this->invoice_number} 已有退貨紀錄，無法出庫。");
+        }
+        
+        // 1. 外部先過濾基本狀態，減少不必要的 DB 連線佔用
+		DB::transaction(function () use ($allowNegative) {
+        
+        // 2. 核心：在扣減庫存與計算成本前，必須對產品或庫存記錄進行 lockForUpdate()
+        // 註：這應該在 $this->deductInventory() 內部實作，確保加權平均成本計算時數據不被夾擊
+        $this->deductInventory($this->getCurrentItemsQuantity(), $allowNegative);
+        
+        // 3. 重新載入最新的關聯資料（包含明細與費用快照）
+        $this->load(['items.product', 'fees']); 
+        
+        // 4. 拋出事件或直接執行傳票過帳
+        // 嚴謹性檢查：在 postJournal 內部必須使用 BC Math 檢查：
+        // sale_revenue 借貸必須平衡
+        // sale_cost 必須 >= 0
+        // sale_fee 如果當下沒有綁定任何費用（例如客人付現、無佣金），應自動跳過不產生空傳票
+        $this->postJournal('sale_revenue');
+        $this->postJournal('sale_cost');
+        
+        if ($this->fees->isNotEmpty()) {
+            $this->postJournal('sale_fee');
+        }
+        
+        // 5. 更新出庫時間與單據狀態
+        $this->update([
+            'stocked_out_at' => now(),
+            'status' => 'completed' // 建議增加狀態欄位以便索引
+        ]);
+		}, 3);
     }
-	
-	/**
-     * 如果已有關聯的 SalesReturn 
-	 * 且狀態為 pending 或 completed，則鎖定
+    
+    /**
+     * 編輯銷售單時的庫存調整
      */
-	public function isLocked(): bool
-	{
-		return $this->returns()->whereIn('status', ['pending', 'approved', 'completed'])->exists();
-	}
-	
-	/**
-     * 第一階段判斷：是否存在任何（非作廢）的退貨紀錄
+    public function adjustStockForEdit(array $oldItems, array $newItems, bool $allowNegative = false): void
+    {
+        if ($this->stocked_out_at && !$this->canBeModified()) {
+            throw new \Exception('已出庫的銷售單無法修改庫存。');
+        }
+        
+        $changes = $this->calculateInventoryChanges($oldItems, $newItems);
+        
+        foreach ($changes as $key => $change) {
+            [$productId, $warehouseId] = explode('-', $key);
+            
+            if ($change > 0) {
+                $this->deductSingleProduct($productId, $warehouseId, $change, $allowNegative);
+            } elseif ($change < 0) {
+                $this->restoreSingleProduct($productId, $warehouseId, abs($change));
+            }
+        }
+    }
+    
+    /**
+     * 計算庫存變化量
      */
+    private function calculateInventoryChanges(array $oldItems, array $newItems): array
+    {
+        $oldQtyMap = [];
+        foreach ($oldItems as $item) {
+            $key = $item['product_id'] . '-' . $item['warehouse_id'];
+            $oldQtyMap[$key] = $item['quantity'];
+        }
+        
+        $changes = [];
+        foreach ($newItems as $item) {
+            $key = $item['product_id'] . '-' . $item['warehouse_id'];
+            $oldQty = $oldQtyMap[$key] ?? 0;
+            $change = $item['quantity'] - $oldQty;
+            if ($change != 0) {
+                $changes[$key] = $change;
+            }
+            unset($oldQtyMap[$key]);
+        }
+        
+        // 處理被刪除的商品
+        foreach ($oldQtyMap as $key => $oldQty) {
+            $changes[$key] = -$oldQty;
+        }
+        
+        return $changes;
+    }
+    
+    /**
+     * 扣減庫存（多商品）
+     */
+    private function deductInventory(array $itemsQuantity, bool $allowNegative): void
+    {
+        foreach ($itemsQuantity as $key => $quantity) {
+            [$productId, $warehouseId] = explode('-', $key);
+            $this->deductSingleProduct($productId, $warehouseId, $quantity, $allowNegative);
+        }
+    }
+    
+    /**
+     * 扣減單一商品庫存
+     */
+    private function deductSingleProduct(int $productId, int $warehouseId, float $quantity, bool $allowNegative): void
+    {
+        if ($quantity <= 0) return;
+        
+        $inventory = Inventory::where('product_id', $productId)
+            ->where('warehouse_id', $warehouseId)
+            ->lockForUpdate()
+            ->first();
+        
+        $currentQty = $inventory ? (float)$inventory->quantity : 0;
+        
+        if (!$allowNegative && $currentQty < $quantity) {
+            $product = Product::find($productId);
+            throw new \Exception("商品 {$product?->name} 庫存不足。可用：{$currentQty}，需扣：{$quantity}");
+        }
+        
+        $newQty = bcsub((string)$currentQty, (string)$quantity, self::DECIMAL_PRECISION);
+        
+        if ($inventory) {
+            $inventory->update(['quantity' => $newQty]);
+        } else {
+            Inventory::create([
+                'product_id'   => $productId,
+                'warehouse_id' => $warehouseId,
+                'quantity'     => $newQty,
+                'shop_id'      => $this->shop_id,
+            ]);
+        }
+    }
+    
+    /**
+     * 回補單一商品庫存
+     */
+    private function restoreSingleProduct(int $productId, int $warehouseId, float $quantity): void
+    {
+        if ($quantity <= 0) return;
+        
+        Inventory::where('product_id', $productId)
+            ->where('warehouse_id', $warehouseId)
+            ->increment('quantity', $quantity);
+    }
+    
+    /**
+     * 取得目前所有商品的數量（用於出庫）
+     */
+    private function getCurrentItemsQuantity(): array
+    {
+        $quantities = [];
+        foreach ($this->items as $item) {
+            $key = $item->product_id . '-' . $item->warehouse_id;
+            $quantities[$key] = $item->quantity;
+        }
+        return $quantities;
+    }
+    
+    // ==============================================
+    // Status Checks
+    // ==============================================
+    
+    public function isLocked(): bool
+    {
+        return $this->hasReturnRecords();
+    }
+    
     public function hasReturnRecords(): bool
     {
-        // 排除已取消 (cancelled) 的退貨單，僅鎖定處理中、已審核或已完成的單據
         return $this->returns()
             ->whereIn('status', ['pending', 'approved', 'completed'])
             ->exists();
     }
-	
-	/**
-     * 第二階段：綜合判斷是否允許變動（刪除、修改、再次退貨）
-     */
+    
     public function canBeModified(): bool
     {
-        // 如果已經有退貨紀錄，則不允許任何變動
-        if ($this->hasReturnRecords()) {
-            return false;
-        }
-
-        // 此外可增加其他判斷，例如：單據是否已結案 (completed)
-        return $this->status !== 'completed';
+        return !$this->hasReturnRecords() && $this->status !== 'completed';
     }
-
-    /**
-     * 動態攔截所有費用屬性
-     */
+    
+    // ==============================================
+    // Dynamic Attribute (Fees)
+    // ==============================================
+    
     public function getAttribute($key)
     {
-        // 初始化快取
         if (self::$feeTypesCache === null) {
             self::$feeTypesCache = config('business.fee_types', []);
         }
         
-        // 如果是定義的費用類型，從 sale_fees 計算
         if (isset(self::$feeTypesCache[$key])) {
-            // 關聯已載入時直接計算
             if ($this->relationLoaded('fees')) {
                 return (string) $this->fees->where('fee_type', $key)->sum('amount');
             }
-            // 未載入時使用查詢（避免 N+1）
             return (string) $this->fees()->where('fee_type', $key)->sum('amount');
         }
         
-        // 其他屬性走預設邏輯
         return parent::getAttribute($key);
     }
-
+    
+    // ==============================================
+    // Model Events
+    // ==============================================
+    
     protected static function booted()
     {
         static::deleting(function ($sale) {
-			if ($sale->hasReturnRecords()) {
-				throw new \Exception('此銷售單已有退貨紀錄，禁止刪除。');
-			}
-		});
-
-		static::updating(function ($sale) {
-			if ($sale->hasReturnRecords()) {
-				throw new \Exception('此銷售單已有退貨紀錄，禁止修改。');
-			}
-		});
-		
-		static::creating(function ($sale) {
+            if ($sale->hasReturnRecords()) {
+                throw new \Exception('此銷售單已有退貨紀錄，禁止刪除。');
+            }
+            
+            if ($sale->stocked_out_at) {
+                throw new \Exception('已出庫的銷售單禁止刪除。');
+            }
+        });
+        
+        static::updating(function ($sale) {
+            if ($sale->hasReturnRecords()) {
+                throw new \Exception('此銷售單已有退貨紀錄，禁止修改。');
+            }
+        });
+        
+        static::creating(function ($sale) {
             if (empty($sale->invoice_number)) {
                 $sale->invoice_number = self::generateInvoiceNumber();
             }
         });
     }
+    
+    // ==============================================
+    // Invoice Number Generator
+    // ==============================================
     
     public static function generateInvoiceNumber(): string
     {
@@ -365,79 +378,65 @@ class Sale extends Model
             $digits = (int) Setting::get('number_digits', 5);
             $datePart = now()->format('Ymd');
             $fullPrefix = $prefix . $datePart;
-
+            
             $lastOrder = self::where('invoice_number', 'like', "{$fullPrefix}%")
-                        ->lockForUpdate()
-                        ->orderBy('invoice_number', 'desc')
-                        ->first();
-
-            if ($lastOrder) {
-                $lastNumber = (int) substr($lastOrder->invoice_number, -$digits);
-                $nextNumber = $lastNumber + 1;
-            } else {
-                $nextNumber = 1;
-            }
-
+                ->lockForUpdate()
+                ->orderBy('invoice_number', 'desc')
+                ->first();
+            
+            $nextNumber = $lastOrder 
+                ? (int) substr($lastOrder->invoice_number, -$digits) + 1
+                : 1;
+            
             return $fullPrefix . str_pad($nextNumber, $digits, '0', STR_PAD_LEFT);
         });
     }
     
-    public function getPaymentMethodNameAttribute(): string
+    // ==============================================
+    // Create/Update with Calculations
+    // ==============================================
+    
+    public static function createWithCalculations(array $data, array $items): self
     {
-        return collect(config('business.payment_methods'))
-            ->firstWhere('id', $this->payment_method)['name'] ?? $this->payment_method;
-    }
-
-    /**
-	 * 【修正】解決 $sale 變數未定義的問題
-	 */
-	public static function createWithCalculations(array $data, array $items)
-	{
-		return DB::transaction(function () use ($data, $items) {
+        return DB::transaction(function () use ($data, $items) {
             $feeConfigs = config('business.fee_types', []);
             
-            // 1. 過濾掉不屬於 sales 主表的欄位（即費用欄位）
+            // 分離費用欄位
             $saleFields = array_diff_key($data, $feeConfigs);
-            
-            // 2. 建立 Sale 主表紀錄
             $sale = self::create($saleFields);
             
-            $allowNegative = Setting::get('allow_negative_stock', false);
-
+            // 建立銷售項目並快照成本
             foreach ($items as $item) {
-                $warehouseId = $item['warehouse_id'] ?? $data['warehouse_id'];
-                
-                $inventory = Inventory::where('product_id', $item['product_id'])
-                    ->where('warehouse_id', $warehouseId)
-                    ->lockForUpdate()
-                    ->first();
-
-                $currentQty = $inventory ? $inventory->quantity : 0;
-
-                if (!$allowNegative && bccomp((string)$currentQty, (string)$item['quantity'], 4) === -1) {
-                    throw new \Exception("商品 ID {$item['product_id']} 庫存不足。");
-                }
-
-                $newQty = bcsub((string)$currentQty, (string)$item['quantity'], 4);
-
-                Inventory::updateOrCreate(
-                    ['product_id' => $item['product_id'], 'warehouse_id' => $warehouseId],
-                    ['quantity' => $newQty]
-                );
-
+                $warehouseId = $item['warehouse_id'] ?? $data['warehouse_id'] ?? null;
+                $product = Product::find($item['product_id']);
+                // ✅ 確保正確獲取成本
+				$unitCost = $product?->cost ?? 0;
+				
+				// ✅ 如果成本為0，記錄警告
+				if ($unitCost == 0) {
+					\Log::warning('Product cost is zero when creating sale item', [
+						'product_id' => $item['product_id'],
+						'product_name' => $product?->name,
+						'sale_id' => $sale->id,
+					]);
+				}
                 $sale->items()->create([
-                    'product_id'   => $item['product_id'],
-                    'warehouse_id' => $warehouseId,
-                    'price'        => $item['price'],
-                    'quantity'     => $item['quantity'],
-                    'subtotal'     => bcmul((string)$item['quantity'], (string)$item['price'], 4),
-                ]);
+                    'product_id'   	=> $item['product_id'],
+                    'warehouse_id' 	=> $warehouseId,
+                    'price'        	=> $item['price'],
+                    'quantity'     	=> $item['quantity'],
+                    'subtotal'     	=> bcmul((string)$item['quantity'], (string)$item['price'], self::DECIMAL_PRECISION),                    
+					'unitCost' 		=> $unitCost,
+					'unitCost_type' => gettype($unitCost),
+            ]);
             }
-
-            // 3. 儲存費用到 sale_fees 關聯表
+            
+            // 建立費用記錄
+            $allowNegative = Setting::get('allow_negative_stock', false);
+            $sale->deductInventory($sale->getCurrentItemsQuantity(), $allowNegative);
+            
             foreach ($data as $key => $value) {
-                // 檢查是否為定義的費用類型，且金額不為 0
-                if (isset($feeConfigs[$key]) && bccomp((string)$value, '0', 4) !== 0) {
+                if (isset($feeConfigs[$key]) && bccomp((string)$value, '0', self::DECIMAL_PRECISION) !== 0) {
                     $sale->fees()->create([
                         'shop_id'  => auth()->user()->shop_id ?? 1,
                         'fee_type' => $key,
@@ -446,128 +445,94 @@ class Sale extends Model
                     ]);
                 }
             }
-
+            
             return $sale;
         });
-    } 
-
-    public function updateWithCalculations(array $data, array $items)
+    }
+    
+    public function updateWithCalculations(array $data, array $items): self
     {
         return DB::transaction(function () use ($data, $items) {
-            \Log::info('Sale::updateWithCalculations 開始', ['sale_id' => $this->id]);
+            if (!$this->canBeModified()) {
+                throw new \Exception('此銷售單無法修改（已有退貨或已完成）。');
+            }
             
-            $oldItems = $this->items->keyBy(function ($item) {
-                return $item->product_id . '-' . $item->warehouse_id;
-            });
-
+            // 保存舊資料用於庫存調整
+            $oldItems = $this->items->map(fn($item) => [
+                'product_id'   => $item->product_id,
+                'warehouse_id' => $item->warehouse_id,
+                'quantity'     => $item->quantity,
+            ])->toArray();
+            
             $feeConfigs = config('business.fee_types');
             $saleData = array_diff_key($data, $feeConfigs);
             
+            // 更新基本資料
             $this->update($saleData);
-
-            // 更新費用明細
+            
+            // 更新費用
             $this->fees()->delete();
             foreach ($data as $key => $value) {
                 if (isset($feeConfigs[$key]) && (float)$value != 0) {
                     $this->fees()->create([
                         'shop_id'  => auth()->user()->shop_id ?? 1,
-                        'sale_id'  => $this->id,
                         'fee_type' => $key,
                         'amount'   => $value,
-                        'note'     => $feeConfigs[$key]['name'],
+                        'note'     => $feeConfigs[$key]['name'] ?? $key,
                     ]);
                 }
             }
-
-            $this->items()->delete();
             
+            // 更新銷售項目
+            $this->items()->delete();
             foreach ($items as $item) {
                 if (empty($item['product_id'])) continue;
-
-                $warehouseId = $item['warehouse_id'] ?? $saleData['warehouse_id'];
-
+                
+                $warehouseId = $item['warehouse_id'] ?? $saleData['warehouse_id'] ?? null;
+                $product = Product::find($item['product_id']);
+                
                 $this->items()->create([
                     'product_id'   => $item['product_id'],
                     'warehouse_id' => $warehouseId,
                     'price'        => $item['price'],
                     'quantity'     => $item['quantity'],
-                    'subtotal'     => bcmul((string)$item['quantity'], (string)$item['price'], 2),
+                    'subtotal'     => bcmul((string)$item['quantity'], (string)$item['price'], self::DECIMAL_PRECISION),
+                    'unit_cost'    => $product?->cost ?? 0,  // ✅ 修正欄位名稱
                 ]);
-
-                $key = $item['product_id'] . '-' . $warehouseId;
-                $oldQty = $oldItems->has($key) ? (float)$oldItems[$key]->quantity : 0;
-                $newQty = (float)$item['quantity'];
-                $diff = $newQty - $oldQty;
-
-                if ($diff > 0) {
-                    $this->processStockReduction($item['product_id'], $warehouseId, $diff);
-                } elseif ($diff < 0) {
-                    $this->restoreStock($item['product_id'], $warehouseId, abs($diff));
-                }
             }
-
+            
+            // 調整庫存
+            $newItems = collect($items)->map(fn($item) => [
+                'product_id'   => $item['product_id'],
+                'warehouse_id' => $item['warehouse_id'] ?? $saleData['warehouse_id'] ?? null,
+                'quantity'     => $item['quantity'],
+            ])->toArray();
+            
+            $allowNegative = Setting::get('allow_negative_stock', false);
+            $this->adjustStockForEdit($oldItems, $newItems, $allowNegative);
+            
             return $this;
         });
     }
-    
-    protected function processStockReduction($productId, $warehouseId, $amount)
-    {
-        $needed = $amount;
-        $stocks = Inventory::where('product_id', $productId)
-            ->where('warehouse_id', $warehouseId)
-            ->where('status', 'in_stock')
-            ->where('quantity', '>', 0)
-            ->orderBy('created_at', 'asc')
-            ->get();
-
-        foreach ($stocks as $inv) {
-            if ($needed <= 0) break;
-            if ($inv->quantity >= $needed) {
-                $inv->decrement('quantity', $needed);
-                $needed = 0;
-            } else {
-                $needed -= $inv->quantity;
-                $inv->update(['quantity' => 0, 'status' => 'sold']);
-            }
-            if ($inv->fresh()->quantity <= 0) $inv->update(['status' => 'sold']);
-        }
-
-        if ($needed > 0) throw new \Exception("庫存不足，尚缺 {$needed} 單位");
-    }
-
-    protected function restoreStock($productId, $warehouseId, $amount)
-    {
-        $inv = Inventory::where('product_id', $productId)
-            ->where('warehouse_id', $warehouseId)
-            ->where('status', 'sold')
-            ->orderBy('updated_at', 'desc')
-            ->first();
-        
-        if ($inv) {
-            $inv->increment('quantity', $amount);
-            $inv->update(['status' => 'in_stock']);
-        } else {            
-            throw new \Exception("無法還原庫存：找不到對應的庫存紀錄");    
-        }
-    }
 	
-	// 取得銷售日期
-	public function getSoldDateAttribute()
-	{
-		return $this->sold_at->format('Y-m-d');
-	}
-
-	// 取得成交時間
-	public function getSoldTimeAttribute()
-	{
-		return $this->sold_at->format('H:i');
-	}
+	/**
+     * 🛡️ 靜態多型容錯盾：防止全域監聽器或會計引擎動態盲踩 withTrashed() 導致系統 500 崩潰
+     * 因為本模型不使用軟刪除，當被呼叫時直接返回查詢構造器本身，達成熱修復相容
+     */
+    public static function withTrashed()
+    {
+        return static::query();
+    }
+    
+    // ==============================================
+    // Relationships
+    // ==============================================
     
     public function customer(): BelongsTo
     {
         return $this->belongsTo(Customer::class);
     }
-
+    
     public function items(): HasMany 
     {
         return $this->hasMany(SaleItem::class); 
@@ -592,20 +557,17 @@ class Sale extends Model
     {
         return $this->hasMany(SaleFee::class);
     }
-	
-	public function returns(): HasMany
+    
+    public function returns(): HasMany
     {
         return $this->hasMany(SalesReturn::class, 'sale_id');
     }
-	
-	public function channel(): BelongsTo
-	{
-		return $this->belongsTo(Channel::class, 'channel_id');
-	}
-	
-	/**
-     * 關聯日記帳 (多型或一對一)
-     */
+    
+    public function channel(): BelongsTo
+    {
+        return $this->belongsTo(Channel::class, 'channel_id');
+    }
+    
     public function journal()
     {
         return $this->morphOne(Journal::class, 'reference');

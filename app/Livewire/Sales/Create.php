@@ -177,25 +177,40 @@ class Create extends Component
             $subtotal = bcadd($subtotal, $lineTotal, 4);
         }
 
-        $this->items_subtotal = $subtotal;
+        //$this->items_subtotal = $subtotal;
         $this->form['subtotal'] = $subtotal;
-
-        $cTotal = $subtotal; 
-        $sNet = $subtotal;   
+		$sellerDiscount = (string)($this->form['seller_discount'] ?? '0.0000');
+		$adjustedSubtotal = bcsub($subtotal, $sellerDiscount, 4);
+        $cTotal = $adjustedSubtotal; 
+        $sNet = $adjustedSubtotal;   
         $feeConfigs = config('business.fee_types', []);
 
         foreach ($feeConfigs as $key => $config) {
-            $val = (string)($this->form[$key] ?? '0.0000');
-            
-            if ($config['target'] === 'customer') {
-                $cTotal = ($config['operator'] === 'add') ? bcadd($cTotal, $val, 4) : bcsub($cTotal, $val, 4);
-            } elseif ($config['target'] === 'seller') {
-                $sNet = ($config['operator'] === 'add') ? bcadd($sNet, $val, 4) : bcsub($sNet, $val, 4);
-            }
+            if ($key === 'seller_discount') continue;
+			
+			$val = (string)($this->form[$key] ?? '0.0000');
+            $target = $config['target'] ?? '';
+        
+			// 根據 operator 決定加減
+			$isAdd = ($config['operator'] === 'add');
+			
+			switch ($target) {
+				case 'customer':
+					$cTotal = $isAdd ? bcadd($cTotal, $val, 4) : bcsub($cTotal, $val, 4);
+					break;
+				case 'seller':
+					$sNet = $isAdd ? bcadd($sNet, $val, 4) : bcsub($sNet, $val, 4);
+					break;
+				case 'both':
+					// 同時影響買家實付和賣家實收
+					$cTotal = $isAdd ? bcadd($cTotal, $val, 4) : bcsub($cTotal, $val, 4);
+					$sNet = $isAdd ? bcadd($sNet, $val, 4) : bcsub($sNet, $val, 4);
+					break;
+			}
         }
         
-        $this->customer_total = $cTotal;
-        $this->final_net_amount = $sNet;
+        //$this->customer_total = $cTotal;
+        //$this->final_net_amount = $sNet;
         
         $this->form['customer_total'] = $cTotal;
         $this->form['final_net_amount'] = $sNet;

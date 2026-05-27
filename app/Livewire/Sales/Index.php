@@ -70,8 +70,7 @@ class Index extends Component
     }
 	
 	/**
-     * 【修正衝突】：Livewire 動作方法改名為 submitStockOut
-     * 內部純粹調用 Model 厚邏輯，不再包含任何重複的方法定義
+     * 執行出庫扣減庫存，同步產生會計日記帳與主營成本結轉
      */
     public function submitStockOut(int $saleId)
     {        

@@ -171,7 +171,25 @@
                         <span class="font-bold opacity-70">小計</span>
                         <span class="font-mono text-right">NT$ {{ number_format((float) ($form['subtotal'] ?? 0), 2) }}</span>
                     </div>
+					<div class="flex justify-between items-center p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
+						<div class="flex items-center gap-2">
+							<x-icon name="o-tag" class="w-5 h-5 text-amber-600" />
+							<span class="font-bold text-amber-700 dark:text-amber-400">賣家折扣</span>
+							<span class="text-[10px] text-amber-500">(從收入扣除)</span>
+						</div>
+						<div class="flex items-center gap-2">
+							<span class="text-amber-600 font-bold">-</span>
+							<x-input 
+								wire:model.live.debounce.150ms="form.seller_discount"
+								class="input-sm text-right font-mono bg-white w-32"
 
+								inputmode="decimal"
+								step="1"
+								min="0"
+							/>
+							<span class="text-amber-600">元</span>
+						</div>
+					</div>
 					<div class="grid grid-cols-2 gap-4 text-xs">
 						{{-- 左側：買家區塊 --}}
 						<div class="space-y-3">
@@ -179,7 +197,7 @@
 							
 							@foreach(collect(config('business.fee_types'))->where('target', 'customer') as $field => $config)
 								<x-input 
-									wire:model.live.debounce.500ms="form.{{ $field }}"
+									wire:model.live.debounce.200ms="form.{{ $field }}"
 									label="{{ $config['name'] }}" 
 									prefix="{{ $config['operator'] === 'add' ? '+' : '-' }}"
 									icon="{{ $config['icon'] ?? '' }}"
@@ -203,7 +221,7 @@
 							
 							@foreach(collect(config('business.fee_types'))->where('target', 'seller') as $field => $config)
 								<x-input 
-									wire:model.live.debounce.500ms="form.{{ $field }}" 
+									wire:model.live.debounce.200ms="form.{{ $field }}" 
 									label="{{ $config['name'] }}" 
 									prefix="{{ $config['operator'] === 'add' ? '+' : '-' }}"
 									icon="{{ $config['icon'] ?? '' }}"
@@ -212,15 +230,6 @@
 									step="0.01"
 								/>
 							@endforeach
-							
-							@if(!isset(config('business.fee_types')['order_adjustment']))
-								<x-input
-									wire:model.live.debounce.500ms="form.order_adjustment"
-									label="帳款調整"
-									prefix="±"
-									class="input-sm text-right font-mono"
-								/>
-							@endif
 						</div>
 					</div>
 

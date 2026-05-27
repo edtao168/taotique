@@ -6,6 +6,8 @@ namespace App\Traits;
 use App\Models\Journal;
 use App\Services\AccountingService;
 use Illuminate\Support\Facades\App;
+use Illuminate\Support\Facades\Log;  // ✅ 加上這行
+use RuntimeException;  // ✅ 加上這行
 
 /**
  * 費曼註釋：精簡後的會計 Trait
@@ -29,25 +31,49 @@ trait HasAccounting
      * @return Journal|null
      * @throws \RuntimeException
      */
-    public function postJournal(string $eventType): ?Journal
-    {
-        // 取得規則陣列（由各 Model 實作）
-        $rules = $this->getAccountingRules($eventType);
-
-        if (empty($rules)) {
-            \Illuminate\Support\Facades\Log::warning("{$eventType} 無會計規則，跳過過帳");
-            return null;
+    public function postJournal(string $eventType): Journal
+	{
+		// ✅ 詳細日誌
+    Log::info('HasAccounting::postJournal', [
+        'model' => get_class($this),
+        'model_id' => $this->id,
+        'eventType' => $eventType,
+    ]);
+		// 重新載入必要的關聯，避免使用已被變更的實例
+		$freshSource = static::with(['items', 'fees'])->find($this->id);
+		
+		if (!$freshSource) {
+            throw new RuntimeException(
+                "無法載入 " . class_basename($this) . " #{$this->id}，可能已被刪除"
+            );
         }
-
-        // 委託 AccountingService 執行
-        $service = App::make(AccountingService::class);
+		
+		// 確保關聯資料已載入（避免 N+1）
+        if (!$freshSource->relationLoaded('items')) {
+            $freshSource->load('items');
+        }
+        if (!$freshSource->relationLoaded('fees')) {
+            $freshSource->load('fees');
+        }
         
-        return $service->postFromRules(
-            source: $this,
-            referenceType: $eventType,
-            rules: $rules
-        );
-    }
+		$rules = $this->getAccountingRules($eventType);
+		 // ✅ 記錄 rules 內容
+    Log::info('HasAccounting::postJournal rules', [
+        'eventType' => $eventType,
+        'rules' => $rules,
+    ]);
+    
+		return app(AccountingService::class)->postFromRules(
+			$freshSource,
+			$rules,
+			$eventType			
+		);
+	}
+	
+	/**
+     * 抽象方法：子類別需實作，回傳會計規則
+     */
+    abstract public function getAccountingRules(string $eventType): array;
 
     /**
      * 定義與 Journal 的關聯（多態）
@@ -56,12 +82,4 @@ trait HasAccounting
     {
         return $this->morphOne(Journal::class, 'reference');
     }
-
-    /**
-     * 取得會計規則陣列（由各 Model 實作）
-     * 
-     * @param string $eventType 事件類型
-     * @return array 規則陣列
-     */
-    abstract public function getAccountingRules(string $eventType): array;
 }

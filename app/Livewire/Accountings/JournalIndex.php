@@ -22,25 +22,11 @@ class JournalIndex extends Component
     public string $rejectReason = '';
     protected $paginationTheme = 'bootstrap';
 
-    public function render()
-    {
-        $query = Journal::query()
-            ->when($this->search, fn($q) => $q->where('description', 'like', "%{$this->search}%"))
-            ->when($this->status, fn($q) => $q->where('status', $this->status))
-            ->orderBy('entry_date', 'desc')
-            ->orderBy('id', 'desc');
-
-        return view('livewire.accountings.journal-index', [
-            'journals' => $query->paginate(15),
-            'statuses' => ['draft', 'posted', 'cancelled', 'closed']
-        ]);
-    }
-
     // 開啟 Drawer
     public function openDrawer(int $journalId): void
     {
         $this->selectedJournalId = $journalId;
-        $this->selectedJournal = Journal::with('items.account')
+        $this->selectedJournal = Journal::with(['items.account'])
             ->findOrFail($journalId);
 			
 		$this->showDrawer = true;
@@ -161,18 +147,33 @@ class JournalIndex extends Component
         }
     }
 
-    // 刷新選中資料
+    /**
+     * 🎯 刷新選中資料 (語法徹底校正嚴謹版)
+     */
     protected function refreshSelected(): void
     {
         if ($this->selectedJournalId) {
-            $this->selectedJournal = Journal::with('items.account')
+            $this->selectedJournal = Journal::with(['items.account'])
                 ->findOrFail($this->selectedJournalId);
         }
     }
-
-    // 開啟駁回視窗
-    public function openRejectModal(): void
+	
+	/**
+     * 🎯 渲染日記帳主列表 (排除多型貪婪加載，保持最高效能)
+     */
+    public function render()
     {
-        $this->showRejectModal = true;
+        $query = Journal::query()
+            ->with(['items.account']) 
+            ->when($this->search, fn($q) => $q->where('description', 'like', "%{$this->search}%"))
+            ->when($this->status, fn($q) => $q->where('status', $this->status))
+            ->orderBy('entry_date', 'desc')
+            ->orderBy('id', 'desc');
+
+        return view('livewire.accountings.journal-index', [
+            'journals' => $query->paginate(15),
+            'statuses' => ['draft', 'posted', 'cancelled', 'closed']
+        ]);
     }
+
 }

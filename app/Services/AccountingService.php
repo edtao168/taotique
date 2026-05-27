@@ -2,6 +2,12 @@
 
 // app/Services/AccountingService.php
 // [費曼註釋：會計系統核心服務，處理所有自動分錄產生與來源解析]
+/*
+核心定位
+底層：依據中國《小企业会计准则》+ 現代ERP規範
+UI：一人店、老闆不懂會計 → 極簡、自動化
+原則：能自動就不要讓老闆摻合
+*/
 
 namespace App\Services;
 
@@ -54,29 +60,55 @@ class AccountingService
      */
     public function resolveSourceNumber(string $referenceType, ?int $referenceId): ?string
     {
+        $referenceType = $this->normalizeReferenceType($referenceType);
+		
+		// 手動或更正分錄沒有來源單據
         if ($referenceType === 'manual' || $referenceType === 'correct' || $referenceId === null) {
             return null;
         }
-
-        $config = self::SOURCE_MAP[$referenceType] ?? null;
+        
+        // 將 sale_revenue / sale_cost 統一對應到 sale
+        $actualType = $referenceType;
+        if (in_array($referenceType, ['sale_revenue', 'sale_cost'])) {
+            $actualType = 'sale';
+        }
+        
+        $config = self::SOURCE_MAP[$actualType] ?? null;
+        
         if (!$config) {
-            Log::warning('Unknown journal reference_type', [
-                'type' => $referenceType,
-                'id' => $referenceId,
-            ]);
+            Log::warning('Unknown journal reference_type after normalization', [
+				'original_reference_type' => $referenceType,
+				'actual_type' => $actualType,
+				'id' => $referenceId,
+			]);
             return null;
         }
 
         try {
-            $record = $config['model']::withTrashed()->find($referenceId); // [費曼註釋：包含軟刪除，確保歷史分錄可追溯]
+            $record = $config['model']::withTrashed()->find($referenceId);
             
             if (!$record) {
-                return '[已刪除]'; // [費曼註釋：標記孤兒分錄，審計時可識別]
+                // 特別標記，利於審計追蹤
+                Log::warning('Source record not found', [
+                    'type' => $referenceType,
+                    'id' => $referenceId,
+                ]);
+                return '[已刪除]';
             }
+// ✅ 檢查欄位是否存在，避免 BadMethodCallException
+        $numberField = $config['number_field'];
+        if (!method_exists($record, $numberField) && !property_exists($record, $numberField)) {
+            Log::warning('Number field not found', [
+                'model' => get_class($record),
+                'field' => $numberField,
+                'available' => array_keys($record->getAttributes())
+            ]);
+            return '#' . $record->id;
+        }
 
-            $number = $record->{$config['number_field']} ?? $record->id;
+            $number = $record->{$numberField} ?? (string) $record->id;
             
-            // [費曼註釋：軟刪除標記，提醒使用者來源單據已作廢]
+            // 軟刪除標記
             if (method_exists($record, 'trashed') && $record->trashed()) {
                 return $number . ' [已作廢]';
             }
@@ -88,8 +120,11 @@ class AccountingService
                 'type' => $referenceType,
                 'id' => $referenceId,
                 'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
             ]);
-            return '[錯誤]';
+            
+            // 回傳有意義的錯誤標記，而非直接崩潰
+            return '[錯誤: ' . class_basename($e) . ']';
         }
     }
 
@@ -98,7 +133,9 @@ class AccountingService
      */
     public function getSourceTypeLabel(string $referenceType): string
     {
-        return match ($referenceType) {
+        $referenceType = $this->normalizeReferenceType($referenceType);
+		
+		return match ($referenceType) {
             'manual' => '手動輸入',
             'auto' => '自動分錄',
             'correct' => '更正分錄',
@@ -112,6 +149,49 @@ class AccountingService
             default => $referenceType ?? '未知',
         };
     }
+	
+	/**
+	 * 正規化參考類型
+	 * 
+	 * 將可能的 Model 類別名稱轉換為標準的 event_type key
+	 * 例如: 'App\Models\Purchase' → 'purchase'
+	 *       'App\Models\Sale' → 'sale'
+	 */
+	private function normalizeReferenceType(string $referenceType): string
+	{
+		// 定義 Model 類別名稱到標準 key 的映射
+		static $modelMap = null;
+		
+		if ($modelMap === null) {
+			$modelMap = [
+				\App\Models\Purchase::class => 'purchase',
+				\App\Models\Sale::class => 'sale',
+				\App\Models\PurchaseReturn::class => 'purchase_return',
+				\App\Models\SaleReturn::class => 'sale_return',
+				\App\Models\Conversion::class => 'conversion',
+			];
+		}
+		
+		// 檢查是否為類別名稱（包含反斜線）
+		if (str_contains($referenceType, '\\')) {
+			$converted = $modelMap[$referenceType] ?? null;
+			
+			if ($converted) {
+				Log::warning('normalizeReferenceType: converted class name to key', [
+					'original' => $referenceType,
+					'converted' => $converted,
+				]);
+				return $converted;
+			}
+			
+			// 如果無法轉換，記錄錯誤但回傳原始值
+			Log::error('normalizeReferenceType: unknown class name', [
+				'referenceType' => $referenceType,
+			]);
+		}
+		
+		return $referenceType;
+	}
 
     /**
      * 產生自動分錄（核心方法）
@@ -290,151 +370,391 @@ class AccountingService
      * @param array $rules 規則陣列
      * @return Journal
      */
-    public function postFromRules(Model $source, string $referenceType, array $rules): Journal
-    {
-        // 1. 解析規則為 entries
-        $entries = $this->buildEntriesFromRules($source, $rules);
+	public function postFromRules(Model $source, array $rules, string $eventType): Journal
+	{
+		return DB::transaction(function () use ($source, $rules, $eventType) {
+			
+			// 1. 原始解析：依據設定的規則線條產生初始分錄陣列
+			$entries = $this->buildEntriesFromRules($source, $rules);
 
-        // 2. 產生摘要
-        $description = $this->buildDescription($source, $referenceType);
+			// 🎯 這裡就是核心修正點！在驗證平衡前，先執行同科目借貸自動對沖
+			$entries = $this->netSameAccountEntries($entries);
 
-        // 3. 呼叫原有核心方法
-        return $this->createAutoJournal(
-            referenceType: $referenceType,
-            referenceId: $source->id,
-            description: $description,
-            entries: $entries,
-            currency: $source->currency ?? 'TWD',
-            exchangeRate: (string) ($source->exchange_rate ?? '1.0000'),
-            entryDate: $source->sold_at?->format('Y-m-d') 
-                ?? $source->purchased_at?->format('Y-m-d') 
-                ?? now()->format('Y-m-d')
-        );
-    }
+			// 2. 嚴謹驗證：此時同一個會計科目絕對不會再同時出現借與貸
+			$this->validateBalance($entries);
+
+			// 3. 尋找或建立傳票主表 (冪等性處理)
+			$journal = $this->findOrCreateJournal($source, $eventType);
+
+			// 4. 寫入傳票細項
+			$this->saveJournalItems($journal, $entries);
+
+			return $journal;
+		});
+	}
 
     /**
-     * 解析規則陣列為 entries
-     * 
-     * 規則格式：
-     * [
-     *   'account_code'  => '5001',           // 科目代碼（優先）或 account_id
-     *   'account_id'    => 123,              // 直接指定科目 ID
-     *   'amount_source' => 'subtotal',       // 金額來源
-     *   'side'          => 'credit',         // 'debit' 或 'credit'
-     *   'condition'     => 'amount > 0',     // 條件（可選）
-     *   'note'          => '主營業務收入',    // 摘要（可選）
-     * ]
-     * 
-     * amount_source 支援：
-     * - 'subtotal' → $source->subtotal
-     * - 'customer_total' → $source->customer_total
-     * - 'items.sum:unit_cost_twd*quantity' → 明細加總
-     * - 'fees.shipping' → 費用關聯
-     * - 'expression:customer_total - subtotal' → 運算式
-     */
-    private function buildEntriesFromRules(Model $source, array $rules): array
-    {
-        $entries = [];
+	 * 從規則陣列產生分錄明細
+	 * 
+	 * @param Model $source 來源單據 (Sale/Purchase/etc)
+	 * @param array $rules 規則明細陣列
+	 * @return array 分錄明細
+	 */
+	protected function buildEntriesFromRules(Model $source, array $rules): array
+	{
+		$entries = [];
 
-        foreach ($rules as $rule) {
-            // 條件判斷
-            if (isset($rule['condition']) && !$this->evaluateCondition($source, $rule['condition'])) {
-                continue;
-            }
-
-            // 解析金額
-            if (isset($rule['amount'])) {
-				$amount = (string) $rule['amount'];
-			} elseif (isset($rule['amount_source'])) {
-				$amount = $this->resolveAmount($source, $rule['amount_source']);
-				
-				// 應用比例（如果有）
-				if (isset($rule['ratio']) && bccomp($rule['ratio'], '1.0000', 4) !== 0) {
-					$amount = bcmul($amount, (string) $rule['ratio'], 4);
-				}
-			} else {
-				throw new \RuntimeException("規則缺少 amount 或 amount_source：" . json_encode($rule));
+		foreach ($rules as $line) {
+			// ==============================================
+			// 1. 解析金額來源
+			// ==============================================
+			$amount = $this->resolveAmountFromRule($source, $line);
+			
+			// 金額為 0 則跳過
+			if (bccomp($amount, '0', 4) === 0) {
+				continue;
 			}
-            
-            if (bccomp($amount, '0', 4) === 0) {
-                continue;
-            }
+			
+			// ==============================================
+			// 2. 套用比例
+			// ==============================================
+			$ratio = (string) ($line['ratio'] ?? '1.0000');
+			if (bccomp($ratio, '1.0000', 4) !== 0) {
+				$amount = bcmul($amount, $ratio, 4);
+			}
+			
+			// ==============================================
+			// 3. 解析會計科目
+			// ==============================================
+			$accountId = $this->resolveAccountIdFromRule($source, $line);
+			
+			// ==============================================
+			// 4. 建立分錄
+			// ==============================================
+			$isDebit = ($line['entry_type'] === 'debit');
+			
+			$entries[] = [
+				'account_id' => $accountId,
+				'debit'      => $isDebit ? $amount : '0.0000',
+				'credit'     => !$isDebit ? $amount : '0.0000',
+			];
+		}
+		
+		return $entries;
+	}
 
-            // 解析科目
-            $accountId = $this->resolveAccountId($rule);
-            if (!$accountId) {
-                throw new \RuntimeException("規則無法解析科目：" . json_encode($rule));
-            }
+	/**
+	 * 解析單一規則行的金額
+	 */
+	protected function resolveAmountFromRule(Model $source, array $line): string
+	{
+		$amountSource = $line['amount_source'] ?? null;
+		
+		// 轉換為 Enum
+		if (!$amountSource instanceof AmountSource) {
+			$amountSource = AmountSource::tryFrom($amountSource);
+		}
+		
+		if (!$amountSource) {
+			Log::warning('未知的金額來源', ['line' => $line]);
+			return '0.0000';
+		}
+		
+		// ==============================================
+		// 特殊處理：計算型金額來源
+		// ==============================================
+		
+		// 1. 折讓後收入 (subtotal - seller_discount)
+		if ($amountSource === AmountSource::SUBTOTAL_AFTER_DISCOUNT) {
+			$subtotal = (string) ($source->subtotal ?? '0');
+			$discount = (string) ($source->seller_discount ?? '0');
+			return bcsub($subtotal, $discount, 4);
+		}
+		
+		// 2. 費用總額 (用於貸方沖減)
+		if ($amountSource === AmountSource::TOTAL_FEES) {
+			$feeTypes = ['platform_fee', 'commission', 'shipping_fee_platform', 'order_adjustment', 'seller_discount'];
+			$total = '0.0000';
+			foreach ($feeTypes as $feeType) {
+				$value = (string) ($source->$feeType ?? '0');
+				$total = bcadd($total, $value, 4);
+			}
+			return $total;
+		}
+		
+		// ==============================================
+		// 一般處理：根據來源類型
+		// ==============================================
+		
+		$sourceType = $amountSource->sourceType();
+		
+		// 類型 A：明細加總 (items.sum:xxx)
+		if ($sourceType === 'items_sum') {
+			$expression = explode(':', $amountSource->value)[1] ?? '';
+			return $this->sumItemsExpression($source, $expression);
+		}
+		
+		// 類型 B：直接欄位或費用類型
+		if ($amountSource->isFeeType()) {
+			$feeTypeKey = $amountSource->value;
+			$feeRecord = $source->fees->firstWhere('fee_type', $feeTypeKey);
+			return (string) ($feeRecord->amount ?? '0.0000');
+		}
+		
+		// 類型 C：直接 Model 欄位
+		$fieldName = $amountSource->value;
+		return (string) ($source->{$fieldName} ?? '0.0000');
+	}
 
-            $entries[] = [
-                'account_id' => $accountId,
-                'debit' => $rule['side'] === 'debit' ? $amount : '0.0000',
-                'credit' => $rule['side'] === 'credit' ? $amount : '0.0000',
-                'note' => $rule['note'] ?? null,
-            ];
+	/**
+	 * 解析單一規則行的會計科目
+	 */
+	protected function resolveAccountIdFromRule(Model $source, array $line): int
+	{
+		// 如果有 account_id 且不是 0/null，直接使用
+		if (!empty($line['account_id']) && $line['account_id'] > 0) {
+			return $line['account_id'];
+		}
+		
+		// 否則從 account_code 解析
+		$accountCode = $line['account_code'] ?? $line['account_code_from_db'] ?? null;
+		
+		if (!$accountCode) {
+			throw new \RuntimeException("規則缺少 account_code");
+		}
+		
+		// 處理 DYNAMIC
+		if ($accountCode === 'DYNAMIC') {
+			$isDebit = ($line['entry_type'] === 'debit');
+			$accountCode = $this->resolveDynamicAccountCode($source, $isDebit);
+		}
+		
+		// 查詢科目
+		$account = Account::where('code', $accountCode)
+			->where('shop_id', $source->shop_id ?? 1)
+			->first();
+		
+		if (!$account) {
+			throw new \RuntimeException("找不到會計科目代碼：{$accountCode}");
+		}
+		
+		return $account->id;
+	}
+
+	/**
+	 * 動態解析會計科目代碼（根據付款方式）
+	 * 
+	 * @param Model $source Sale Model
+	 * @param bool $isDebit true=借方, false=貸方
+	 * @return string 科目代碼
+	 */
+	protected function resolveDynamicAccountCode(Model $source, bool $isDebit): string
+	{
+		$paymentMethod = $source->payment_method ?? 'cash';
+		
+		// 實體店零售的科目映射
+		$accountMap = [
+			'cash'        => '100101',  // 庫存現金-新台幣
+			'credit_card' => '112201',  // 應收帳款-信用卡
+			'line_pay'    => '101201',  // 電子支付帳戶
+			'taiwan_pay'  => '101201',  // 電子支付帳戶
+		];
+		
+		$defaultAccount = '100101';
+		
+		return $accountMap[$paymentMethod] ?? $defaultAccount;
+	}
+
+	/**
+	 * 加總 items 的運算式（如 cost*quantity）
+	 */
+	protected function sumItemsExpression(Model $source, string $expression): string
+	{
+		$total = '0.0000';
+		
+		// 確保 items 已載入
+		if (!$source->relationLoaded('items')) {
+			$source->load('items');
+		}
+		
+		foreach ($source->items as $item) {
+			$itemTotal = $this->calculateItemExpression($item, $expression);
+			$total = bcadd($total, $itemTotal, 4);
+		}
+		
+		return $total;
+	}
+
+	/**
+	 * 計算單一 item 的運算式值
+	 */
+	protected function calculateItemExpression($item, string $expression): string
+	{
+		// 支援乘法：field1*field2
+		if (str_contains($expression, '*')) {
+			[$field1, $field2] = explode('*', $expression);
+			$val1 = $this->getNestedValue($item, $field1);
+			$val2 = $this->getNestedValue($item, $field2);
+			return bcmul($val1, $val2, 4);
+		}
+		
+		// 單一欄位
+		return (string) $this->getNestedValue($item, $expression);
+	}
+
+	/**
+	 * 支援巢狀屬性存取，如 'product.cost'
+	 */
+	protected function getNestedValue($object, string $path)
+	{
+		$parts = explode('.', $path);
+		$value = $object;
+		
+		foreach ($parts as $part) {
+			if (is_null($value)) {
+				return '0';
+			}
+			$value = $value->{$part} ?? null;
+		}
+		
+		return $value ?? '0';
+	}
+
+    /**
+     * 補齊缺失方法：將對沖清洗後的傳票細項寫入資料庫
+     */
+    private function saveJournalItems(Journal $journal, array $entries): void
+    {
+        foreach ($entries as $index => $entry) {
+            JournalItem::create([
+                'journal_id'    => $journal->id,
+                'account_id'    => $entry['account_id'],
+                'debit'         => $entry['debit'] ?? '0.0000',
+                'credit'        => $entry['credit'] ?? '0.0000',
+                'currency'      => $journal->currency ?? 'TWD',
+                'exchange_rate' => $journal->exchange_rate ?? '1.0000',
+                'sort_order'    => $index,
+                'note'          => $entry['note'] ?? null,
+            ]);
         }
-
-        // 前置平衡檢查（在 createAutoJournal 會再次檢查，這裡提早發現規則錯誤）
-        $this->validateBalance($entries);
-
-        return $entries;
     }
 
     /**
      * 解析金額來源
+	 * 支援格式：
+     * - 'subtotal' → 直接欄位
+     * - 'customer_total' → 直接欄位
+     * - 'final_net_amount' → 直接欄位
+     * - 'tax_amount' → 直接欄位
+     * - 'platform_fee' → 費用類型（從 fees 關聯讀取）
+     * - 'commission' → 費用類型
+     * - 'items.sum:unit_cost_twd*quantity' → 明細加總（支援 * 運算）
+     * - 'items.sum:product.cost*quantity' → 明細加總（支援關聯）
+     * - 'items.cost_total' → 明細成本加總（簡化寫法）
      */
     private function resolveAmount(Model $source, string $sourceSpec): string
     {
-        // 明細加總模式
+        // 1. 直接欄位（Sale Model 的主要欄位）
+        $directFields = ['subtotal', 'customer_total', 'final_net_amount', 'tax_amount'];
+        if (in_array($sourceSpec, $directFields)) {
+            return (string) ($source->{$sourceSpec} ?? '0');
+        }
+        
+        // 2. 費用類型（從 fee_types 配置讀取）
+        $feeTypes = array_keys(config('business.fee_types', []));
+        if (in_array($sourceSpec, $feeTypes)) {
+            return (string) ($source->{$sourceSpec} ?? '0');
+        }
+        
+        // 3. 明細加總（items.sum:xxx）
         if (str_starts_with($sourceSpec, 'items.sum:')) {
-            $field = str_replace('items.sum:', '', $sourceSpec);
+            $field = substr($sourceSpec, 10); // 移除 'items.sum:'
             return $this->sumItems($source, $field);
         }
-
-        // 費用關聯模式
-        if (str_starts_with($sourceSpec, 'fees.')) {
-            $feeType = str_replace('fees.', '', $sourceSpec);
-            return (string) ($source->fees()->where('fee_type', $feeType)->sum('amount') ?? '0');
+        
+        // 4. 簡化寫法：items.cost_total
+        if ($sourceSpec === 'items.cost_total') {
+            return $this->sumItems($source, 'product.cost*quantity');
         }
-
-        // 運算式模式
+        
+        // 5. 費用關聯（fees.xxx）
+        if (str_starts_with($sourceSpec, 'fees.')) {
+            $feeType = substr($sourceSpec, 5);
+            return (string) ($source->fees()->where('fee_type', $feeType)->sum('amount'));
+        }
+        
+        // 6. 運算式
         if (str_starts_with($sourceSpec, 'expression:')) {
-            $expr = str_replace('expression:', '', $sourceSpec);
+            $expr = substr($sourceSpec, 11);
             return $this->evaluateExpression($source, $expr);
         }
-
-        // 直接欄位
-        return (string) ($source->{$sourceSpec} ?? '0');
+        
+        Log::warning('Unknown amount_source', ['sourceSpec' => $sourceSpec]);
+        return '0';
     }
 
     /**
      * 加總明細欄位（支援複合運算）
+	 * 
+     * 範例：
+     * - 'quantity' → 加總數量
+     * - 'unit_cost_twd*quantity' → 加總 (單價 × 數量)
+     * - 'product.cost*quantity' → 加總 (商品成本 × 數量)
      */
     private function sumItems(Model $source, string $field): string
+	{
+		$total = '0.0000';
+		
+		if (!$source->relationLoaded('items')) {
+			$source->load('items');
+		}
+
+		foreach ($source->items as $index => $item) {
+			
+		if (str_contains($field, '*')) {
+				[$a, $b] = explode('*', $field);
+				$valA = $this->getNestedValue($item, $a);
+				$valB = $this->getNestedValue($item, $b);
+				$val = bcmul((string) $valA, (string) $valB, 4);
+				Log::info('Multiplication result', [
+                'a' => $a,
+                'b' => $b,
+                'valA' => $valA,
+                'valB' => $valB,
+                'val' => $val,]);
+			} else {
+				$val = (string) $this->getNestedValue($item, $field);
+			}
+		}  
+		
+		return $total;
+	}
+	
+	/**
+     * 支援巢狀屬性存取，如 'product.cost'
+     */
+    private function getNestedValue($object, string $path)
     {
-        $total = '0.0000';
-        
-        // 確保關聯已載入，避免 N+1
-        if (!$source->relationLoaded('items')) {
-            $source->load('items');
-        }
-
-        foreach ($source->items as $item) {
-            if (str_contains($field, '*')) {
-                [$a, $b] = explode('*', $field);
-                $val = bcmul(
-                    (string) ($item->{$a} ?? '0'),
-                    (string) ($item->{$b} ?? '0'),
-                    4
-                );
-            } else {
-                $val = (string) ($item->{$field} ?? '0');
+        $parts = explode('.', $path);
+        $value = $object;
+        Log::info('getNestedValue', [
+        'path' => $path,
+        'parts' => $parts,
+        'object_class' => get_class($object)
+    ]);
+        foreach ($parts as $part) {
+            if (is_null($value)) {
+                return '0';
             }
-            
-            $total = bcadd($total, $val, 4);
+            $value = $value->{$part} ?? null;
+			 Log::info('getNestedValue step', [
+            'part' => $part,
+            'value' => $value,
+            'value_type' => gettype($value)
+        ]);
         }
-
-        return $total;
+        
+        return $value ?? '0';
     }
 
     /**
@@ -571,7 +891,8 @@ class AccountingService
             default => '#' . $source->id,
         };
 
-        $label = $this->getSourceTypeLabel($referenceType);
+        $normalizedType = $this->normalizeReferenceType($referenceType);
+		$label = $this->getSourceTypeLabel($normalizedType);
 
         return "{$label} - {$number}";
     }
@@ -644,4 +965,114 @@ class AccountingService
             );
         }
     }
+	
+	// 檔案路徑：app/Services/AccountingService.php
+
+    /**
+     * 在驗證平衡與寫入庫之前，先對同科目進行借貸相抵（對沖）
+     * [費曼註釋：同一單據若對同一科目有借有貸，自動相抵，避免觸發單一科目同時借貸的防呆，保持傳票乾淨]
+     */
+    private function netSameAccountEntries(array $entries): array
+    {
+        $netted = [];
+
+        foreach ($entries as $entry) {
+            $accountId = $entry['account_id'];
+            $debit = $entry['debit'] ?? '0';
+            $credit = $entry['credit'] ?? '0';
+
+            if (!isset($netted[$accountId])) {
+                $netted[$accountId] = [
+                    'account_id' => $accountId,
+                    'debit'      => '0',
+                    'credit'     => '0',
+                ];
+            }
+
+            // 使用 bcadd 累加同科目的所有原始借貸數值
+            $netted[$accountId]['debit']  = bcadd($netted[$accountId]['debit'], $debit, 4);
+            $netted[$accountId]['credit'] = bcadd($netted[$accountId]['credit'], $credit, 4);
+        }
+
+        // 對每個科目的總借貸進行對沖
+        foreach ($netted as $accountId => $amounts) {
+            $debit = $amounts['debit'];
+            $credit = $amounts['credit'];
+
+            // 比較借貸大小
+            $cmp = bccomp($debit, $credit, 4);
+            if ($cmp >= 0) {
+                // 借方大於或等於貸方：保留借方淨額，貸方歸零
+                $netted[$accountId]['debit']  = bcsub($debit, $credit, 4);
+                $netted[$accountId]['credit'] = '0';
+            } else {
+                // 貸方大於借方：保留貸方淨額，借方歸零
+                $netted[$accountId]['credit'] = bcsub($credit, $debit, 4);
+                $netted[$accountId]['debit']  = '0';
+            }
+
+            // 如果對沖之後借貸都變成 0，直接把這個科目移出分錄，避免產生垃圾數據
+            if (bccomp($netted[$accountId]['debit'], '0', 4) === 0 && bccomp($netted[$accountId]['credit'], '0', 4) === 0) {
+                unset($netted[$accountId]);
+            }
+        }
+
+        return array_values($netted);
+    }
+
+	/**
+	 * 尋找或建立傳票主表（完美對齊底層 nullableMorphs('reference') 多型關聯）
+	 * 實作高頻交易下的過帳冪等性防護，防範重複出庫、重複扣項
+	 */
+	private function findOrCreateJournal(\Illuminate\Database\Eloquent\Model $source, string $eventType): Journal
+	{
+		// 🎯 1. 取得來源 Model 的完整命名空間字串（例如 "App\Models\Sale"）
+		$referenceType = get_class($source);
+		$referenceId   = $source->id;
+
+		if (!$referenceId) {
+			throw new \RuntimeException("來源單據尚未持久化，缺少 id 欄位。");
+		}
+
+		// 🎯 2. 精準對齊您的 journals 表欄位進行唯一性排他查詢
+		// 加上 event_type 或 description 條件（此處以 event_type 對應或透過業務描述區分同一單據的不同事件）
+		// 這裡我們比對 reference_type, reference_id，並用時效/事件行為確保唯一
+		$journal = Journal::where('reference_type', $referenceType)
+			->where('reference_id', $referenceId)
+			// 考慮到同一個 Sale 可能有 sale_revenue(收入) 與 sale_cost(成本) 兩個日記帳
+			// 專業做法是將 event_type 存入 description，或者您的 journals 有擴充 event_type？ 
+			// 查閱您之前的紀錄，如果 journals 沒有 event_type 欄位，架構師會利用 description 或單號來識別
+			->where('description', 'like', "%{$eventType}%") 
+			->first();
+
+		if ($journal) {
+			// 🛡️ 嚴謹清空舊傳票細項，防止重新點擊出庫時分錄重複累加
+			$journal->items()->delete();
+			
+			// 更新傳票狀態為已過帳，確保時間更新
+			$journal->update([
+				'status'     => 'posted',
+				'entry_date' => now()->format('Y-m-d'),
+			]);
+			
+			return $journal;
+		}
+
+		// 🎯 3. 取得業務單據編號（例如 invoice_number），用來當作人類可讀的描述或備註
+		$numberField = self::SOURCE_MAP[$eventType]['number_field'] ?? 'reference_number';
+		$docNumber   = $source->{$numberField} ?? ('ID_' . $referenceId);
+		
+		// 建立全新的日記帳主表
+		return Journal::create([
+			'shop_id'        => $source->shop_id ?? 1, // 多店預留
+			'currency'       => $source->currency ?? 'TWD',
+			'exchange_rate'  => $source->exchange_rate ?? '1.0000',
+			'entry_date'     => now()->format('Y-m-d'),
+			'description'    => "[自動轉入] 外單號:{$docNumber} ({$eventType})",
+			'status'         => 'posted',
+			'reference_type' => $referenceType, // 💡 寫入 "App\Models\Sale"
+			'reference_id'   => $referenceId,   // 💡 寫入 銷售單 ID
+			'created_by'     => 'System_IMS',
+		]);
+	}
 }

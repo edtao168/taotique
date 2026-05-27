@@ -57,9 +57,41 @@ class Journal extends Model
         return $this->hasMany(self::class, 'corrects_journal_id');
     }
 
-    public function reference(): MorphTo
+    /**
+     * 🎯 前端調用點一：如果您的 Blade 寫的是 $journal->reference
+     * 自動偵測：新單據走 source 欄位，舊單據走 reference 欄位
+     */
+    public function reference(): \Illuminate\Database\Eloquent\Relations\MorphTo
     {
-        return $this->morphTo();
+        // 🛡️ 智慧分流：如果 source_type 有值，代表是新引擎傳票，強制綁定新欄位
+        if (!empty($this->source_type)) {
+            return $this->morphTo('source', 'source_type', 'source_id');
+        }
+        
+        // 🕒 歷史相容：如果是舊傳票，走原本的 reference 欄位
+        return $this->morphTo('reference', 'reference_type', 'reference_id');
+    }
+
+    /**
+     * 🎯 前端調用點二：如果您的 Blade 寫的是 $journal->source
+     */
+    public function source(): \Illuminate\Database\Eloquent\Relations\MorphTo
+    {
+        if (!empty($this->source_type)) {
+            return $this->morphTo('source', 'source_type', 'source_id');
+        }
+        return $this->morphTo('reference', 'reference_type', 'reference_id');
+    }
+
+    /**
+     * 🛡️ 安全容錯別名：防止前端某些地方殘留了 sourceDocument 的呼叫
+     */
+    public function sourceDocument(): \Illuminate\Database\Eloquent\Relations\MorphTo
+    {
+        if (!empty($this->source_type)) {
+            return $this->morphTo('source', 'source_type', 'source_id');
+        }
+        return $this->morphTo('reference', 'reference_type', 'reference_id');
     }
 
     // ==================== 輔助方法 ====================
@@ -340,5 +372,21 @@ class Journal extends Model
                 ? "發現 {$pendingCorrections} 筆跨期更正分錄，請確認"
                 : null,
         ];
+    }
+	
+	/**
+     * 🛡️ 終極多型安全盾：強行將資料庫內的所有自訂別名，對沖映射到實體 Model 類別上
+     * 防止 Eloquent 找不到類別而亂噴 BadMethodCallException
+     */
+    public static function getActualClassNameForMorph($alias)
+    {
+        $map = [
+            'sale'         => \App\Models\Sale::class,
+            'sale_revenue' => \App\Models\Sale::class,
+            'sale_cost'    => \App\Models\Sale::class,
+            'purchase'     => \App\Models\Purchase::class,
+        ];
+
+        return $map[$alias] ?? parent::getActualClassNameForMorph($alias);
     }
 }

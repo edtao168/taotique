@@ -40,7 +40,7 @@
                     <span class="font-bold text-info">NT$ {{ number_format($sale->customer_total, 0) }}</span>
                 @endscope
 				@scope('cell_final_net_amount', $sale)
-                    <span class="font-bold text-success">NT$ {{ number_format($sale->final_net_amount, 0) }}</span>
+                    <span class="font-bold text-success">NT$ {{ number_format($sale->calculated_final_net_amount, 0) }}</span>
                 @endscope
             </x-table>
         </div>
@@ -135,6 +135,16 @@
 				<div class="grid grid-cols-2 gap-3">
 					{{-- 左側：買家側項目 (如運費、折扣、優惠券) --}}
 					<div class="space-y-3 p-3 border rounded-lg bg-base-100 shadow-sm">
+						<div class="badge badge-warning badge-outline badge-sm font-bold text-[10px]">賣家折扣</div>
+						<div>
+							<p class="text-[10px] text-gray-400">賣家折扣</p>
+							<p class="text-sm font-mono font-bold text-amber-600">
+								- NT$ {{ number_format(abs($selectedSale->seller_discount ?? 0), 0) }}
+							</p>
+						</div>
+        
+						<div class="divider my-2"></div>
+					
 						<div class="badge badge-info badge-outline badge-sm font-bold text-[10px]">買家細目</div>
 						<div class="space-y-2">
 							@foreach(collect(config('business.fee_types'))->where('target', 'customer') as $key => $fee)
