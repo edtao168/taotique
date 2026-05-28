@@ -16,6 +16,7 @@ class AccountingRuleLine extends Model
     protected $fillable = [
         'accounting_rule_id',
         'account_id',
+		'account_code',
         'entry_type',
         'amount_source',
         'ratio',

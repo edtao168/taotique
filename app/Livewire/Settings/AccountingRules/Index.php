@@ -29,7 +29,8 @@ class Index extends Component
         'event_type' => 'required|string|max:100|unique:accounting_rules,event_type',
         'is_active' => 'boolean',
         'lines' => 'required|array|min:2',
-        'lines.*.account_id' => 'required|exists:accounts,id',
+        'lines.*.account_id' => 'nullable|exists:accounts,id',
+		'lines.*.account_code' => 'nullable|string|max:20',
         'lines.*.entry_type' => 'required|in:debit,credit',
         'lines.*.amount_source' => 'required|string',
         'lines.*.ratio' => 'required|numeric|min:0',
@@ -39,14 +40,14 @@ class Index extends Component
 
     public function create()
     {
-        $this->reset(['event_type', 'is_active', 'lines', 'editingItem']);
-        $this->is_active = true;
-        $this->lines = [
-            ['account_id' => '', 'entry_type' => 'debit', 'amount_source' => '', 'ratio' => 1],
-            ['account_id' => '', 'entry_type' => 'credit', 'amount_source' => '', 'ratio' => 1],
-        ];
-        $this->myModal = true;
-    }
+		$this->reset(['event_type', 'is_active', 'lines', 'editingItem']);
+		$this->is_active = true;
+		$this->lines = [
+			['account_id' => null, 'account_code' => 'DYNAMIC', 'entry_type' => 'debit', 'amount_source' => '', 'ratio' => 1],
+			['account_id' => null, 'account_code' => 'DYNAMIC', 'entry_type' => 'credit', 'amount_source' => '', 'ratio' => 1],
+		];
+		$this->myModal = true;
+	}
 
     public function edit(AccountingRule $item)
     {
@@ -58,14 +59,20 @@ class Index extends Component
             'entry_type' => $line->entry_type,
             'amount_source' => $line->amount_source,
             'ratio' => $line->ratio,
-			'account_code' => $line->account_code,
+			'account_code' => $line->account_id ? $line->account?->code : 'DYNAMIC',
         ])->toArray();
         $this->myModal = true;
     }
 
     public function addLine()
     {
-        $this->lines[] = ['account_id' => '', 'entry_type' => 'debit', 'amount_source' => '', 'ratio' => 1];
+        $this->lines[] = [
+        'account_id'   => null, 
+        'account_code' => 'DYNAMIC',
+        'entry_type'   => 'debit', 
+        'amount_source'=> '', 
+        'ratio'        => 1
+    ];
     }
 
     public function removeLine($index)
@@ -75,48 +82,71 @@ class Index extends Component
     }
 
     public function save()
-    {
-        $rules = $this->rules;
-        if ($this->editingItem) {
-            $rules['event_type'] = 'required|string|max:100|unique:accounting_rules,event_type,' . $this->editingItem->id;
-        }
-        $data = $this->validate($rules);
+	{
+		$rules = $this->rules;
+		if ($this->editingItem) {
+			$rules['event_type'] = 'required|string|max:100|unique:accounting_rules,event_type,' . $this->editingItem->id;
+		}
+		
+		// 【驗證前清洗】確保前端傳回的字串 "null"、空字串、0 或 'DYNAMIC'，能正確統一處理
+		foreach ($this->lines as $index => $line) {
+			$currentId = $line['account_id'] ?? null;
+			
+			// 統一將各種「空值」變體轉為真正的 null
+			if (empty($currentId) || $currentId === 'null' || $currentId === 'DYNAMIC' || $currentId === 0 || $currentId === '0') {
+				$this->lines[$index]['account_id'] = null;
+				$this->lines[$index]['account_code'] = 'DYNAMIC';
+			} else {
+				// 若有實質 ID，預先查出 code 存入，減少 transaction 內查詢
+				$account = Account::find($currentId);
+				$this->lines[$index]['account_code'] = $account ? $account->code : 'DYNAMIC';
+			}
+		}
 
-        // 檢查借貸平衡 (借總額 == 貸總額，此處用筆數簡單驗證)
-        $debitCount = collect($this->lines)->where('entry_type', 'debit')->count();
-        $creditCount = collect($this->lines)->where('entry_type', 'credit')->count();
-        if ($debitCount == 0 || $creditCount == 0) {
-            $this->error('至少需要一筆借方和一筆貸方');
-            return;
-        }
+		// 執行驗證
+		$this->validate($rules);
 
-        $rule = AccountingRule::updateOrCreate(
-            ['id' => $this->editingItem?->id],
-            [
-                'event_type' => $this->event_type,
-                'is_active' => $this->is_active,
-                'shop_id' => 1,
-            ]
-        );
+		// 檢查借貸平衡
+		$debitCount = collect($this->lines)->where('entry_type', 'debit')->count();
+		$creditCount = collect($this->lines)->where('entry_type', 'credit')->count();
+		if ($debitCount == 0 || $creditCount == 0) {
+			$this->error('至少需要一筆借方和一筆貸方');
+			return;
+		}
 
-        // 刪除舊明細，重新建立
-        $rule->lines()->delete();
-        foreach ($this->lines as $line) {
-            AccountingRuleLine::create([
-                'accounting_rule_id' => $rule->id,
-                'account_id' => $line['account_id'],
-                'entry_type' => $line['entry_type'],
-                'amount_source' => $line['amount_source'],
-                'ratio' => $line['ratio'],
-                'sort_order' => 1,
-                'is_active' => true,
-            ]);
-        }
+		// 強制開啟資料庫事務
+		\DB::transaction(function () {
+			$rule = AccountingRule::updateOrCreate(
+				['id' => $this->editingItem?->id],
+				[
+					'event_type' => $this->event_type,
+					'is_active' => $this->is_active,
+					'shop_id' => 1,
+				]
+			);
 
-        $this->success($this->editingItem ? '規則已更新' : '新規則已建立');
-        $this->myModal = false;
-        $this->reset(['event_type', 'is_active', 'lines', 'editingItem']);
-    }
+			// 刪除舊明細
+			$rule->lines()->delete();
+			
+			// 寫入新明細（直接信任清洗後的 $this->lines，不再二次判斷）
+			foreach ($this->lines as $index => $line) {
+				AccountingRuleLine::create([
+					'accounting_rule_id' => $rule->id,
+					'account_id'         => $line['account_id'],
+					'account_code'       => $line['account_code'],
+					'entry_type'         => $line['entry_type'],
+					'amount_source'      => $line['amount_source'],
+					'ratio'              => $line['ratio'],
+					'sort_order'         => $index + 1,
+					'is_active'          => true,
+				]);
+			}
+		});
+
+		$this->success($this->editingItem ? '規則已更新' : '新規則已建立');
+		$this->myModal = false;
+		$this->reset(['event_type', 'is_active', 'lines', 'editingItem']);
+	}
 
     public function delete(AccountingRule $item)
     {
