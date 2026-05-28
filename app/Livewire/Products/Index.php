@@ -31,11 +31,37 @@ class Index extends Component
         $this->perPage += 10;
     }
 	
+	/**
+     * 開啟快速查詢抽屜
+     */
+    public function showDetail(Product $product)
+    {
+        $this->selectedProduct = Product::with('images')->find($product->id);
+        $this->drawer = true;
+    }
+
+    /**
+     * 刪除商品邏輯
+     */
+    public function delete(Product $product)
+    {
+        if ($product->saleItems()->exists()) {
+            $this->error("此商品已有銷售紀錄，無法刪除。");
+            return;
+        }
+        
+        $product->delete();
+        $this->success("商品 [{$product->sku}] 已移除");
+    }
+    	
     public function render()
 	{
 		// 1. 先處理查詢與分頁 (將結果存入變數，不要在這裡直接 return)
 		$products = Product::query()
-			->with('images')
+			->with([
+				'images',
+				'inventories.warehouse.shop',
+			])
 			->when($this->search, function($q) {
 				$q->where('name', 'like', "%{$this->search}%")
 				  ->orWhere('sku', 'like', "%{$this->search}%");
@@ -65,28 +91,4 @@ class Index extends Component
 			'headers' => $headers,
 		]);
 	}
-	
-	/**
-     * 開啟快速查詢抽屜
-     */
-    public function showDetail(Product $product)
-    {
-        $this->selectedProduct = Product::with('images')->find($product->id);
-        $this->drawer = true;
-    }
-
-    /**
-     * 刪除商品邏輯
-     */
-    public function delete(Product $product)
-    {
-        if ($product->saleItems()->exists()) {
-            $this->error("此商品已有銷售紀錄，無法刪除。");
-            return;
-        }
-        
-        $product->delete();
-        $this->success("商品 [{$product->sku}] 已移除");
-    }
-    
 }

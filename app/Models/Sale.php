@@ -171,7 +171,7 @@ class Sale extends Model
         // 5. 更新出庫時間與單據狀態
         $this->update([
             'stocked_out_at' => now(),
-            'status' => 'completed' // 建議增加狀態欄位以便索引
+            //'status' => 'completed' // 建議增加狀態欄位以便索引
         ]);
 		}, 3);
     }

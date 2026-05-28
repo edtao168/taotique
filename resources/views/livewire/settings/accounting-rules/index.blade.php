@@ -12,19 +12,35 @@
         <div class="hidden md:block">
             <x-table :headers="$headers" :rows="$rows" @row-click="$wire.edit($event.detail.id)" class="cursor-pointer">
                 @scope('cell_lines_summary', $item)
-                    <div class="text-sm space-y-0.5">
-                        @foreach($item->lines as $line)
-                            <div>
-                                <span class="badge {{ $line->entry_type === 'debit' ? 'badge-success' : 'badge-error' }} text-xs">
-                                    {{ $line->entry_type === 'debit' ? '借' : '貸' }}
-                                </span>
-                                <span class="font-mono text-xs">{{ $line->account->code }}</span>
-                                <span class="text-gray-600">{{ $line->account->name }}</span>
-                                <span class="text-gray-400 text-xs">({{ $line->amount_source }})</span>
-                            </div>
-                        @endforeach
-                    </div>
-                @endscope
+    <div class="text-sm">
+        @foreach($item->lines as $index => $line)
+            <div class="py-0.5">
+                <span class="font-mono text-xs font-semibold {{ $line->entry_type === 'debit' ? 'text-primary' : 'text-error' }}">
+                    {{ $line->entry_type === 'debit' ? '借' : '貸' }}
+                </span>
+                <span class="ml-1">
+                    @if($line->account_id === null && $line->account_code === 'DYNAMIC')
+                        <span class="text-purple-600 font-medium">[動態帳戶]</span>
+                    @elseif($line->account)
+                        {{ $line->account->code }} - {{ $line->account->name }}
+                    @else
+                        <span class="text-error">⚠️ 帳戶不存在 (ID: {{ $line->account_id }})</span>
+                    @endif
+                </span>
+                @if($line->amount_source)
+                    <span class="text-xs text-gray-400 ml-1">
+                        ({{ $line->amount_source }})
+                    </span>
+                @endif
+                @if($line->ratio != 1)
+                    <span class="text-xs text-gray-400">
+                        ×{{ $line->ratio }}
+                    </span>
+                @endif
+            </div>
+        @endforeach
+    </div>
+@endscope
 
                 @scope('cell_status', $item)                   
 					<x-checkbox wire:click.stop="toggleActive({{ $item->id }})" :checked="$item->is_active" class="checkbox-primary" tight />
@@ -39,34 +55,48 @@
         </div>
 
         {{-- 手機端卡片：點擊整塊區域皆可修改 --}}
-        <div class="md:hidden">
-            @foreach($rows as $item)
-                <div class="p-4 border-b border-base-200 last:border-none active:bg-base-200 cursor-pointer" wire:click="edit({{ $item->id }})">
-                    <div class="flex justify-between items-start">
-                        <div class="flex-1">
-                            <div class="font-mono font-bold text-primary">{{ $item->event_type }}</div>
-                            <div class="text-sm mt-1 space-y-0.5">
-                                @foreach($item->lines as $line)
-                                    <div>
-                                        <span class="badge {{ $line->entry_type === 'debit' ? 'badge-success' : 'badge-error' }} text-xs">
-                                            {{ $line->entry_type === 'debit' ? '借' : '貸' }}
-                                        </span>
-                                        {{ $line->account->name }}
-                                    </div>
-                                @endforeach
-                            </div>
-                        </div>
-                        <div class="flex gap-1">
-                            <x-button icon="o-pencil" class="btn-sm btn-ghost text-primary" />
-                        </div>
-                    </div>
-                </div>
-            @endforeach
+		<div class="md:hidden">
+			@foreach($rows as $item)
+				<div class="p-4 border-b border-base-200 last:border-none active:bg-base-200 cursor-pointer" wire:click="edit({{ $item->id }})">
+					<div class="flex justify-between items-start">
+						<div class="flex-1">
+							<div class="font-mono font-bold text-primary">{{ $item->event_type }}</div>
+							<div class="text-sm mt-1 space-y-0.5">
+								@foreach($item->lines as $line)
+									<div>
+										<span class="badge {{ $line->entry_type === 'debit' ? 'badge-primary' : 'badge-error' }} text-xs">
+											{{ $line->entry_type === 'debit' ? '借' : '貸' }}
+										</span>
+										{{-- 修改這裡：加入空值檢查 --}}
+										@if($line->account_id === null && isset($line->account_code) && $line->account_code === 'DYNAMIC')
+											<span class="text-purple-600">[動態帳戶]</span>
+										@elseif($line->account)
+											{{ $line->account->code }} - {{ $line->account->name }}
+										@else
+											<span class="text-gray-400">⚠️ 帳戶已刪除</span>
+										@endif
+										{{-- 顯示金額來源和比例（可選） --}}
+										@if($line->amount_source)
+											<span class="text-xs text-gray-400 ml-1">({{ $line->amount_source }})</span>
+										@endif
+										@if($line->ratio != 1)
+											<span class="text-xs text-gray-400">×{{ $line->ratio }}</span>
+										@endif
+									</div>
+								@endforeach
+							</div>
+						</div>
+						<div class="flex gap-1">
+							<x-button icon="o-pencil" class="btn-sm btn-ghost text-primary" />
+						</div>
+					</div>
+				</div>
+			@endforeach
 
-            @if($rows->isEmpty())
-                <div class="p-8 text-center text-gray-400">目前沒有過帳規則</div>
-            @endif
-        </div>
+			@if($rows->isEmpty())
+				<div class="p-8 text-center text-gray-400">目前沒有過帳規則</div>
+			@endif
+		</div>
     </x-card>
 
     {{-- 新增/編輯 Modal --}}
@@ -83,45 +113,62 @@
                 <span class="font-bold">分錄明細</span>
                 <x-button label="增加一行" icon="o-plus" wire:click="addLine" class="btn-sm btn-outline" />
             </div>
-
-            <div class="space-y-2">
+			
+			{{-- 表頭 --}}
+			<div class="grid grid-cols-12 gap-2 px-2 py-2 bg-base-200 rounded-lg text-xs font-semibold text-gray-500">
+				<div class="col-span-4">會計科目</div>
+				<div class="col-span-2">借貸選單</div>
+				<div class="col-span-3">金額來源</div>
+				<div class="col-span-2">比例</div>
+				<div class="col-span-1 text-center">操作</div>
+			</div>
+			
+			{{-- 明細行 --}}
+			<div class="space-y-2 max-h-96 overflow-y-auto">
                 @foreach($lines as $index => $line)
-        {{-- 加入動態邊框色，讓整行更有感 --}}
-        <div class="grid grid-cols-12 gap-2 items-center p-2 bg-base-100 rounded-lg border-l-4 {{ ($line['entry_type'] ?? '') === 'debit' ? 'border-l-success' : 'border-l-error' }} border-y border-r border-base-300">
-            
-            <div class="col-span-4">
-                <x-select wire:model="lines.{{ $index }}.account_id" 
-                    :options="$accounts" option-label="name" option-sub-label="code"
-                    placeholder="選擇科目" size="sm" />
-            </div>
+					{{-- 加入動態邊框色，讓整行更有感 --}}
+					<div class="grid grid-cols-12 gap-2 items-center p-2 bg-base-100 rounded-lg border-l-4 {{ ($line['entry_type'] ?? '') === 'debit' ? 'border-l-primary' : 'border-l-error' }} border-y border-r border-base-300">
+						
+						<div class="col-span-4">
+							<x-select    
+								wire:model="lines.{{ $index }}.account_id"
+								:options="collect($accounts)->push([
+									'id' => null,
+									'name' => '🔧 動態帳戶 (DYNAMIC)',
+									'code' => 'DYNAMIC'
+								])->toArray()"
+								option-label="name"
+								option-value="id"
+								placeholder="請選擇會計科目"
+							/>
+						</div>
 
-            <div class="col-span-2">
-                {{-- 借貸選單：加入屬性改變文字顏色 --}}
-                <x-select 
-                    wire:model.live="lines.{{ $index }}.entry_type" 
-                    :options="$entryTypes" 
-                    size="sm"
-                    class="{{ ($line['entry_type'] ?? '') === 'debit' ? 'text-success font-bold' : 'text-error font-bold' }}"
-                />
-            </div>
+						<div class="col-span-2">
+							<x-select 
+								wire:model.live="lines.{{ $index }}.entry_type" 
+								:options="$entryTypes" 
+								size="sm"
+								class="{{ ($line['entry_type'] ?? '') === 'debit' ? 'text-primary font-bold' : 'text-error font-bold' }}"
+							/>
+						</div>
 
-            <div class="col-span-3">
-                <x-select wire:model="lines.{{ $index }}.amount_source" 
-                    :options="$amountSources" option-label="label" option-value="value"
-                    placeholder="金額來源" size="sm" />
-            </div>
+						<div class="col-span-3">
+							<x-select wire:model="lines.{{ $index }}.amount_source" 
+								:options="$amountSources" option-label="label" option-value="value"
+								placeholder="金額來源" size="sm" />
+						</div>
 
-            <div class="col-span-2">
-                <x-input wire:model="lines.{{ $index }}.ratio" type="number" step="0.01" 
-                    label="比例" class="input-sm" />
-            </div>
+						<div class="col-span-2">
+							<x-input wire:model="lines.{{ $index }}.ratio" type="number" step="0.01" 
+								class="" />
+						</div>
 
-            <div class="col-span-1 text-right">
-                <x-button icon="o-trash" wire:click="removeLine({{ $index }})" 
-                    class="btn-ghost btn-sm text-error" />
-            </div>
-        </div>
-    @endforeach
+						<div class="col-span-1 text-right">
+							<x-button icon="o-trash" wire:click="removeLine({{ $index }})" 
+								class="btn-ghost btn-sm text-error" />
+						</div>
+					</div>
+				@endforeach
             </div>
         </div>
 

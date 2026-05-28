@@ -47,6 +47,7 @@ enum AmountSource: string
     // ==============================================
     
     case ITEMS_COST = 'items.sum:cost*quantity';
+	case ITEMS_PRODUCT_COST = 'items.sum:product.cost*quantity';
     
     // ==============================================
     // 計算型金額來源
@@ -90,6 +91,7 @@ enum AmountSource: string
             self::PURCHASE_TAX => 'purchase_tax_amount (進項稅額)',
             
             self::ITEMS_COST => 'items.sum:cost*quantity (商品成本)',
+			self::ITEMS_PRODUCT_COST => 'items.sum:product.cost*quantity (商品成本-關聯)',
             
             self::SUBTOTAL_AFTER_DISCOUNT => 'subtotal_after_discount (折讓後收入)',
             self::TOTAL_FEES => 'total_fees (費用總額)',
@@ -102,6 +104,7 @@ enum AmountSource: string
     {
         return match($this) {
             self::ITEMS_COST => 'items_sum',
+			self::ITEMS_PRODUCT_COST => 'items_sum', 
             default => 'direct_field',
         };
     }

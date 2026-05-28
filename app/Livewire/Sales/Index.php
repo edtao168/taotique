@@ -3,11 +3,13 @@
 
 namespace App\Livewire\Sales;
 
+use App\Models\AccountingRule;
 use App\Models\Inventory;
 use App\Models\Product;
 use App\Models\Sale;
 use App\Models\Setting;
 use App\Models\Warehouse;
+use App\Services\AccountingService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Livewire\Component;
@@ -100,106 +102,144 @@ class Index extends Component
 	 * 刪除訂單（含庫存回滾與關聯清理）
 	 */
 	public function delete($id)
-	{
-		$sale = Sale::with(['items', 'fees'])->find($id);
-		
-		if (!$sale) {
-			$this->error('找不到該單據，可能已被刪除。');
-			return;
-		}
-		
-		// 1. 檢查是否已有退貨紀錄
-		if ($sale->hasReturnRecords()) {
-			$this->error('此銷售單已有退貨紀錄，禁止刪除。');
-			return;
-		}
+    {
+        try {
+            DB::transaction(function () use ($id) {
+                // 💡 1. 行級鎖定當前欲刪除的單據
+                $sale = Sale::with(['items', 'fees'])->lockForUpdate()->find($id);
+                
+                if (!$sale) {
+                    throw new \Exception('找不到該單據，可能已被其他操作員刪除。');
+                }
+                
+                if ($sale->hasReturnRecords()) {
+                    throw new \Exception('此銷售單已有衍生退貨紀錄，禁止刪除。');
+                }
 
-		// 2. 檢查是否已結案
-		if ($sale->status === 'completed') {
-			$this->error('已結案單據不可刪除。');
-			return;
-		}
+                // 💡 2. 狀態機核心校驗：原本的狀態如果已經是 completed（已完成出庫/已記帳），絕對不允許直接刪除單據
+                if ($sale->status === 'completed') {
+                    throw new \Exception('該銷售單已出庫結案並生成財務傳票，若需調整請走「銷售退貨」流程，禁止直接刪除！');
+                }
 
-		try {
-			DB::transaction(function () use ($sale) {
-				// 3. 回滾庫存
-				foreach ($sale->items as $item) {
-					$inventory = Inventory::where('product_id', $item->product_id)
-						->where('warehouse_id', $item->warehouse_id)
-						->lockForUpdate()
-						->first();
+                // 💡 3. 回滾庫存（針對 pending 或 processing 狀態可能產生的預扣或佔用進行回滾）
+                foreach ($sale->items as $item) {
+                    $inventory = Inventory::where('product_id', $item->product_id)
+                        ->where('warehouse_id', $sale->warehouse_id)
+                        ->lockForUpdate()
+                        ->first();
 
-					if ($inventory) {
-						$newQty = bcadd($inventory->quantity, $item->quantity, 4);
-						$inventory->update(['quantity' => $newQty]);
-					}
-				}
+                    if ($inventory) {
+                        // 嚴謹使用 bcadd 還原庫存
+                        $newQty = bcadd($inventory->quantity, $item->quantity, 4);
+                        $inventory->update(['quantity' => $newQty]);
+                    }
+                }
 
-				// 4. 【關鍵】先刪除關聯的費用明細
-				$sale->fees()->delete();
-				
-				// 5. 刪除商品明細（如果沒有設定 cascade）
-				$sale->items()->delete();
+                // 💡 4. 清理級聯關聯數據，防範外鍵約束衝突
+                $sale->fees()->delete();
+                $sale->items()->delete();
 
-				// 6. 最後刪除主單
-				$sale->delete();
-			});
+                // 💡 5. 實體刪除（或軟刪除，依您的 Model 規劃而定）
+                $sale->delete();
+            });
 
-			$this->selectedSale = null;
-			$this->drawer = false;
-			$this->success('銷售單已刪除，庫存已回滾');
-			
-		} catch (\Exception $e) {
-			$this->error('刪除失敗：' . $e->getMessage());
-		}
-	}
+            $this->selectedSale = null;
+            $this->drawer = false;
+            $this->success('銷售單已安全刪除，相關商品庫存已全數平滑回滾。');
+            
+        } catch (\Exception $e) {
+            $this->error('刪除失敗：' . $e->getMessage());
+        }
+    }
 	
 	/**
 	 * 扣庫存
 	 */
-	public function processStockOut(int $saleId)
-	{
-		// 1. 取得銷售單與明細，並加上鎖定
-		$sale = Sale::with('items')->findOrFail($saleId);
+	public function processStockOut(int $saleId, AccountingService $accountingService)
+    {
+        try {
+            // 💡 1. 於資料庫事務開始前獲取「是否允許負庫存」的全域配置
+            $allowNegative = (bool) Setting::get('allow_negative_inventory', false);
 
-		if ($sale->stocked_out_at) {
-			$this->error('此單據已執行過出庫');
-			return;
-		}
+            DB::transaction(function () use ($saleId, $allowNegative, $accountingService) {
+                // 💡 2. 併發防護：行級鎖定當前銷售單主表，防止高頻點擊造成的重複出庫
+                $sale = Sale::with(['items', 'fees'])->lockForUpdate()->findOrFail($saleId);
 
-		try {
-			DB::transaction(function () use ($sale) {
-				foreach ($sale->items as $item) {
-					// 2. 尋找庫存紀錄
-					$inventory = Inventory::where('product_id', $item->product_id)
-						->where('warehouse_id', $sale->warehouse_id)
-						->lockForUpdate()
-						->first();
+                // 💡 3. 狀態判定變更：由原本的檔案標記改為嚴謹的狀態機校驗
+                if ($sale->status === 'completed') {
+                    throw new \Exception('此銷售單據已完成出庫，不可重複操作。');
+                }
 
-					// 3. 執行扣除 (嚴謹性使用 bcsub 或 decrement)
-					if ($inventory) {
-						$inventory->decrement('quantity', $item->quantity);
-					} else {
-						// 若無紀錄則建立 (支援負庫存)
-						Inventory::create([
-							'shop_id' => $sale->channel,
-							'warehouse_id' => $sale->warehouse_id,
-							'product_id' => $item->product_id,
-							'quantity' => bcsub('0', $item->quantity, 4),
-						]);
-					}
-				}
+                if ($sale->status === 'cancelled') {
+                    throw new \Exception('此銷售單據已作廢，無法執行出庫。');
+                }
 
-				// 4. 更新出庫時間戳（這會觸發 DB 的 is_stocked_out 虛擬欄位）
-				$sale->update(['stocked_out_at' => now()]);
-			});
+                // 💡 4. 逐項扣減庫存（零售實體商品一對一精準扣減）
+                foreach ($sale->items as $item) {
+                    $inventory = Inventory::where('product_id', $item->product_id)
+                        ->where('warehouse_id', $sale->warehouse_id)
+                        ->lockForUpdate()
+                        ->first();
 
-			$this->success('庫存扣除成功');
-			$this->drawer = false; // 處理完後關閉抽屜
-		} catch (\Exception $e) {
-			$this->error('出庫失敗：' . $e->getMessage());
-		}
-	}
+                    if ($inventory) {
+                        // 檢查庫存充足性（若不允許負庫存）
+                        if (!$allowNegative && bccomp($inventory->quantity, $item->quantity, 4) < 0) {
+                            $productName = $item->product->name ?? '未命名商品';
+                            throw new \Exception("商品 [{$productName}] 庫存不足！當前餘額: {$inventory->quantity}");
+                        }
+                        
+                        // 高頻交易下強制使用 bcsub 進行嚴謹運算，防止浮點數失真
+                        $newQty = bcsub($inventory->quantity, $item->quantity, 4);
+                        $inventory->update(['quantity' => $newQty]);
+                    } else {
+                        // 若無歷史庫存紀錄，若不允許負庫存則直接報錯
+                        if (!$allowNegative) {
+                            $productName = $item->product->name ?? '未命名商品';
+                            throw new \Exception("商品 [{$productName}] 於該倉庫內無庫存紀錄。");
+                        }
+
+                        // 建立初始負庫存
+                        Inventory::create([
+                            'shop_id'      => $sale->shop_id ?? 1,
+                            'warehouse_id' => $sale->warehouse_id,
+                            'product_id'   => $item->product_id,
+                            'quantity'     => bcsub('0', $item->quantity, 4),
+                        ]);
+                    }
+                }
+
+                // 💡 5. 更新單據生命週期狀態至「已完成（已出庫）」
+                $sale->update([
+                    'status'         => 'completed',
+                    'stocked_out_at' => now(), // 保留時間戳作為審計與報表分析輔助
+                ]);
+
+                // 💡 6. 串接規則引擎自動分錄過帳（分開處理：零售收入確認 與 銷貨成本結轉）
+                // 抓取您利用 Seeder 清洗進去的會計分錄規則
+                $revenueRules = AccountingRule::getRulesForEvent('sale_revenue_retail', $sale->shop_id ?? 1);
+                $costRules    = AccountingRule::getRulesForEvent('sale_cost', $sale->shop_id ?? 1);
+				$feeRules     = AccountingRule::getRulesForEvent('sale_fee', $sale->shop_id ?? 1);
+
+                if (!empty($revenueRules)) {
+                    $accountingService->postFromRules($sale, $revenueRules, 'sale_revenue');
+                }
+                if (!empty($costRules)) {
+                    $accountingService->postFromRules($sale, $costRules, 'sale_cost');
+                }
+				if (!empty($feeRules)) {
+    $accountingService->postFromRules($sale, $feeRules, 'sale_fee');
+}
+            });
+
+            $this->success("銷售單已成功出庫，且對齊會計準則自動結轉過帳！");
+            $this->drawer = false; 
+            $this->selectedSale = null;
+
+        } catch (\Exception $e) {
+            // 完美捕捉包含會計引擎（Line 93 缺失或未平衡等）的所有異常，回傳前端錯誤氣泡
+            $this->error('出庫失敗：' . $e->getMessage());
+        }
+    }
 		
     public function render()
     {

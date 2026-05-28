@@ -58,6 +58,7 @@ class Index extends Component
             'entry_type' => $line->entry_type,
             'amount_source' => $line->amount_source,
             'ratio' => $line->ratio,
+			'account_code' => $line->account_code,
         ])->toArray();
         $this->myModal = true;
     }

@@ -101,7 +101,7 @@
 
 					{{-- 4. 基本資料設定 --}}
 					<x-menu-sub title="基本資料設定" icon="o-cog-6-tooth">
-						<x-menu-item title="商品資料管理" icon="o-cube" link="/products" />
+						<x-menu-item title="商品資料管理" icon="o-cube" :link="route('products.index')" />
 						<x-menu-item title="商品分類定義" icon="o-tag" :link="route('categories.index')" />
 						<x-menu-item title="材質分類定義" icon="o-photo" :link="route('materials.index')" />
 						<x-menu-item title="營業點管理" icon="o-map-pin" :link="route('shops.index')" />

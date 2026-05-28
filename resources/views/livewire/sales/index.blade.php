@@ -225,7 +225,7 @@
 				<div class="flex gap-3 w-full border-t pt-4 bg-base-100">
 					<x-button label="返回" icon="o-arrow-uturn-left" :link="route('sales.index')" class="btn-success flex-1 text-white" />
 					@if(!$isLocked)							
-						<x-button label="修改" icon="o-pencil" :link="route('sales.edit', $selectedSale->id)" class="btn-primary flex-1 text-white" />
+						
 						@if($selectedSale->stocked_out_at)
 							<x-button 
 								label="退貨" 
@@ -234,6 +234,7 @@
 								class="btn-outline-dark flex-1"								
 							/>					
 						@else
+							<x-button label="修改" icon="o-pencil" :link="route('sales.edit', $selectedSale->id)" class="btn-primary flex-1 text-white" />
 							<x-button 
 								label="出庫" 
 								icon="o-archive-box-arrow-down" 

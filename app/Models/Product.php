@@ -30,15 +30,17 @@ class Product extends Model
 		'is_unique' => 'boolean',
         'is_active' => 'boolean',
     ];
-	public function getCostAttribute($value)
-{
-    Log::info('Product::getCostAttribute called', [
-        'product_id' => $this->id,
-        'value' => $value,
-        'original' => $this->getOriginal('cost')
-    ]);
-    return $value;
-}
+	
+	/* public function getCostAttribute($value)
+	{
+		Log::info('Product::getCostAttribute called', [
+			'product_id' => $this->id,
+			'value' => $value,
+			'original' => $this->getOriginal('cost')
+		]);
+		return $value;
+	} */
+	
 	/**
      * 定義 full_display_name 屬性	
      */	
@@ -72,10 +74,14 @@ class Product extends Model
 	}
 	
 	// 取得所有倉庫的總庫存數量
-	public function getTotalStockAttribute(): string
+	public function getTotalStockAttribute(): int
 	{
-		// 直接加總該商品在所有(目前店鋪)倉庫的數量
-		return $this->inventories->sum('quantity'); 
+		// 如果已經預載了 inventories，直接使用集合，避免重複查詢
+		if ($this->relationLoaded('inventories')) {
+			return (int) $this->inventories->sum('quantity');
+		}
+		
+		return (int) $this->inventories()->sum('quantity'); 
 	}
 	
 	/**
@@ -83,7 +89,10 @@ class Product extends Model
 	 */
 	public function getAverageCostAttribute(): string
 	{
-		$inventories = $this->hasMany(Inventory::class)->where('quantity', '>', 0)->get();
+		// 如果已經預載，使用集合
+		$inventories = $this->relationLoaded('inventories') 
+			? $this->inventories->where('quantity', '>', 0)
+			: $this->inventories()->where('quantity', '>', 0)->get();
 		
 		if ($inventories->isEmpty()) return '0.00';
 

@@ -11,6 +11,7 @@ UI：一人店、老闆不懂會計 → 極簡、自動化
 
 namespace App\Services;
 
+use App\Enums\AmountSource;
 use App\Models\Account;
 use App\Models\Journal;
 use App\Models\JournalItem;
@@ -497,8 +498,15 @@ class AccountingService
 		// 類型 B：直接欄位或費用類型
 		if ($amountSource->isFeeType()) {
 			$feeTypeKey = $amountSource->value;
-			$feeRecord = $source->fees->firstWhere('fee_type', $feeTypeKey);
-			return (string) ($feeRecord->amount ?? '0.0000');
+			
+			// ✅ 先嘗試從 attributes 直接取（如果 fees 關聯已載入）
+			if ($source->relationLoaded('fees')) {
+				$feeRecord = $source->fees->firstWhere('fee_type', $feeTypeKey);
+				return (string) ($feeRecord->amount ?? '0.0000');
+			}
+			
+			// ✅ 否則直接從 model attribute 取（透過魔術方法）
+			return (string) ($source->{$feeTypeKey} ?? '0.0000');
 		}
 		
 		// 類型 C：直接 Model 欄位
@@ -507,38 +515,40 @@ class AccountingService
 	}
 
 	/**
-	 * 解析單一規則行的會計科目
+	 * 修改後的單一規則行會計科目解析
+	 * [資深架構師重構：解耦對 account_code 欄位的依賴，完美支援借方動態付款科目]
 	 */
 	protected function resolveAccountIdFromRule(Model $source, array $line): int
 	{
-		// 如果有 account_id 且不是 0/null，直接使用
-		if (!empty($line['account_id']) && $line['account_id'] > 0) {
-			return $line['account_id'];
+		// 1. 取得規則配置的 Code，如果不存在則去查舊有的 account_id 倒推（相容過渡期）
+		$code = $line['account_code'] ?? null;
+		
+		if (empty($code) && !empty($line['account_id'])) {
+			$code = Account::where('id', $line['account_id'])->value('code');
 		}
-		
-		// 否則從 account_code 解析
-		$accountCode = $line['account_code'] ?? $line['account_code_from_db'] ?? null;
-		
-		if (!$accountCode) {
-			throw new \RuntimeException("規則缺少 account_code");
+
+		// 2. 如果是 DYNAMIC，或者沒設 Code 且為借方，視為動態金流科目
+		if ($code === 'DYNAMIC' || (empty($code) && ($line['entry_type'] ?? '') === 'debit')) {
+			$code = $this->resolveDynamicAccountCode($source, true);
 		}
-		
-		// 處理 DYNAMIC
-		if ($accountCode === 'DYNAMIC') {
-			$isDebit = ($line['entry_type'] === 'debit');
-			$accountCode = $this->resolveDynamicAccountCode($source, $isDebit);
+
+		// 3. 防禦：如果到了這一步還是空的，說明規則真的漏填了
+		if (empty($code)) {
+			throw new \RuntimeException(
+				"自動分錄失敗：規則 (Line ID: {$line['id']}) 未設定會計科目代碼(account_code)且無法動態解析。"
+			);
 		}
-		
-		// 查詢科目
-		$account = Account::where('code', $accountCode)
+
+		// 4. 以唯一 Code 檢索實體 ID
+		$account = Account::where('code', $code)
 			->where('shop_id', $source->shop_id ?? 1)
 			->first();
-		
+
 		if (!$account) {
-			throw new \RuntimeException("找不到會計科目代碼：{$accountCode}");
+			throw new \RuntimeException("會計科目表中找不到代碼為 [{$code}] 的科目，請先建立該科目。");
 		}
-		
-		return $account->id;
+
+		return (int) $account->id;
 	}
 
 	/**
@@ -578,8 +588,16 @@ class AccountingService
 		}
 		
 		foreach ($source->items as $item) {
-			$itemTotal = $this->calculateItemExpression($item, $expression);
-			$total = bcadd($total, $itemTotal, 4);
+			if (str_contains($expression, '*')) {
+				[$a, $b] = explode('*', $expression);
+				$valA = $this->getNestedValue($item, $a);
+				$valB = $this->getNestedValue($item, $b);
+				$val = bcmul((string) $valA, (string) $valB, 4);
+			} else {
+				$val = (string) $this->getNestedValue($item, $expression);
+			}
+			
+			$total = bcadd($total, $val, 4);
 		}
 		
 		return $total;
@@ -716,46 +734,14 @@ class AccountingService
 				$valA = $this->getNestedValue($item, $a);
 				$valB = $this->getNestedValue($item, $b);
 				$val = bcmul((string) $valA, (string) $valB, 4);
-				Log::info('Multiplication result', [
-                'a' => $a,
-                'b' => $b,
-                'valA' => $valA,
-                'valB' => $valB,
-                'val' => $val,]);
 			} else {
 				$val = (string) $this->getNestedValue($item, $field);
 			}
+			$total = bcadd($total, $val, 4);
 		}  
 		
 		return $total;
 	}
-	
-	/**
-     * 支援巢狀屬性存取，如 'product.cost'
-     */
-    private function getNestedValue($object, string $path)
-    {
-        $parts = explode('.', $path);
-        $value = $object;
-        Log::info('getNestedValue', [
-        'path' => $path,
-        'parts' => $parts,
-        'object_class' => get_class($object)
-    ]);
-        foreach ($parts as $part) {
-            if (is_null($value)) {
-                return '0';
-            }
-            $value = $value->{$part} ?? null;
-			 Log::info('getNestedValue step', [
-            'part' => $part,
-            'value' => $value,
-            'value_type' => gettype($value)
-        ]);
-        }
-        
-        return $value ?? '0';
-    }
 
     /**
      * 簡易運算式求值
@@ -883,19 +869,51 @@ class AccountingService
     /**
      * 產生摘要
      */
-    private function buildDescription(Model $source, string $referenceType): string
-    {
-        $number = match(true) {
-            $source instanceof \App\Models\Purchase => $source->purchase_number,
-            $source instanceof \App\Models\Sale => $source->invoice_number,
-            default => '#' . $source->id,
-        };
-
-        $normalizedType = $this->normalizeReferenceType($referenceType);
+    private function buildDescription(Model $source, string $eventType): string
+	{
+		// 正規化事件類型（移除前綴如 sale_）
+		$normalizedType = $this->normalizeReferenceType($eventType);
 		$label = $this->getSourceTypeLabel($normalizedType);
+		
+		// 取得單據編號
+		$number = $this->getDocumentNumberFromSource($source, $eventType);
+		
+		return "{$label} - {$number}";
+	}
 
-        return "{$label} - {$number}";
-    }
+	/**
+	 * 從來源 Model 取得單據編號（統一處理，不重複）
+	 */
+	private function getDocumentNumberFromSource(Model $source, string $eventType): string
+	{
+		// 先嘗試從 SOURCE_MAP 找到對應的 number_field
+		// 但 sale_fee/sale_revenue/sale_cost 都對應到 sale
+		$mapKey = $eventType;
+		
+		// 將 sale_xxx 對應回原始的 model key
+		if (in_array($eventType, ['sale_revenue', 'sale_cost', 'sale_fee'])) {
+			$mapKey = 'sale';
+		}
+		
+		$config = self::SOURCE_MAP[$mapKey] ?? null;
+		
+		if ($config && isset($config['number_field'])) {
+			$numberField = $config['number_field'];
+			if (property_exists($source, $numberField) || method_exists($source, $numberField)) {
+				return $source->{$numberField} ?? ('#' . $source->id);
+			}
+		}
+		
+		// 備案：根據 Model 類型直接判斷
+		return match(true) {
+			$source instanceof \App\Models\Sale => $source->invoice_number ?? ('#' . $source->id),
+			$source instanceof \App\Models\Purchase => $source->purchase_number ?? ('#' . $source->id),
+			$source instanceof \App\Models\PurchaseReturn => $source->return_number ?? ('#' . $source->id),
+			$source instanceof \App\Models\SaleReturn => $source->return_number ?? ('#' . $source->id),
+			$source instanceof \App\Models\Conversion => $source->conversion_number ?? ('#' . $source->id),
+			default => '#' . $source->id,
+		};
+	}
 	
     /**
      * [費曼註釋：計算原始分錄與更正後分錄的差額，只回傳有變化的項目]
@@ -966,8 +984,6 @@ class AccountingService
         }
     }
 	
-	// 檔案路徑：app/Services/AccountingService.php
-
     /**
      * 在驗證平衡與寫入庫之前，先對同科目進行借貸相抵（對沖）
      * [費曼註釋：同一單據若對同一科目有借有貸，自動相抵，避免觸發單一科目同時借貸的防呆，保持傳票乾淨]
@@ -1058,9 +1074,8 @@ class AccountingService
 			return $journal;
 		}
 
-		// 🎯 3. 取得業務單據編號（例如 invoice_number），用來當作人類可讀的描述或備註
-		$numberField = self::SOURCE_MAP[$eventType]['number_field'] ?? 'reference_number';
-		$docNumber   = $source->{$numberField} ?? ('ID_' . $referenceId);
+		// ✅ 直接使用 buildDescription 產生描述
+		$description = $this->buildDescription($source, $eventType);
 		
 		// 建立全新的日記帳主表
 		return Journal::create([
@@ -1068,7 +1083,7 @@ class AccountingService
 			'currency'       => $source->currency ?? 'TWD',
 			'exchange_rate'  => $source->exchange_rate ?? '1.0000',
 			'entry_date'     => now()->format('Y-m-d'),
-			'description'    => "[自動轉入] 外單號:{$docNumber} ({$eventType})",
+			'description'    => "[自動轉入] 外單號:{$description} ({$eventType})",
 			'status'         => 'posted',
 			'reference_type' => $referenceType, // 💡 寫入 "App\Models\Sale"
 			'reference_id'   => $referenceId,   // 💡 寫入 銷售單 ID
