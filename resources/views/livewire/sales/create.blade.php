@@ -197,7 +197,7 @@
 							
 							@foreach(collect(config('business.fee_types'))->where('target', 'customer') as $field => $config)
 								<x-input 
-									wire:model.live.debounce.200ms="form.{{ $field }}"
+									wire:model.blur="form.{{ $field }}"
 									label="{{ $config['name'] }}" 
 									prefix="{{ $config['operator'] === 'add' ? '+' : '-' }}"
 									icon="{{ $config['icon'] ?? '' }}"
@@ -221,7 +221,7 @@
 							
 							@foreach(collect(config('business.fee_types'))->where('target', 'seller') as $field => $config)
 								<x-input 
-									wire:model.live.debounce.200ms="form.{{ $field }}" 
+									wire:model.blur="form.{{ $field }}" 
 									label="{{ $config['name'] }}" 
 									prefix="{{ $config['operator'] === 'add' ? '+' : '-' }}"
 									icon="{{ $config['icon'] ?? '' }}"
