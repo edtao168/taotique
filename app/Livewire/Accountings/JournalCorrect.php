@@ -1,13 +1,12 @@
 <?php
-
 // app/Livewire/Accountings/JournalCorrect.php
-// [費曼註釋：此元件只處理「已過帳分錄」的更正。draft 不可進入此元件]
 
 namespace App\Livewire\Accountings;
 
 use App\Models\Account;
 use App\Models\Journal;
 use App\Models\JournalItem;
+use App\Traits\HasAccountSearch;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Livewire\Component;
@@ -15,106 +14,115 @@ use Mary\Traits\Toast;
 
 class JournalCorrect extends Component
 {
-    use Toast;
+    use Toast, HasAccountSearch;
 
     public Journal $originalJournal;
     public ?int $originalJournalId = null;
-	public ?string $event_type = null;
+    public ?string $event_type = null;
 
     // 更正表單
     public string $entry_date = '';
     public string $description = '';
-    public string $amount = '';           // 正確金額
-    public string $originalAmount = '';
-    public string $selected_account = '';
-    public string $payment_method = '';
-    public string $entry_type = '';
     public string $correction_reason = '';
-	public string $correction_summary = '';
-	
+    
+    // 多科目更正資料結構
+    public array $originalItems = [];      // 原始分錄項目
+    public array $correctedItems = [];     // 更正後分錄項目
+    public array $availableAccounts = [];   // 可用科目選項
+    
     // UI
+    public array $diff_lines = [];
     public array $generated_lines = [];
-    public array $diff_lines = [];       // 差額
     public array $paymentOptions = [];
-    public array $accountOptions = [];
-	public bool $showOriginalDrawer = false;
-	
+    public string $correction_summary = '';
+    public bool $showOriginalDrawer = false;
 
     public function mount(Journal $journal): void
     {        
-		$this->originalJournal = $journal;
+        $this->originalJournal = $journal;
         $this->originalJournalId = $journal->id;
-		
-		// 防呆——必須是posted
+        
+        // 防呆檢查
         if ($journal->status !== 'posted') {
             $this->error('僅已過帳分錄可更正');
             $this->redirect(route('accountings.journals.index'));
             return;
         }
 
-        // 防呆——防止對「更正分錄」再次更正
         if ($journal->reference_type === 'correct') {
             $this->error('不可對更正分錄再次更正');
             $this->redirect(route('accountings.journals.index'));
             return;
         }
 
-        // 防呆——防止對有「更正分錄」的憑證再次更正
-		$exists = Journal::where('corrects_journal_id', $this->originalJournalId)->exists();
-		if ($exists) {
-			$this->error('此分錄已經存在更正記錄...');
-			return;
-		}		
-		
+        $exists = Journal::where('corrects_journal_id', $this->originalJournalId)->exists();
+        if ($exists) {
+            $this->error('此分錄已經存在更正記錄');
+            $this->redirect(route('accountings.journals.index'));
+            return;
+        }        
+
+        // 🔧 修正：必須先載入原始資料，才能正確完成初始化
         $this->loadOriginalData();
+        $this->loadAvailableAccounts();
         $this->loadPaymentOptions();
-        $this->loadAccountOptions();
+        $this->search('');
+        
+        // 🔧 修正：初始化完畢後立即計算一次差額分錄，讓畫面能立即呈現預覽
+        $this->generateDiffEntries();
     }
 
     protected function loadOriginalData(): void
     {
         $this->originalJournal->load('items.account');
-		
-		// 取得原始分錄的業務類型
-		$this->event_type = $this->originalJournal->reference_type;
-
+        $this->event_type = $this->originalJournal->reference_type;
         $this->entry_date = now()->format('Y-m-d');
         $this->description = '[更正] ' . $this->originalJournal->description;
 
-        // 計算原始金額
-        $totalDebit = '0';
+        $this->originalItems = [];
+        $this->correctedItems = [];
+        
         foreach ($this->originalJournal->items as $item) {
-            $totalDebit = bcadd($totalDebit, $item->debit, 4);
+            $isDebit = bccomp($item->debit, '0', 4) > 0;
+            $amount = $isDebit ? $item->debit : $item->credit;
+            
+            $itemData = [
+                'id' => $item->id,
+                'account_id' => $item->account_id,
+                'account_code' => $item->account->code,
+                'account_name' => $item->account->name,
+                'entry_type' => $isDebit ? 'debit' : 'credit',
+                'amount' => $amount,
+                'original_amount' => $amount,
+            ];
+            
+            $this->originalItems[] = $itemData;
+            
+            // 🔧 修正：統一鍵值名稱為 account_code 與 account_id，確保與前端 blade 完美對應
+            $this->correctedItems[] = [
+                'id' => $item->id,
+                'account_id' => $item->account_id,
+                'account_code' => $item->account->code,
+                'account_name' => '【' . $item->account->code . '】' . $item->account->name,
+                'entry_type' => $isDebit ? 'debit' : 'credit',
+                'amount' => $amount,
+                'original_amount' => $amount,
+            ];
         }
-        $this->originalAmount = $totalDebit;
-        $this->amount = $totalDebit; // 預設帶入原金額，使用者修改後產生差額
-
-        $firstItem = $this->originalJournal->items->first();
-        if ($firstItem) {
-            $this->selected_account = $firstItem->account->code;
-            $this->entry_type = bccomp($firstItem->debit, '0', 4) > 0 ? 'expense' : 'income';
-        }
-
-        foreach ($this->originalJournal->items as $item) {
-            if (str_starts_with($item->account->code, '1')) {
-                $this->payment_method = $item->account->code;
-                break;
-            }
-        }
-
-        $this->generateDiffEntries();
     }
 
-    protected function loadAccountOptions(): void
+    protected function loadAvailableAccounts(): void
     {
         $accounts = Account::where('is_active', true)
-            ->whereRaw('LENGTH(code) = 6')
+            ->whereRaw('LENGTH(code) <= 6')
             ->get();
 
-        $this->accountOptions = $accounts->map(fn ($account) => [
-            'id' => (string) $account->code,
+        $this->availableAccounts = $accounts->map(fn ($account) => [
+            'id' => $account->id,
+            'code' => $account->code,
             'name' => '【' . $account->code . '】' . $account->name,
-            'type' => str_starts_with($account->code, '5') ? 'income' : 'expense',
+            'type' => $account->type,
+            'normal_side' => $account->normal_side,
         ])->toArray();
     }
 
@@ -132,298 +140,318 @@ class JournalCorrect extends Component
             ->get();
 
         $this->paymentOptions = $paymentAccounts->map(fn ($account) => [
-            'id' => (string) $account->code,
+            'id' => $account->id,
+            'code' => $account->code,
             'name' => '【' . $account->code . '】' . $account->name,
         ])->toArray();
     }
 
-    public function updatedAmount(): void
+    /**
+     * 監聽 Livewire 屬性更新（當使用者變更下拉科目或借貸別時自動觸發）
+     */
+    public function updatedCorrectedItems($value, $key)
     {
-        $this->generateDiffEntries();
+        // 解析格式如 "0.account_code" 或 "1.entry_type"
+        if (str_contains($key, '.')) {
+            list($index, $field) = explode('.', $key);
+            
+            if ($field === 'account_code') {
+                $this->updateItemAccount((int)$index, $value);
+            } else {
+                $this->generateDiffEntries();
+            }
+        }
     }
 
-    public function updatedPaymentMethod(): void
+    /**
+     * 更新某個科目的金額
+     */
+    public function updateItemAmount($index, $amount)
     {
-        $this->generateDiffEntries();
-    }
-
-    public function updatedSelectedAccount(): void
-    {
-        $account = collect($this->accountOptions)->firstWhere('id', $this->selected_account);
-        $this->entry_type = $account ? $account['type'] : 'expense';
+        $this->correctedItems[$index]['amount'] = $amount;
         $this->generateDiffEntries();
     }
 
     /**
-     * [費曼註釋：計算差額分錄，只產生「需要調整」的部分。這是會計更正的核心邏輯]
-     * 
-     * T字帳範例：
-     * 原始：借 業務招待費 1000 / 貸 現金 1000（錯誤，應為 1200）
-     * 更正：借 業務招待費 200 / 貸 現金 200（只補差額 200）
+     * 更新某個科目的科目選擇
      */
-	protected function generateDiffEntries(): void
-	{
-		$this->diff_lines = [];
-		$this->generated_lines = [];
-
-		if (empty($this->selected_account) || empty($this->payment_method)) {
-			return;
-		}
-
-		$paymentAccount = Account::where('code', $this->payment_method)->first();
-		$targetAccount = Account::where('code', $this->selected_account)->first();
-		if (!$paymentAccount || !$targetAccount) return;
-		
-		// 取得原始資料
-		$firstItem = $this->originalJournal->items->first();
-		$originalTargetCode = $firstItem ? $firstItem->account->code : '';
-		
-		$originalPaymentCode = '';
-		foreach ($this->originalJournal->items as $item) {
-			if (str_starts_with($item->account->code, '1')) {
-				$originalPaymentCode = $item->account->code;
-				break;
-			}
-		}
-
-		$isAccountChanged = $originalTargetCode !== $this->selected_account;
-		$isPaymentChanged = $originalPaymentCode !== $this->payment_method;
-		$isAmountChanged  = bccomp($this->amount, $this->originalAmount, 4) !== 0;
-
-		// 驗證新科目是否適用於原始業務類型
-		if (($isAmountChanged || $isAccountChanged) && in_array($targetAccount->type, ['cost', 'profit'])) {
-			try {
-				// 使用原始分錄的業務類型進行驗證
-				$targetAccount->validateForEventType($this->event_type, [
-					'amount' => (float)$this->amount,
-				]);
-			} catch (\RuntimeException $e) {
-				$this->error($e->getMessage());
-				$this->diff_lines = [];
-				$this->generated_lines = [];
-				return;
-			}
-		}
-	
-		if (!$isAccountChanged && !$isPaymentChanged && !$isAmountChanged) {
-			return;
-		}
-
-		// ========== 產生口語化摘要 ==========
-		$this->correction_summary = $this->buildSummary(
-			$isAmountChanged, $isAccountChanged, $isPaymentChanged,
-			$originalTargetCode, $this->selected_account,
-			$originalPaymentCode, $this->payment_method,
-			$this->originalAmount, $this->amount
-		);
-
-		// A. 沖銷原始分錄（標記為紅色/取消）
-		foreach ($this->originalJournal->items as $item) {
-			$isDebit = bccomp($item->debit, '0', 4) > 0;
-			$this->diff_lines[] = [
-				'account_id'    => $item->account_id,
-				'account_code'  => $item->account->code,
-				'account_name'  => $item->account->name,
-				'entry_type'    => $isDebit ? 'credit' : 'debit',
-				'amount'        => $isDebit ? $item->debit : $item->credit,
-				'action'        => 'cancel',           // ← 動作標記
-				'action_label'  => '取消這筆',          // ← 口語標籤
-				'color'         => 'error',           // ← 紅色
-				'icon'          => 'o-x-circle',      // ← 叉叉圖示
-			];
-		}
-
-		// B. 建立新分錄（標記為綠色/確認）
-		if ($this->entry_type === 'expense') {
-			$this->diff_lines[] = [
-				'account_id'    => $targetAccount->id,
-				'account_code'  => $targetAccount->code,
-				'account_name'  => $targetAccount->name,
-				'entry_type'    => 'debit',
-				'amount'        => $this->amount,
-				'action'        => 'confirm',         // ← 動作標記
-				'action_label'  => '改為這筆',         // ← 口語標籤
-				'color'         => 'success',         // ← 綠色
-				'icon'          => 'o-check-circle', // ← 打勾圖示
-			];
-			$this->diff_lines[] = [
-				'account_id'    => $paymentAccount->id,
-				'account_code'  => $paymentAccount->code,
-				'account_name'  => $paymentAccount->name,
-				'entry_type'    => 'credit',
-				'amount'        => $this->amount,
-				'action'        => 'confirm',
-				'action_label'  => '改為這筆',
-				'color'         => 'success',
-				'icon'          => 'o-check-circle',
-			];
-		} else {
-			// income...
-			$this->diff_lines[] = [
-				'account_id'    => $paymentAccount->id,
-				'account_code'  => $paymentAccount->code,
-				'account_name'  => $paymentAccount->name,
-				'entry_type'    => 'debit',
-				'amount'        => $this->amount,
-				'action'        => 'confirm',
-				'action_label'  => '改為這筆',
-				'color'         => 'success',
-				'icon'          => 'o-check-circle',
-			];
-			$this->diff_lines[] = [
-				'account_id'    => $targetAccount->id,
-				'account_code'  => $targetAccount->code,
-				'account_name'  => $targetAccount->name,
-				'entry_type'    => 'credit',
-				'amount'        => $this->amount,
-				'action'        => 'confirm',
-				'action_label'  => '改為這筆',
-				'color'         => 'success',
-				'icon'          => 'o-check-circle',
-			];
-		}
-
-		$this->generateFullPreview($paymentAccount, $targetAccount);
-	}
-
-	/**
-	 * 產生口語化更正摘要
-	 */
-	protected function buildSummary(
-		bool $isAmountChanged, bool $isAccountChanged, bool $isPaymentChanged,
-		string $oldAccount, string $newAccount,
-		string $oldPayment, string $newPayment,
-		string $oldAmount, string $newAmount
-	): string {
-		$parts = [];
-
-		if ($isAmountChanged) {
-			$diff = bcsub($newAmount, $oldAmount, 4);
-			$direction = bccomp($diff, '0', 4) > 0 ? '增加' : '減少';
-			$absDiff = bccomp($diff, '0', 4) > 0 ? $diff : bcsub('0', $diff, 4);
-			$parts[] = "金額從 {$oldAmount} {$direction} 為 {$newAmount}（差額 {$absDiff}）";
-		}
-
-		if ($isAccountChanged) {
-			$oldName = Account::where('code', $oldAccount)->value('name') ?? $oldAccount;
-			$newName = Account::where('code', $newAccount)->value('name') ?? $newAccount;
-			$parts[] = "科目從「{$oldName}」改為「{$newName}」";
-		}
-
-		if ($isPaymentChanged) {
-			$oldName = Account::where('code', $oldPayment)->value('name') ?? $oldPayment;
-			$newName = Account::where('code', $newPayment)->value('name') ?? $newPayment;
-			$parts[] = "付款帳戶從「{$oldName}」改為「{$newName}」";
-		}
-
-		return empty($parts) ? '' : implode('，', $parts) . '。';
-	}
+    public function updateItemAccount($index, $accountCode)
+    {
+        $account = collect($this->availableAccounts)->firstWhere('code', $accountCode);
+        if ($account) {
+            $this->correctedItems[$index]['account_code'] = $accountCode;
+            $this->correctedItems[$index]['account_id'] = $account['id'];
+            $this->correctedItems[$index]['account_name'] = $account['name'];
+            
+            // 根據科目正常餘額方向自動設定借貸別
+            $normalSide = $account['normal_side'] ?? 'debit';
+            $this->correctedItems[$index]['entry_type'] = $normalSide;
+        }
+        $this->generateDiffEntries();
+    }
 
     /**
-     * [費曼註釋：產生「原始 + 更正」的完整預覽，讓使用者確認最終淨額正確]
+     * 新增一行科目
      */
-    protected function generateFullPreview(Account $paymentAccount, Account $targetAccount): void
+    public function addItem()
+    {
+        $this->correctedItems[] = [            
+            'id' => null,
+            'account_id' => null,
+            'account_code' => '',
+            'account_name' => '',
+            'entry_type' => 'debit',
+            'amount' => '0',            
+            'original_amount' => '0',
+        ];
+        $this->search('');
+        $this->generateDiffEntries();
+    }
+
+    /**
+     * 刪除一行科目
+     */
+    public function removeItem($index)
+    {
+        if (count($this->correctedItems) <= 2) {
+            $this->warning('至少需要保留兩個科目（借貸雙方）');
+            return;
+        }
+        
+        unset($this->correctedItems[$index]);
+        $this->correctedItems = array_values($this->correctedItems);
+        $this->generateDiffEntries();
+    }
+
+    /**
+     * 計算更正後的借貸總額
+     */
+    protected function calculateTotals(): array
+    {
+        $totalDebit = '0';
+        $totalCredit = '0';
+        
+        foreach ($this->correctedItems as $item) {
+            if (($item['entry_type'] === 'debit')) {
+                $totalDebit = bcadd($totalDebit, $item['amount'] ?? '0', 4);
+            } else {
+                $totalCredit = bcadd($totalCredit, $item['amount'] ?? '0', 4);
+            }
+        }
+        
+        return [$totalDebit, $totalCredit];
+    }
+
+    /**
+     * 核心邏輯：產生差額分錄（支援多科目）
+     */
+    protected function generateDiffEntries(): void
+    {
+        $this->diff_lines = [];
+        $this->generated_lines = [];
+        
+        // 建立原始科目的索引映射
+        $originalMap = [];
+        foreach ($this->originalItems as $item) {
+            $key = $item['account_code'] . '_' . $item['entry_type'];
+            $originalMap[$key] = $item;
+        }
+        
+        $hasAnyChange = false;
+        $correctionParts = [];
+        
+        // 比對每個更正項目與原始項目的差異
+        foreach ($this->correctedItems as $item) {
+            if (empty($item['account_code'])) {
+                continue; // 忽略尚未選取科目的空行
+            }
+
+            // 尋找相同科目在原分錄中是否存在
+            $originalItem = null;
+            foreach ($this->originalItems as $orig) {
+                if ($orig['account_code'] === $item['account_code']) {
+                    $originalItem = $orig;
+                    break;
+                }
+            }
+            
+            $originalAmount = $originalItem ? $originalItem['amount'] : '0';
+            $newAmount = $item['amount'] ?? '0';
+            
+            // 檢查科目與方向是否改變
+            $directionChanged = $originalItem ? ($originalItem['entry_type'] !== $item['entry_type']) : false;
+            $amountDiff = bcsub($newAmount, $originalAmount, 4);
+            $amountChanged = bccomp($amountDiff, '0', 4) !== 0;
+            
+            if (!$originalItem || $directionChanged || $amountChanged) {
+                $hasAnyChange = true;
+                
+                if ($amountChanged && $originalItem && !$directionChanged) {
+                    $direction = bccomp($amountDiff, '0', 4) > 0 ? '增加' : '減少';
+                    $absDiff = abs($amountDiff);
+                    $correctionParts[] = "{$item['account_name']} {$direction} {$absDiff}";
+                }
+                
+                // 如果原科目存在，但金額改變或方向變了，先全額沖銷原科目
+                if ($originalItem) {
+                    $this->diff_lines[] = [
+                        'account_id' => $originalItem['account_id'],
+                        'account_code' => $originalItem['account_code'],
+                        'account_name' => $originalItem['account_name'],
+                        'entry_type' => $originalItem['entry_type'] === 'debit' ? 'credit' : 'debit',
+                        'amount' => $originalAmount,
+                        'action' => 'cancel',
+                        'action_label' => '沖銷原分錄',
+                        'color' => 'error',
+                        'icon' => 'o-x-circle',
+                    ];
+                }
+                
+                // 建立新的更正後項目
+                if (bccomp($newAmount, '0', 4) !== 0) {
+                    $this->diff_lines[] = [
+                        'account_id' => $item['account_id'],
+                        'account_code' => $item['account_code'],
+                        'account_name' => str_replace(['【', '】'], '', explode('】', $item['account_name'])[1] ?? $item['account_name']),
+                        'entry_type' => $item['entry_type'],
+                        'amount' => $newAmount,
+                        'action' => 'confirm',
+                        'action_label' => $originalItem ? '修正為此金額' : '新增科目分錄',
+                        'color' => 'success',
+                        'icon' => 'o-check-circle',
+                    ];
+                }
+            }
+        }
+        
+        // 檢查是否有被刪除的原始項目
+        foreach ($this->originalItems as $originalItem) {
+            $found = false;
+            foreach ($this->correctedItems as $item) {
+                if ($item['account_code'] === $originalItem['account_code']) {
+                    $found = true;
+                    break;
+                }
+            }
+            if (!$found) {
+                $hasAnyChange = true;
+                $correctionParts[] = "刪除 {$originalItem['account_name']}";
+                $this->diff_lines[] = [
+                    'account_id' => $originalItem['account_id'],
+                    'account_code' => $originalItem['account_code'],
+                    'account_name' => $originalItem['account_name'],
+                    'entry_type' => $originalItem['entry_type'] === 'debit' ? 'credit' : 'debit',
+                    'amount' => $originalItem['amount'],
+                    'action' => 'cancel',
+                    'action_label' => '刪除原分錄',
+                    'color' => 'error',
+                    'icon' => 'o-x-circle',
+                ];
+            }
+        }
+        
+        // 驗證更正差額借貸平衡
+        $diffDebit = '0';
+        $diffCredit = '0';
+        foreach ($this->diff_lines as $line) {
+            if ($line['entry_type'] === 'debit') {
+                $diffDebit = bcadd($diffDebit, $line['amount'], 4);
+            } else {
+                $diffCredit = bcadd($diffCredit, $line['amount'], 4);
+            }
+        }
+        
+        if (bccomp($diffDebit, $diffCredit, 4) !== 0) {
+            $this->diff_lines = [];
+            $this->correction_summary = '⚠️ 更正後差額借貸不平衡，請確認各科目金額配置';
+            return;
+        }
+        
+        $this->correction_summary = $hasAnyChange 
+            ? '更正內容摘要：' . implode('、', $correctionParts) . '。'
+            : '分錄內容無任何變動';
+        
+        $this->generateFullPreview();
+    }
+
+    protected function generateFullPreview(): void
     {
         $this->generated_lines = [];
-		// 原始分錄（標記為原始）
-        foreach ($this->originalJournal->items as $item) {
+        
+        foreach ($this->originalItems as $item) {
             $this->generated_lines[] = [
-                'account_id' => $item->account_id,
-                'account_code' => $item->account->code,
-                'account_name' => $item->account->name,
-                'entry_type' => bccomp($item->debit, '0', 4) > 0 ? 'debit' : 'credit',
-                'amount' => bccomp($item->debit, '0', 4) > 0 ? $item->debit : $item->credit,
+                'account_code' => $item['account_code'],
+                'account_name' => $item['account_name'],
+                'entry_type' => $item['entry_type'],
+                'amount' => $item['amount'],
                 'is_original' => true,
             ];
         }
-
-        // 差額分錄（標記為更正）
+        
         foreach ($this->diff_lines as $line) {
             $this->generated_lines[] = array_merge($line, ['is_original' => false]);
         }
     }
 
     /**
-     * [費曼註釋：儲存更正分錄。核心原則：不碰原始分錄，只產生新的差額分錄]
+     * 儲存更正分錄
      */
     public function save(): void
     {
-        // 在執行 transaction 前再次檢查，如果已經更正過，則不允許再次儲存
-		$exists = Journal::where('corrects_journal_id', $this->originalJournalId)->exists();
-		if ($exists) {
-			$this->error('此分錄已經存在更正記錄，請先刪除舊的更正分錄。');
-			return;
-		}
-		
-		$this->validate([
-            'entry_date' => 'required|date',
-            'correction_reason' => 'required|string|min:5|max:500',
-            'amount' => 'required|numeric|min:0',
-            'selected_account' => 'required|exists:accounts,code',
-            'payment_method' => 'required|exists:accounts,code',
-        ]);
-
-        if (empty($this->diff_lines)) {
-            $this->error('金額無變更，無需更正');
+        $exists = Journal::where('corrects_journal_id', $this->originalJournalId)->exists();
+        if ($exists) {
+            $this->error('此分錄已經存在更正記錄');
             return;
         }
-		
-		 // 驗證更正後的科目規則
-		$targetAccount = Account::where('code', $this->selected_account)->first();
-		if ($targetAccount && in_array($targetAccount->type, ['cost', 'profit'])) {
-			$isAmountChanged = bccomp($this->amount, $this->originalAmount, 4) !== 0;
-			$isAccountChanged = $targetAccount->code !== $this->originalJournal->items->first()->account->code;
         
-			if ($isAmountChanged || $isAccountChanged) {
-				try {
-					$targetAccount->validateForEventType($this->event_type, [
-						'amount' => (float)$this->amount,
-					]);
-				} catch (\RuntimeException $e) {
-					$this->error($e->getMessage());
-					return;
-				}
+        $this->validate([
+            'entry_date' => 'required|date',
+            'correction_reason' => 'required|string|min:5|max:500',
+        ]);
+        
+        foreach ($this->correctedItems as $index => $item) {
+            if (empty($item['account_code'])) {
+                $this->error("第 " . ($index + 1) . " 行未選擇有效會計科目");
+                return;
+            }
+			if (bccomp($item['amount'], '0', 4) == 0) {
+				$this->error("第 " . ($index + 1) . " 行的金額不能為 0");
+				return;
 			}
-		}
-
+        }
+        
+        list($totalDebit, $totalCredit) = $this->calculateTotals();
+        if (bccomp($totalDebit, $totalCredit, 4) !== 0) {
+            $this->error('更正後總體借貸不平衡：借方 = ' . $totalDebit . '，貸方 = ' . $totalCredit);
+            return;
+        }
+        
+        if (empty($this->diff_lines)) {
+            $this->error('無任何變更，無需產生更正憑證');
+            return;
+        }
+        
         try {
             DB::transaction(function () {
-                // [費曼註釋：鎖定原始分錄，防止併發重複更正]
                 $original = Journal::lockForUpdate()->findOrFail($this->originalJournalId);
-
+                
                 if ($original->status !== 'posted') {
-                    throw new \RuntimeException('原始分錄狀態已變更');
+                    throw new \RuntimeException('原始分錄狀態已變更，非已過帳狀態');
                 }
-
-                // [費曼註釋：計算總差額借貸，確保平衡]
-                $totalDebit = '0';
-                $totalCredit = '0';
-                foreach ($this->diff_lines as $line) {
-                    if ($line['entry_type'] === 'debit') {
-                        $totalDebit = bcadd($totalDebit, $line['amount'], 4);
-                    } else {
-                        $totalCredit = bcadd($totalCredit, $line['amount'], 4);
-                    }
-                }
-
-                if (bccomp($totalDebit, $totalCredit, 4) !== 0) {
-                    throw new \RuntimeException('差額分錄借貸不平衡');
-                }
-
-                // 建立更正分錄
+                
                 $correction = Journal::create([
                     'shop_id' => $original->shop_id,
                     'currency' => $original->currency,
-                    'exchange_rate' => $original->exchange_rate, // [費曼註釋：繼承原始匯率，不可使用即期匯率]
+                    'exchange_rate' => $original->exchange_rate,
                     'entry_date' => $this->entry_date,
                     'description' => $this->description,
                     'reference_type' => 'correct',
                     'corrects_journal_id' => $original->id,
                     'correction_reason' => $this->correction_reason,
-                    'status' => 'posted', // [費曼註釋：更正分錄直接過帳，不可再修改]
+                    'status' => 'posted',
                     'created_by' => auth()->user()?->name ?? 'System',
                 ]);
-
+                
                 foreach ($this->diff_lines as $line) {
                     JournalItem::create([
                         'journal_id' => $correction->id,
@@ -432,25 +460,25 @@ class JournalCorrect extends Component
                         'credit' => $line['entry_type'] === 'credit' ? $line['amount'] : '0',
                         'currency' => $original->currency,
                         'exchange_rate' => $original->exchange_rate,
+                        'shop_id' => $original->shop_id,
                     ]);
                 }
-
-                Log::info('Journal corrected', [
+                
+                Log::info('Journal corrected successfully', [
                     'original_id' => $original->id,
                     'correction_id' => $correction->id,
-                    'reason' => $this->correction_reason,
                 ]);
-            }, 3);
-
-            $this->success('✅ 更正分錄已建立');
+            });
+            
+            $this->success('✅ 更正分錄已成功建立並過帳');
             $this->redirect(route('accountings.journals.index'));
-
+            
         } catch (\Throwable $e) {
             Log::error('JournalCorrect save failed', [
                 'error' => $e->getMessage(),
                 'original_id' => $this->originalJournalId,
             ]);
-            $this->error('更正失敗：' . $e->getMessage());
+            $this->error('更正程序失敗：' . $e->getMessage());
         }
     }
 

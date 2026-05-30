@@ -144,6 +144,7 @@ class AccountingService
             'sale' => '銷售出貨',
 			'sale_revenue' => '銷售收入確認',
             'sale_cost' => '銷售成本結轉',
+			'sale_fee' => '銷售費用結轉',
             'purchase_return' => '採購退回',
             'sale_return' => '銷售退回',
             'conversion' => '拆裝組合',
@@ -375,11 +376,23 @@ class AccountingService
 	{
 		return DB::transaction(function () use ($source, $rules, $eventType) {
 			
+			// 📍 LOG 1: 開始處理
+            Log::info('===== 開始產生分錄 =====', [
+                'eventType' => $eventType,
+                'source_type' => get_class($source),
+                'source_id' => $source->id,
+                'rules_count' => count($rules),
+            ]);
+			
 			// 1. 原始解析：依據設定的規則線條產生初始分錄陣列
 			$entries = $this->buildEntriesFromRules($source, $rules);
+			// 📍 LOG 2: 對沖前的分錄
+            Log::info('📋 對沖前分錄明細:', $this->formatEntries($entries));
 
 			// 🎯 這裡就是核心修正點！在驗證平衡前，先執行同科目借貸自動對沖
 			$entries = $this->netSameAccountEntries($entries);
+			// 📍 LOG 3: 對沖後分錄
+            Log::info('📋 對沖後分錄明細:', $this->formatEntries($entries));
 
 			// 2. 嚴謹驗證：此時同一個會計科目絕對不會再同時出現借與貸
 			$this->validateBalance($entries);
@@ -389,11 +402,33 @@ class AccountingService
 
 			// 4. 寫入傳票細項
 			$this->saveJournalItems($journal, $entries);
+			
+			Log::info('✅ 分錄產生成功', ['journal_id' => $journal->id]);
 
 			return $journal;
 		});
 	}
 
+	/**
+     * 格式化分錄供 log 輸出
+     */
+    private function formatEntries(array $entries): array
+    {
+        $result = [];
+        foreach ($entries as $i => $entry) {
+            $account = Account::find($entry['account_id']);
+            $result[] = [
+                'index' => $i,
+                'account_code' => $account->code ?? 'N/A',
+                'account_name' => $account->name ?? 'N/A',
+                'debit' => $entry['debit'] ?? '0',
+                'credit' => $entry['credit'] ?? '0',
+                'net' => bcsub($entry['debit'] ?? '0', $entry['credit'] ?? '0', 4),
+            ];
+        }
+        return $result;
+    }
+	
     /**
 	 * 從規則陣列產生分錄明細
 	 * 
@@ -401,48 +436,61 @@ class AccountingService
 	 * @param array $rules 規則明細陣列
 	 * @return array 分錄明細
 	 */
-	protected function buildEntriesFromRules(Model $source, array $rules): array
-	{
-		$entries = [];
-
-		foreach ($rules as $line) {
-			// ==============================================
-			// 1. 解析金額來源
-			// ==============================================
-			$amount = $this->resolveAmountFromRule($source, $line);
-			
-			// 金額為 0 則跳過
-			if (bccomp($amount, '0', 4) === 0) {
-				continue;
-			}
-			
-			// ==============================================
-			// 2. 套用比例
-			// ==============================================
-			$ratio = (string) ($line['ratio'] ?? '1.0000');
-			if (bccomp($ratio, '1.0000', 4) !== 0) {
-				$amount = bcmul($amount, $ratio, 4);
-			}
-			
-			// ==============================================
-			// 3. 解析會計科目
-			// ==============================================
-			$accountId = $this->resolveAccountIdFromRule($source, $line);
-			
-			// ==============================================
-			// 4. 建立分錄
-			// ==============================================
-			$isDebit = ($line['entry_type'] === 'debit');
-			
-			$entries[] = [
-				'account_id' => $accountId,
-				'debit'      => $isDebit ? $amount : '0.0000',
-				'credit'     => !$isDebit ? $amount : '0.0000',
-			];
-		}
-		
-		return $entries;
-	}
+    protected function buildEntriesFromRules(Model $source, array $rules): array
+    {
+        $entries = [];
+        
+        foreach ($rules as $index => $line) {
+            // 解析金額
+            $amount = $this->resolveAmountFromRule($source, $line);
+            
+            // 📍 LOG 6: 每條規則的解析過程
+            Log::debug('🔍 解析規則:', [
+                'rule_index' => $index,
+                'account_code' => $line['account_code'] ?? 'N/A',
+                'entry_type' => $line['entry_type'] ?? 'N/A',
+                'amount_source' => $line['amount_source'] ?? 'N/A',
+                'ratio' => $line['ratio'] ?? 1,
+                'raw_amount' => $amount,
+            ]);
+            
+            // 金額為 0 則跳過
+            if (bccomp($amount, '0', 4) === 0) {
+                Log::debug('⏭️ 金額為0，跳過此規則');
+                continue;
+            }
+            
+            // 套用比例
+            $ratio = (string) ($line['ratio'] ?? '1.0000');
+            if (bccomp($ratio, '1.0000', 4) !== 0) {
+                $amount = bcmul($amount, $ratio, 4);
+                Log::debug('📐 套用比例後:', ['amount' => $amount, 'ratio' => $ratio]);
+            }
+            
+            // 解析會計科目
+            $accountId = $this->resolveAccountIdFromRule($source, $line);
+            
+            // 建立分錄
+            $isDebit = ($line['entry_type'] === 'debit');
+            $entry = [
+                'account_id' => $accountId,
+                'debit' => $isDebit ? $amount : '0.0000',
+                'credit' => !$isDebit ? $amount : '0.0000',
+            ];
+            
+            $entries[] = $entry;
+            
+            // 📍 LOG 7: 最終產生的分錄行
+            $account = Account::find($accountId);
+            Log::debug('✅ 產生分錄行:', [
+                'account' => ($account->code ?? 'N/A') . ' ' . ($account->name ?? 'N/A'),
+                'debit' => $entry['debit'],
+                'credit' => $entry['credit'],
+            ]);
+        }
+        
+        return $entries;
+    }
 
 	/**
 	 * 解析單一規則行的金額
@@ -959,28 +1007,43 @@ class AccountingService
     {
         $totalDebit = '0';
         $totalCredit = '0';
-
+        
+        // 📍 LOG 4: 計算借貸總和
         foreach ($entries as $entry) {
-            try {
-                $debit = $entry['debit'] ?? '0';
-                $credit = $entry['credit'] ?? '0';
-
-                // [費曼註釋：防呆——同一科目不可同時有借有貸]
-                if (bccomp($debit, '0', 4) > 0 && bccomp($credit, '0', 4) > 0) {
-                    throw new \InvalidArgumentException('單一科目不可同時借貸');
-                }
-
-                $totalDebit = bcadd($totalDebit, $debit, 4);
-                $totalCredit = bcadd($totalCredit, $credit, 4);
-            } catch (\Throwable $e) {
-                throw new \RuntimeException('金額運算錯誤：' . $e->getMessage());
+            $debit = $entry['debit'] ?? '0';
+            $credit = $entry['credit'] ?? '0';
+            
+            // 檢查同一科目同時借貸
+            if (bccomp($debit, '0', 4) > 0 && bccomp($credit, '0', 4) > 0) {
+                $account = Account::find($entry['account_id']);
+                throw new \RuntimeException(
+                    "❌ 科目 {$account->code} {$account->name} 同時有借貸！借={$debit} 貸={$credit}"
+                );
             }
+            
+            $totalDebit = bcadd($totalDebit, $debit, 4);
+            $totalCredit = bcadd($totalCredit, $credit, 4);
         }
-
+        
+        // 📍 LOG 5: 借貸總和
+        Log::info('💰 借貸總和計算:', [
+            'total_debit' => $totalDebit,
+            'total_credit' => $totalCredit,
+            'difference' => bcsub($totalDebit, $totalCredit, 4),
+        ]);
+        
+        // 如果不平衡，拋出詳細錯誤
         if (bccomp($totalDebit, $totalCredit, 4) !== 0) {
-            throw new \RuntimeException(
-                "借貸不平衡：借方 {$totalDebit} ≠ 貸方 {$totalCredit}"
+            $errorMsg = sprintf(
+                "\n❌ 借貸不平衡！\n借方總額: %s\n貸方總額: %s\n差額: %s\n\n分錄明細:\n%s",
+                $totalDebit,
+                $totalCredit,
+                bcsub($totalDebit, $totalCredit, 4),
+                json_encode($this->formatEntries($entries), JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)
             );
+            
+            Log::error($errorMsg);
+            throw new \RuntimeException($errorMsg);
         }
     }
 	

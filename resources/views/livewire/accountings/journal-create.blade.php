@@ -1,10 +1,9 @@
-{{-- resources/views/livewire/accountings/journal-create.blade.php --}}
-{{-- [費曼註釋：此視圖只處理 draft 的新增與修改。已過帳分錄會被導向 journal-correct] --}}
-
+{{-- 傳票（台灣：收入傳票、支出傳票、轉帳傳票）= 
+	 記帳憑證（大陸：或稱「記帳憑單」、「分錄憑單」） --}}
 <div>
     <x-header 
-        :title="$isEdit ? '✏️ 修改草稿憑證' : '➕ 新增日記帳草稿'" 
-        subtitle="歷史記憶 + 會計規則雙引擎匹配" 
+        :title="$isEdit ? '✏️ 修改草稿傳票' : '➕ 新增手動傳票'" 
+        subtitle="手動輸入多科目分錄，系統自動驗證借貸平衡" 
         separator 
     >
         <x-slot:actions>
@@ -32,7 +31,7 @@
     </x-header>
 
     <x-form wire:submit="save" id="journalForm">
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-4">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
             
             <div class="lg:col-span-2">
                 <x-datetime 
@@ -45,115 +44,121 @@
 
             <div class="lg:col-span-2">
                 <x-input 
-                    label="1️⃣ 摘要" 
-                    wire:model.live="description"
-                    placeholder="例如：POS機無法開機送修、中午請客戶吃飯..." 
+                    label="摘要" 
+                    wire:model="description"
+                    placeholder="例如：支付平台手續費、銷售商品收入..." 
                     icon="o-chat-bubble-left" 
-                    hint="系統會自動比對歷史紀錄與基礎規則" 
                     required 
                 />
             </div>
 
-            <div class="lg:col-span-2">
-                <x-select 
-                    label="2️⃣ 系統智能匹配科目 (可手動修改 | 自動匹配不一定正確，需確認。)" 
-                    wire:model.live="selected_account" 
-                    :options="$accountOptions" 
-                    option-label="name" 
-                    option-value="id" 
-                    placeholder="請輸入上方摘要，或手動選擇科目..." 
-                    searchable 
-                    icon="o-check-circle" 
-                    :class="!empty($selected_account) ? 'text-success font-bold' : ''" 
-                />
-				<div wire:loading wire:target="description" class="text-xs text-warning mt-1 items-center flex">
-					<x-loading class="w-3 h-3 mr-1" /> 正在分析摘要並匹配會計科目...
-				</div>
-                {{-- 顯示匹配結果 --}}
-    @if(!empty($selected_account) && !empty($description))
-        <div class="text-xs text-success mt-1 flex items-center">
-            <x-icon name="o-sparkles" class="w-3 h-3 mr-1" />
-            匹配成功：{{ $currentAccountName }}
-        </div>
-    @endif
-            </div>
-
-            <x-input 
-                label="3️⃣ 金額 (TWD)" 
-                wire:model.live="amount" 
-                type="number" 
-                step="0.0001" 
-                icon="o-currency-dollar" 
-                placeholder="0.0000" 
-                :disabled="empty($selected_account)" 
-                :hint="empty($selected_account) ? '請先確認科目' : '輸入金額以生成分錄'" 
-                required 
-            />
-
-            <x-select 
-                label="4️⃣ 資金帳戶" 
-                wire:model.live="payment_method" 
-                :options="$paymentOptions" 
-                option-label="name" 
-                option-value="id" 
-                placeholder="-- 請先確認金額 --" 
-                :disabled="empty($amount) || bccomp($amount, '0', 4) <= 0" 
-                searchable 
-                required 
-            />
-        </div>
-
-        {{-- 分錄預覽 --}}
-        @if(!empty($payment_method) && count($generated_lines) > 0)
-            <div class="mt-8 p-5 bg-base-200 rounded-xl border border-primary/20 shadow-sm">
-                <div class="font-bold mb-3 text-primary flex items-center text-lg">
-                    <span class="mr-2">✅</span> 分錄預覽確認
-                </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div class="border-r border-base-300 pr-4">
-                        <div class="text-success font-bold mb-2 text-sm uppercase tracking-wide">借方 (Dr)</div>
-                        @foreach($generated_lines as $line)
-                            @if($line['entry_type'] === 'debit')
-                                <div class="text-sm py-2 px-3 bg-base-100 rounded mb-2 flex justify-between">
-                                    <span>{{ $line['account_name'] }} <span class="text-xs text-gray-400">({{ $line['account_id'] }})</span></span>
-                                    <span class="font-bold font-mono">{{ number_format($line['amount'], 4) }}</span>
-                                </div>
-                            @endif
-                        @endforeach
-                    </div>
-                    
-                    <div>
-                        <div class="text-error font-bold mb-2 text-sm uppercase tracking-wide">貸方 (Cr)</div>
-                        @foreach($generated_lines as $line)
-                            @if($line['entry_type'] === 'credit')
-                                <div class="text-sm py-2 px-3 bg-base-100 rounded mb-2 flex justify-between">
-                                    <span>{{ $line['account_name'] }} <span class="text-xs text-gray-400">({{ $line['account_id'] }})</span></span>
-                                    <span class="font-bold font-mono">{{ number_format($line['amount'], 4) }}</span>
-                                </div>
-                            @endif
-                        @endforeach
-                    </div>
+            {{-- 🆕 多科目分錄表格（參考 journal-correct.blade.php） --}}
+            <div class="lg:col-span-2 mt-4">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="font-bold text-base">📝 分錄明細</div>
+                    <x-button 
+                        label="➕ 新增科目" 
+                        icon="o-plus" 
+                        wire:click="addEntry" 
+                        class="btn-sm btn-ghost" 
+                    />
                 </div>
                 
-                {{-- 借貸平衡驗證 --}}
-                @php
-                    $totalDebit = '0';
-                    $totalCredit = '0';
-                    foreach($generated_lines as $line) {
-                        if($line['entry_type'] === 'debit') {
-                            $totalDebit = bcadd($totalDebit, $line['amount'], 4);
-                        } else {
-                            $totalCredit = bcadd($totalCredit, $line['amount'], 4);
-                        }
-                    }
-                    $isBalanced = bccomp($totalDebit, $totalCredit, 4) === 0;
-                @endphp
+                <div class="overflow-x-auto">
+                    <table class="table table-zebra">
+                        <thead>
+                            <tr class="text-sm">
+                                <th class="w-24">借/貸</th>
+                                <th>會計科目</th>
+                                <th class="w-48 text-right">金額</th>
+                                <th class="w-16 text-center">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach($entries as $index => $entry)
+                                <tr>
+                                    <td>
+                                        <x-select 
+                                            wire:model="entries.{{ $index }}.entry_type" 
+                                            wire:change="updateEntryType({{ $index }}, $event.target.value)"
+                                            :options="[
+                                                ['id' => 'debit', 'name' => '借方'],
+                                                ['id' => 'credit', 'name' => '貸方'],
+                                            ]"
+                                            option-label="name"
+                                            option-value="id"
+                                            class="select-sm"
+                                        />
+                                    </td>
+                                    <td>
+                                        <div>
+											<x-choices 
+												wire:model.live="entries.{{ $index }}.account_code"
+												:options="$accountSearchResults"
+												option-label="name"
+												option-value="id"
+												searchable
+												placeholder="🔍 輸入科目代碼或名稱..."
+												class="w-full"
+												single
+												:debounce="300"
+												@search="search($event.detail)"
+											/>
+										</div>
+                                    </td>
+                                    <td>
+                                        <x-input 
+                                            wire:model.live="entries.{{ $index }}.amount"
+                                            type="number" 
+                                            step="0.0001" 
+                                            placeholder="0.0000"                                            
+											class="input-sm text-right pr-3"
+                                        />
+                                    </td>
+                                    <td class="text-center">
+                                        <x-button 
+                                            icon="o-trash" 
+                                            class="btn-sm btn-ghost text-error"
+                                            wire:click="removeEntry({{ $index }})"
+                                        />
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                        <tfoot class="bg-base-300">
+                            @php
+                                $totalDebit = 0;
+                                $totalCredit = 0;
+                                foreach($entries as $entry) {
+                                    $amt = (float)($entry['amount'] ?? 0);
+                                    if($amt <= 0) continue;
+                                    if($entry['entry_type'] === 'debit') {
+                                        $totalDebit += $amt;
+                                    } else {
+                                        $totalCredit += $amt;
+                                    }
+                                }
+                                $isBalanced = abs($totalDebit - $totalCredit) < 0.0001;
+                            @endphp
+                            <tr class="font-bold">
+                                <td colspan="2" class="text-right">合計：</td>
+                                <td class="text-right">
+                                    <span class="text-success">借 {{ number_format($totalDebit, 4) }}</span>
+                                    <span class="text-error"> / 貸 {{ number_format($totalCredit, 4) }}</span>
+                                    @if(!$isBalanced)
+                                        <span class="badge badge-error badge-sm ml-2">不平衡！</span>
+                                    @endif
+                                </td>
+                                <td></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
                 
-                <div class="mt-4 text-center {{ $isBalanced ? 'text-success' : 'text-error' }} font-bold">
-                    借方合計：{{ number_format($totalDebit, 4) }} | 貸方合計：{{ number_format($totalCredit, 4) }}
-                    {{ $isBalanced ? '✓ 借貸平衡' : '✗ 借貸不平衡' }}
+                <div class="text-xs text-gray-400 mt-2">
+                    💡 提示：金額為 0 的行會自動忽略，不會儲存。
                 </div>
             </div>
-        @endif
+        </div>
     </x-form>
 </div>
