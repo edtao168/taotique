@@ -180,7 +180,7 @@
 						<div class="flex items-center gap-2">
 							<span class="text-amber-600 font-bold">-</span>
 							<x-input 
-								wire:model.live.debounce.150ms="form.seller_discount"
+								wire:model.blur="form.seller_discount"
 								class="input-sm text-right font-mono bg-white w-32"
 
 								inputmode="decimal"
