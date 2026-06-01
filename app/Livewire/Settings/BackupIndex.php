@@ -68,7 +68,7 @@ class BackupIndex extends Component
             ->toArray();
     }
 
-    public function download($fileName): StreamedResponse
+    public function download($filename)
     {
         $disk = Storage::disk('local');
 		$path = "taotique-backup/{$filename}";
