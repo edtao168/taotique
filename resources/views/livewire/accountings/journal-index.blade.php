@@ -11,7 +11,8 @@
         <x-card>
             {{-- 表頭 --}}
             <div class="grid grid-cols-12 gap-4 px-6 py-3 text-xs text-gray-500 border-b border-base-300">
-                <div class="col-span-2 text-center">日期 / 狀態</div>
+				 <div class="col-span-1 text-center">ID</div>
+				<div class="col-span-1 text-center">日期 / 狀態</div>
                 <div class="col-span-6">摘要 / 分錄明細</div>
 				<div class="col-span-2 text-right">借方</div>
                 <div class="col-span-2 text-right">貸方</div>
@@ -36,8 +37,12 @@
                     class="grid grid-cols-12 gap-4 px-6 py-4 border-b border-base-200 last:border-0 hover:bg-base-200 transition-colors cursor-pointer"
                     wire:click="openDrawer({{ $journal->id }})"
                 >                    
+					{{-- 憑證編號 --}}
+					<div class="col-span-1 text-center">
+						<div class="font-mono text-sm font-bold text-gray-600">#{{ $journal->id }}</div>
+					</div>
 					{{-- 日期 + 狀態 --}}
-                    <div class="col-span-2 text-center">
+                    <div class="col-span-1 text-center">
                         <div class="font-mono text-sm">{{ $journal->entry_date->format('Y-m-d') }}</div>
                         <x-badge :value="$jStatusLabel" class="{{ $jStatusClass }} mt-1" />
 						{{-- 分店名稱顯示 --}}
@@ -46,7 +51,7 @@
 								{{ Str::limit($journal->shop->name ?? $journal->shop->shop_name, 10) }}
 							</div>
 						@endif
-						{{-- ✅ 新增：更正標記 --}}
+						{{-- 更正標記 --}}
 						@if($journal->is_corrected && $journal->reference_type !== 'correct')
 							<div class="mt-1">
 								<x-badge value="已更正" class="badge-warning badge-soft" />
@@ -66,10 +71,9 @@
 					
                     {{-- 摘要 + 分錄明細（含借貸方合計） --}}
                     <div class="col-span-10">
-                        <div class="col-span-6 font-bold text-sm mb-3 truncate" title="{{ $journal->description }}">
+                        <div class="font-bold text-sm mb-3 truncate" title="{{ $journal->description }}">
                             {{ $journal->description }}
-                        </div>
-                        
+                        </div>                        
                         
                         {{-- 分錄明細資料 --}}
                         <div class="space-y-1 pl-4">
