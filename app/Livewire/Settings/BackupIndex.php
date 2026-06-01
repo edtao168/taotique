@@ -70,14 +70,15 @@ class BackupIndex extends Component
 
     public function download($fileName): StreamedResponse
     {
-        $path = $this->storagePath .'/'. $fileName;
-
-        if (!Storage::disk($this->disk)->exists($path)) {
-            $this->error('下載失敗', '找不到檔案：' . $path);
-            abort(404);
-        }
-
-        return Storage::disk($this->disk)->download($path, $fileName);
+        $disk = Storage::disk('local');
+		$path = "taotique-backup/{$filename}";
+		
+		if (!$disk->exists($path)) {
+			abort(404);
+		}
+		
+		// Laravel 原生的流式下载——内存占用极低！
+		return $disk->download($path, $filename);
     }
 
     public function render()
