@@ -93,7 +93,6 @@ class Sale extends Model
         };
         
         $rule = AccountingRule::where('event_type', $eventTypeKey)
-            ->where('shop_id', $this->shop_id)
             ->where('is_active', true)
             ->with(['lines' => fn($q) => $q->orderBy('sort_order')])
             ->first();
