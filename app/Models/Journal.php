@@ -40,23 +40,6 @@ class Journal extends Model
         'exchange_rate' => 'decimal:4',
     ];
 
-    // ==================== 關聯 ====================
-    
-    public function items(): HasMany
-    {
-        return $this->hasMany(JournalItem::class);
-    }
-
-    public function originalJournal(): BelongsTo
-    {
-        return $this->belongsTo(self::class, 'corrects_journal_id');
-    }
-
-    public function corrections(): HasMany
-    {
-        return $this->hasMany(self::class, 'corrects_journal_id');
-    }
-
     /**
      * 🎯 前端調用點一：如果您的 Blade 寫的是 $journal->reference
      * 自動偵測：新單據走 source 欄位，舊單據走 reference 欄位
@@ -388,5 +371,30 @@ class Journal extends Model
         ];
 
         return $map[$alias] ?? parent::getActualClassNameForMorph($alias);
+    }
+
+    // ==================== 關聯 ====================
+    
+    public function items(): HasMany
+    {
+        return $this->hasMany(JournalItem::class);
+    }
+
+    public function originalJournal(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'corrects_journal_id');
+    }
+
+    public function corrections(): HasMany
+    {
+        return $this->hasMany(self::class, 'corrects_journal_id');
+    }
+	
+	/**
+     * 分店關聯
+     */
+    public function shop(): BelongsTo
+    {
+        return $this->belongsTo(Shop::class, 'shop_id');
     }
 }

@@ -81,6 +81,35 @@ class JournalCorrect extends Component
 
         $this->originalItems = [];
         $this->correctedItems = [];
+		
+		// 🔧 處理空分錄情況
+		if ($this->originalJournal->items->isEmpty()) {
+			// 原始無分錄，允許直接新增科目
+			$this->warning('原始憑證無分錄項目，請直接新增更正分錄', 5);
+			
+			// 初始化兩行空白的更正項目（借方/貸方各一）
+			$this->correctedItems = [
+				[
+					'id' => null,
+					'account_id' => null,
+					'account_code' => '',
+					'account_name' => '',
+					'entry_type' => 'debit',
+					'amount' => '0',
+					'original_amount' => '0',
+				],
+				[
+					'id' => null,
+					'account_id' => null,
+					'account_code' => '',
+					'account_name' => '',
+					'entry_type' => 'credit',
+					'amount' => '0',
+					'original_amount' => '0',
+				],
+			];
+			return;
+		}
         
         foreach ($this->originalJournal->items as $item) {
             $isDebit = bccomp($item->debit, '0', 4) > 0;
@@ -115,6 +144,7 @@ class JournalCorrect extends Component
     {
         $accounts = Account::where('is_active', true)
             ->whereRaw('LENGTH(code) <= 6')
+			->orderBy('code')
             ->get();
 
         $this->availableAccounts = $accounts->map(fn ($account) => [
@@ -249,6 +279,33 @@ class JournalCorrect extends Component
     {
         $this->diff_lines = [];
         $this->generated_lines = [];
+		
+		// 🔧 處理無原始項目的情況
+		if (empty($this->originalItems)) {
+			// 原始無分錄，所有更正項目都視為新增
+			foreach ($this->correctedItems as $item) {
+				if (empty($item['account_code']) || bccomp($item['amount'] ?? '0', '0', 4) == 0) {
+					continue;
+				}
+				
+				$this->diff_lines[] = [
+					'account_id' => $item['account_id'],
+					'account_code' => $item['account_code'],
+					'account_name' => str_replace(['【', '】'], '', explode('】', $item['account_name'])[1] ?? $item['account_name']),
+					'entry_type' => $item['entry_type'],
+					'amount' => $item['amount'],
+					'action' => 'confirm',
+					'action_label' => '新增科目分錄',
+					'color' => 'success',
+					'icon' => 'o-check-circle',
+				];
+			}
+			
+			$this->correction_summary = !empty($this->diff_lines) 
+				? '原始憑證無分錄，將新增更正分錄。'
+				: '請至少新增一筆借方與貸方科目';
+			return;
+		}
         
         // 建立原始科目的索引映射
         $originalMap = [];

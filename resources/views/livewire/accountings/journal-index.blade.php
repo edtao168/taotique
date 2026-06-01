@@ -35,11 +35,17 @@
                 <div 
                     class="grid grid-cols-12 gap-4 px-6 py-4 border-b border-base-200 last:border-0 hover:bg-base-200 transition-colors cursor-pointer"
                     wire:click="openDrawer({{ $journal->id }})"
-                >
-                    {{-- 日期 + 狀態 --}}
+                >                    
+					{{-- 日期 + 狀態 --}}
                     <div class="col-span-2 text-center">
                         <div class="font-mono text-sm">{{ $journal->entry_date->format('Y-m-d') }}</div>
                         <x-badge :value="$jStatusLabel" class="{{ $jStatusClass }} mt-1" />
+						{{-- 分店名稱顯示 --}}
+						@if($journal->shop)
+							<div class="text-xs text-gray-400 mt-1 truncate" title="{{ $journal->shop->name ?? $journal->shop->shop_name }}">
+								{{ Str::limit($journal->shop->name ?? $journal->shop->shop_name, 10) }}
+							</div>
+						@endif
 						{{-- ✅ 新增：更正標記 --}}
 						@if($journal->is_corrected && $journal->reference_type !== 'correct')
 							<div class="mt-1">
@@ -56,8 +62,8 @@
 								<x-badge value="更正分錄" class="badge-error badge-soft" />
 							</div>
 						@endif
-                    </div>
-                    
+                    </div>                    
+					
                     {{-- 摘要 + 分錄明細（含借貸方合計） --}}
                     <div class="col-span-10">
                         <div class="col-span-6 font-bold text-sm mb-3 truncate" title="{{ $journal->description }}">

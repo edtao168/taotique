@@ -22,12 +22,21 @@
 
         <div class="bg-base-200 p-4 rounded-lg space-y-2 text-sm">
             <div class="flex justify-between">
-                <span class="text-gray-500">憑證編號</span>
+                <span class="text-gray-500">傳票編號</span>
                 <span class="font-mono font-bold">#{{ $journal->id }}</span>
             </div>
             <div class="flex justify-between">
                 <span class="text-gray-500">交易日</span>
                 <span class="font-mono">{{ $journal->entry_date->format('Y-m-d') }}</span>
+            </div>			
+            <div class="font-medium">
+				<span class="text-gray-500">🏪 分店</span>
+                @if($journal->shop)
+                    {{ $journal->shop->name ?? $journal->shop->shop_name ?? '未設定' }}
+                    <span class="text-xs text-gray-400">(ID: {{ $journal->shop_id }})</span>
+                @else
+                    <span class="text-gray-400">未關聯分店</span>
+                @endif
             </div>
             <div class="flex justify-between">
                 <span class="text-gray-500">幣別 / 匯率</span>

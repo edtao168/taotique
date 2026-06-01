@@ -134,11 +134,11 @@
                                 </td>
                                 <td class="w-48">
                                     <x-input 
-                                        wire:model="correctedItems.{{ $index }}.amount" 
+                                        wire:model.blur="correctedItems.{{ $index }}.amount" 
                                         type="number" 
                                         step="0.0001" 
                                         placeholder="0.0000"
-                                        class="input-sm text-right"
+                                        class="input-sm text-right pr-3"
                                     />
                                 </td>
                                 <td class="text-center w-16">

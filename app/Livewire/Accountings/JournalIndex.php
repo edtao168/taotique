@@ -26,7 +26,7 @@ class JournalIndex extends Component
     public function openDrawer(int $journalId): void
     {
         $this->selectedJournalId = $journalId;
-        $this->selectedJournal = Journal::with(['items.account'])
+        $this->selectedJournal = Journal::with(['items.account', 'shop'])
             ->findOrFail($journalId);
 			
 		$this->showDrawer = true;
@@ -164,7 +164,7 @@ class JournalIndex extends Component
     public function render()
     {
         $query = Journal::query()
-            ->with(['items.account']) 
+            ->with(['items.account', 'shop']) 
             ->when($this->search, fn($q) => $q->where('description', 'like', "%{$this->search}%"))
             ->when($this->status, fn($q) => $q->where('status', $this->status))
             ->orderBy('entry_date', 'desc')
