@@ -143,23 +143,31 @@ class Purchase extends Model
      */
     public function getAccountingRules(string $eventType): array
     {
-        return match($eventType) {
-            'purchase' => [
-                [
-                    'account_code'  => '1405',           // 庫存商品
-                    'amount_source' => 'total_twd',      // 本幣總成本
-                    'side'          => 'debit',
-                    'note'          => '採購入庫-庫存增加',
-                ],
-                [
-                    'account_code'  => '2202',           // 應付帳款
-                    'amount_source' => 'total_twd',
-                    'side'          => 'credit',
-                    'note'          => '採購入庫-應付增加',
-                ],
-            ],
-            default => throw new \InvalidArgumentException("Purchase 不支援事件類型：{$eventType}"),
-        };
+        / 採購只有 inbound 事件需要動態科目
+		if ($eventType === 'purchase_inbound') {
+			$eventTypeKey = 'purchase_inbound';  // 固定，不像 sale 有多種
+		} else {
+			$eventTypeKey = $eventType;
+		}
+		
+		$rule = AccountingRule::where('event_type', $eventTypeKey)
+			->where('is_active', true)
+			->with('lines')
+			->first();
+		
+		if (!$rule) {
+			throw new \RuntimeException("找不到會計規則：{$eventTypeKey}");
+		}
+		
+		// 動態替換借方科目
+		$lines = $rule->lines->toArray();
+		foreach ($lines as &$line) {
+			if ($line['account_code'] === 'DYNAMIC') {
+				$line['account_code'] = $this->getInventoryAccountCode();
+			}
+		}
+		
+		return $lines;
     }
 
     /**
@@ -193,12 +201,27 @@ class Purchase extends Model
 	/**
      * 取得庫存科目ID（可依供應商或商品類型動態決定）
      */
-    protected function getInventoryAccountId(): int
+    /* protected function getInventoryAccountId(): int
     {
         // 預設：庫存商品 (1405)
         // [TECH-DEBT] 未來可擴充為依商品類型選擇科目
         return Account::where('code', '1405')->first()?->id ?? 1405;
-    }
+    } */
+	protected function getInventoryAccountCode(Product $product): string
+{
+    $category = $product->category_code; // 假設產品有分類
+    
+    return match($category) {
+        'bracelet' => '140502',  // 手鍊手鐲
+        'earring'  => '140505',  // 耳環
+        'general'  => '140503',  // 百貨
+        'package'  => '140901',  // 禮盒包材
+        'part'     => '140509',  // 配件半成品
+        'pendant'  => '140501',  // 吊墜項鍊
+        'ring'     => '140506',  // 戒指
+        default    => '140599',  // 其他庫存
+    };
+}
 
     /**
      * 取得應付帳款科目ID
@@ -257,5 +280,14 @@ class Purchase extends Model
     public function returns(): HasMany
     {
         return $this->hasMany(PurchaseReturn::class, 'purchase_id');
+    }
+	
+	/**
+     * 🛡️ 防禦性虛擬關聯：防止 HasAccounting Trait 強制預載入 fees 時崩潰
+     */
+    public function fees(): HasMany
+    {
+        // 採購單費用直接記錄於主表欄位（shipping_fee, tax, other_fees），故此處回傳一個必為空的 HasMany 關聯
+        return $this->hasMany(PurchaseItem::class, 'purchase_id')->whereRaw('1 = 0');
     }
 }
