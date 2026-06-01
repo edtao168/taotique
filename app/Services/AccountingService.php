@@ -589,7 +589,7 @@ class AccountingService
 
 		// 4. 以唯一 Code 檢索實體 ID
 		$account = Account::where('code', $code)
-			->where('shop_id', $source->shop_id ?? 1)
+			->where('is_active', true)
 			->first();
 
 		if (!$account) {
