@@ -68,17 +68,31 @@ class BackupIndex extends Component
             ->toArray();
     }
 
+    /**
+     * 使用 Livewire 封裝的 streamDownload
+     */
     public function download($filename)
     {
-        $disk = Storage::disk('local');
-		$path = "taotique-backup/{$filename}";
+        // 統一由真相來源設定讀取，避免寫死 'local' 與硬編碼路徑
+        $disk = Storage::disk($this->disk);
+        $path = $this->storagePath . '/' . $filename;
 		
-		if (!$disk->exists($path)) {
-			abort(404);
-		}
+        if (!$disk->exists($path)) {
+            $this->error('下載失敗', '找不到該備份檔案。');
+            return;
+        }
 		
-		// Laravel 原生的流式下载——内存占用极低！
-		return $disk->download($path, $filename);
+        // 獲取該 Disk 的真實全路徑或串流
+        $realPath = $disk->path($path);
+
+        // 使用 Livewire 內建支援的 streamDownload
+        return response()->streamDownload(function () use ($disk, $path) {
+            $stream = $disk->readStream($path);
+            if ($stream) {
+                fpassthru($stream);
+                fclose($stream);
+            }
+        }, $filename);
     }
 
     public function render()

@@ -135,11 +135,7 @@ class Purchase extends Model
     }
 	
 	/**
-     * 【費曼註釋】採購入庫的會計規則定義
-     * 
-     * T字帳範例（採購 10,000 TWD 水晶）：
-     * 借：1405 庫存商品    10,000.0000
-     * 貸：2202 應付帳款    10,000.0000
+     * 【費曼註釋】採購入庫的會計規則定義     
      */
     public function getAccountingRules(string $eventType): array
     {
