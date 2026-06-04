@@ -3,45 +3,14 @@
 namespace App\Livewire\Dashboard;
 
 use App\Models\Inventory;
-use App\Models\Sale;
 use App\Models\Product;
+use App\Models\Sale;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Livewire\Component;
 
 class Overview extends Component
 {
-    public function render()
-    {
-        $now = Carbon::now();
-
-        // 1. 統計數據
-        $stats = [
-            'todaySales' => Sale::whereDate('created_at', Carbon::today())->sum('subtotal'),
-            'monthSales' => Sale::whereMonth('created_at', $now->month)->whereYear('created_at', $now->year)->sum('subtotal'),
-            'monthNetProfit' => Sale::whereMonth('created_at', $now->month)->whereYear('created_at', $now->year)->sum('final_net_amount'),
-            'inventoryValue' => Product::totalInventoryValue(),
-            'lowStockCount' => Inventory::whereExists(function ($query) {
-                $query->select(DB::raw(1))
-                      ->from('products')
-                      ->whereColumn('products.id', 'inventories.product_id')
-                      ->whereRaw('inventories.quantity <= products.min_stock');
-            })->count(),
-        ];
-
-        // 2. 生成最近 12 個月的月份列表（包含無數據的月份）
-        $monthlyData = $this->getMonthlyDataWithGapsFilled();
-
-        return view('livewire.dashboard.overview', [
-            'stats' => $stats,
-            'monthlyData' => $monthlyData,
-            'recentSales' => Sale::with(['shop', 'channel', 'customer']) // 務必加上 Eager Loading
-				->latest('sold_at')
-				->take(5)
-				->get(),
-        ]);
-    }
-
     /**
      * 獲取最近 12 個月數據，缺少的月份補 0
      */
@@ -86,5 +55,36 @@ class Overview extends Component
         });
 
         return $merged->values(); // 轉回數值索引陣列
+    }
+	
+	    public function render()
+    {
+        $now = Carbon::now();
+
+        // 1. 統計數據
+        $stats = [
+            'todaySales' => Sale::whereDate('created_at', Carbon::today())->sum('subtotal'),
+            'monthSales' => Sale::whereMonth('created_at', $now->month)->whereYear('created_at', $now->year)->sum('subtotal'),
+            'monthNetProfit' => Sale::whereMonth('created_at', $now->month)->whereYear('created_at', $now->year)->sum('final_net_amount'),
+            'inventoryValue' => Product::totalInventoryValue(),
+            'lowStockCount' => Inventory::whereExists(function ($query) {
+                $query->select(DB::raw(1))
+                      ->from('products')
+                      ->whereColumn('products.id', 'inventories.product_id')
+                      ->whereRaw('inventories.quantity <= products.min_stock');
+            })->count(),
+        ];
+
+        // 2. 生成最近 12 個月的月份列表（包含無數據的月份）
+        $monthlyData = $this->getMonthlyDataWithGapsFilled();
+
+        return view('livewire.dashboard.overview', [
+            'stats' => $stats,
+            'monthlyData' => $monthlyData,
+            'recentSales' => Sale::with(['shop', 'channel', 'customer', 'user']) // 務必加上 Eager Loading
+				->latest('sold_at')
+				->take(5)
+				->get(),
+        ]);
     }
 }

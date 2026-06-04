@@ -165,7 +165,7 @@
 						<div class="col-span-3">歸屬分店 / 通路</div>
 						<div class="col-span-2 text-right">買家實付</div>
 						<div class="col-span-2 text-right">最終進帳</div>
-						<div class="col-span-2 text-center">操作</div>
+						<div class="col-span-2 text-center">操作者</div>
 					</div>
 
 					{{-- 銷售項目卡片 --}}
@@ -200,9 +200,13 @@
 							</div>
 
 							{{-- 操作 --}}
-							<div class="md:col-span-2 flex justify-end">
-								<x-button icon="o-eye" link="{{ route('sales.index', ['search' => $sale->invoice_number]) }}" class="btn-circle btn-ghost btn-sm" />
+							<div class="md:col-span-2 flex items-center justify-center">
+								<span class="text-xs text-gray-400 md:hidden block">操作者：</span>
+								<span class="text-sm font-medium text-gray-600 dark:text-gray-300">
+									{{ $sale->user->name ?? '系統' }}
+								</span>
 							</div>
+							
 						</div>
 					@empty
 						<div class="text-center py-10 text-gray-400">
