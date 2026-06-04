@@ -24,51 +24,25 @@ use RuntimeException;  // ✅ 加上這行
  */
 trait HasAccounting
 {
-    /**
-     * 統一過帳入口
-     * 
-     * @param string $eventType 事件類型（如 'purchase', 'sale_revenue', 'sale_cost'）
-     * @return Journal|null
-     * @throws \RuntimeException
+	/**
+     * 快捷發動動態會計過帳
+     * * @param string $eventType 業務事件類型 (例如: 'sale_revenue', 'sale_cost', 'sale_fee')
+     * @param string|null $context 額外的動態上下文變數
+     * @return \App\Models\Journal|null
      */
-    public function postJournal(string $eventType): Journal
-	{
-		// ✅ 詳細日誌
-    Log::info('HasAccounting::postJournal', [
-        'model' => get_class($this),
-        'model_id' => $this->id,
-        'eventType' => $eventType,
-    ]);
-		// 重新載入必要的關聯，避免使用已被變更的實例
-		$freshSource = static::with(['items', 'fees'])->find($this->id);
-		
-		if (!$freshSource) {
-            throw new RuntimeException(
-                "無法載入 " . class_basename($this) . " #{$this->id}，可能已被刪除"
-            );
-        }
-		
-		// 確保關聯資料已載入（避免 N+1）
-        if (!$freshSource->relationLoaded('items')) {
-            $freshSource->load('items');
-        }
-        if (!$freshSource->relationLoaded('fees')) {
-            $freshSource->load('fees');
-        }
-        
-		$rules = $this->getAccountingRules($eventType);
-		 // ✅ 記錄 rules 內容
-    Log::info('HasAccounting::postJournal rules', [
-        'eventType' => $eventType,
-        'rules' => $rules,
-    ]);
-    
-		return app(AccountingService::class)->postFromRules(
-			$freshSource,
-			$rules,
-			$eventType			
-		);
-	}
+    public function postJournal(string $eventType, ?string $context = null)
+    {
+        // 透過 Laravel 容器自動解析會計核心服務
+        $accountingService = app(AccountingService::class);
+
+        /**
+         * 🎯 核心修復點：
+         * 第一參數：事件類型 (string)
+         * 第二參數：必須是當前 Model 實例本身 ($this)，類型為 Model。
+         * 第三參數：上下文標記 (string|null)
+         */
+        return $accountingService->postFromRules($eventType, $this, $context);
+    }
 	
 	/**
      * 抽象方法：子類別需實作，回傳會計規則

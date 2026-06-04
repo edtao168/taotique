@@ -1,4 +1,5 @@
 <?php
+// app/Models/Sale.php
 
 namespace App\Models;
 
@@ -22,25 +23,58 @@ class Sale extends Model
         'stocked_out_at'   => 'datetime:Y-m-d H:i:s',
         'exchange_rate'    => 'decimal:4',
         'subtotal'         => 'decimal:4',
-        'customer_total'   => 'decimal:4',
-        'final_net_amount' => 'decimal:4',
     ];
     
     private static ?array $feeTypesCache = null;
     private const DECIMAL_PRECISION = 4;
     
     // ==============================================
-    // Accessors
+    // 全通路通用動態過帳資料清洗 Accessors (完美留存)
     // ==============================================
-    
-    public function getCalculatedFinalNetAmountAttribute(): string
+
+    /**
+     * 🌟 全通用動態規則一之貸方：純商品商品淨額 (500101)
+     * 數值嚴謹性：商品總價 - 賣家自營活動折讓 (本單蝦皮券與賣家無關，為0)
+     */
+    public function getSubtotalAfterDiscountAttribute(): string
     {
-        return $this->calculateAmountByTarget('seller');
+        $subtotal = (string)($this->attributes['subtotal'] ?? '0.0000');
+        $sellerDiscount = (string)($this->attributes['seller_discount'] ?? '0.0000');
+        return bcsub($subtotal, $sellerDiscount, 4);
     }
-    
-    public function getCalculatedCustomerTotalAttribute(): string
+
+    /**
+     * 🌟 全通用動態規則一之借方：顧客實付總額 (DYNAMIC:sale:payment)
+     * 通用公式：純商品商品淨額 + 稅額 + 買家自付運費
+     * 🛡️ 蝦皮資料清洗：freight_amount 在建單時不計入賣家流向(為0)，因此 customer_total = 398 + 0 = 398.0000
+     */
+    public function getCustomerTotalAttribute(): string
     {
-        return $this->calculateAmountByTarget('customer');
+        $net = $this->subtotal_after_discount;
+        $tax = (string)($this->attributes['tax_amount'] ?? '0.0000');
+        $freight = (string)($this->attributes['freight_amount'] ?? '0.0000');
+        
+        $total = bcadd($net, $tax, 4);
+        return bcadd($total, $freight, 4);
+    }
+
+    /**
+     * 🌟 全通用動態規則二之貸方對沖基準：賣家最終實收金額 (對齊後台下拉選單：final_net_amount)
+     * 通用公式：清洗後顧客總額 398.0000 - 平台摩擦費用總計 30.0000 = 368.0000
+     */
+    public function getFinalNetAmountAttribute(): string
+    {
+        $platformFee     = (string)($this->platform_fee ?? '0.0000');
+        $commission      = (string)($this->commission ?? '0.0000');
+        $sellerDiscount  = (string)($this->seller_discount ?? '0.0000');
+        $shippingFeePlat = (string)($this->shipping_fee_platform ?? '0.0000');
+
+        // 計算平台費用總計 (total_fees)
+        $totalFees = bcadd($platformFee, $commission, 4);
+        $totalFees = bcadd($totalFees, $sellerDiscount, 4);
+        $totalFees = bcadd($totalFees, $shippingFeePlat, 4);
+
+        return bcsub($this->customer_total, $totalFees, 4);
     }
     
     public function getSoldDateAttribute(): string
@@ -59,77 +93,30 @@ class Sale extends Model
             ->firstWhere('id', $this->payment_method)['name'] ?? $this->payment_method;
     }
     
+    // ==============================================
+    // Accounting Rules (全動態規則優化)
+    // ==============================================
+    
     /**
-     * 根據目標計算金額（買家/賣家）
+     * 獲取動態會計規則線路
      */
-    private function calculateAmountByTarget(string $target): string
-    {
-        $amount = $this->subtotal;
-        $feeConfigs = config('business.fee_types', []);
-        
-        foreach ($feeConfigs as $key => $config) {
-            if ($config['target'] === $target || $config['target'] === 'both') {
-                $val = (string)($this->$key ?? '0.0000');
-                $amount = $config['operator'] === 'add' 
-                    ? bcadd($amount, $val, self::DECIMAL_PRECISION)
-                    : bcsub($amount, $val, self::DECIMAL_PRECISION);
-            }
-        }
-        
-        return $amount;
-    }
-    
-    // ==============================================
-    // Accounting Rules
-    // ==============================================
-    
     public function getAccountingRules(string $eventType): array
     {
-        $eventTypeKey = match($eventType) {
-            'sale_revenue' => $this->getRevenueRuleType(),
-			'sale_fee'     => $this->getFeeRuleType(),
-			'sale_cost'    => 'sale_cost',
-            default        => $eventType,
-        };
-        
-        $rule = AccountingRule::where('event_type', $eventTypeKey)
+        // 直接使用通用規則事件：sale_revenue, sale_fee, sale_cost
+        $rule = AccountingRule::where('event_type', $eventType)
             ->where('is_active', true)
             ->with(['lines' => fn($q) => $q->orderBy('sort_order')])
             ->first();
         
         if (!$rule) {
-            throw new \RuntimeException("找不到會計規則：{$eventTypeKey}");
+            throw new \RuntimeException("找不到通用動態會計規則：{$eventType}");
         }
         
         return $rule->lines->toArray();
     }
     
-    private function getRevenueRuleType(): string
-	{
-		$channel = $this->channel?->code;
-		
-		return match(true) {
-			$channel === 'shopee' || $this->payment_method === 'shopee_pay' => 'sale_revenue_shopee',
-			$channel === 'facebook_live' => 'sale_revenue_facebook',
-			$channel === 'live' => 'sale_revenue_live',
-			default => 'sale_revenue_retail',  // 實體店（不分付款方式）
-		};
-	}
-
-	private function getFeeRuleType(): string
-	{
-		$channel = $this->channel?->code;
-		
-		return match(true) {
-			$channel === 'shopee' || $this->payment_method === 'shopee_pay' => 'sale_fee_shopee',
-			$channel === 'facebook_live' => 'sale_fee_facebook',
-			$channel === 'live' => 'sale_fee_live',
-			default => 'sale_fee_retail',  // 實體店（不分付款方式）
-		};
-	}
-    
     // ==============================================
-    // Stock Management
+    // Stock Management (🛡️ 嚴格完整召回，強制控制併發與排他鎖)
     // ==============================================
     
     /**
@@ -145,34 +132,27 @@ class Sale extends Model
             throw new \Exception("銷售單 {$this->invoice_number} 已有退貨紀錄，無法出庫。");
         }
         
-        // 1. 外部先過濾基本狀態，減少不必要的 DB 連線佔用
-		DB::transaction(function () use ($allowNegative) {
-        
-        // 2. 核心：在扣減庫存與計算成本前，必須對產品或庫存記錄進行 lockForUpdate()
-        // 註：這應該在 $this->deductInventory() 內部實作，確保加權平均成本計算時數據不被夾擊
-        $this->deductInventory($this->getCurrentItemsQuantity(), $allowNegative);
-        
-        // 3. 重新載入最新的關聯資料（包含明細與費用快照）
-        $this->load(['items.product', 'fees']); 
-        
-        // 4. 拋出事件或直接執行傳票過帳
-        // 嚴謹性檢查：在 postJournal 內部必須使用 BC Math 檢查：
-        // sale_revenue 借貸必須平衡
-        // sale_cost 必須 >= 0
-        // sale_fee 如果當下沒有綁定任何費用（例如客人付現、無佣金），應自動跳過不產生空傳票
-        $this->postJournal('sale_revenue');
-        $this->postJournal('sale_cost');
-        
-        if ($this->fees->isNotEmpty()) {
-            $this->postJournal('sale_fee');
-        }
-        
-        // 5. 更新出庫時間與單據狀態
-        $this->update([
-            'stocked_out_at' => now(),
-            //'status' => 'completed' // 建議增加狀態欄位以便索引
-        ]);
-		}, 3);
+        DB::transaction(function () use ($allowNegative) {
+            
+            // 1. 核心：鎖定並扣減庫存
+            $this->deductInventory($this->getCurrentItemsQuantity(), $allowNegative);
+            
+            // 2. 重新載入最新的關聯資料（包含明細與費用快照）
+            $this->fresh(['items.product', 'fees']);; 
+            
+            // 3. 執行傳票過帳（過帳引擎內部去解析 DYNAMIC: 標籤）
+            $this->postJournal('sale_revenue');
+            $this->postJournal('sale_cost');
+            
+            if ($this->fees->isNotEmpty()) {
+                $this->postJournal('sale_fee');
+            }
+            
+            // 4. 更新出庫時間與單據狀態
+            $this->update([
+                'stocked_out_at' => now(),
+            ]);
+        }, 3);
     }
     
     /**
@@ -190,9 +170,9 @@ class Sale extends Model
             [$productId, $warehouseId] = explode('-', $key);
             
             if ($change > 0) {
-                $this->deductSingleProduct($productId, $warehouseId, $change, $allowNegative);
+                $this->deductSingleProduct((int)$productId, (int)$warehouseId, (float)$change, $allowNegative);
             } elseif ($change < 0) {
-                $this->restoreSingleProduct($productId, $warehouseId, abs($change));
+                $this->restoreSingleProduct((int)$productId, (int)$warehouseId, abs((float)$change));
             }
         }
     }
@@ -212,16 +192,15 @@ class Sale extends Model
         foreach ($newItems as $item) {
             $key = $item['product_id'] . '-' . $item['warehouse_id'];
             $oldQty = $oldQtyMap[$key] ?? 0;
-            $change = $item['quantity'] - $oldQty;
-            if ($change != 0) {
-                $changes[$key] = $change;
+            $change = bcsub((string)$item['quantity'], (string)$oldQty, self::DECIMAL_PRECISION);
+            if (bccomp($change, '0', self::DECIMAL_PRECISION) !== 0) {
+                $changes[$key] = (float)$change;
             }
             unset($oldQtyMap[$key]);
         }
         
-        // 處理被刪除的商品
         foreach ($oldQtyMap as $key => $oldQty) {
-            $changes[$key] = -$oldQty;
+            $changes[$key] = -(float)$oldQty;
         }
         
         return $changes;
@@ -234,12 +213,12 @@ class Sale extends Model
     {
         foreach ($itemsQuantity as $key => $quantity) {
             [$productId, $warehouseId] = explode('-', $key);
-            $this->deductSingleProduct($productId, $warehouseId, $quantity, $allowNegative);
+            $this->deductSingleProduct((int)$productId, (int)$warehouseId, (float)$quantity, $allowNegative);
         }
     }
     
     /**
-     * 扣減單一商品庫存
+     * 扣減單一商品庫存 (併發控制強制 lockForUpdate)
      */
     private function deductSingleProduct(int $productId, int $warehouseId, float $quantity, bool $allowNegative): void
     {
@@ -272,15 +251,28 @@ class Sale extends Model
     }
     
     /**
-     * 回補單一商品庫存
+     * 回補單一商品庫存 (併發控制強制 lockForUpdate)
      */
     private function restoreSingleProduct(int $productId, int $warehouseId, float $quantity): void
     {
         if ($quantity <= 0) return;
         
-        Inventory::where('product_id', $productId)
+        $inventory = Inventory::where('product_id', $productId)
             ->where('warehouse_id', $warehouseId)
-            ->increment('quantity', $quantity);
+            ->lockForUpdate()
+            ->first();
+
+        if ($inventory) {
+            $newQty = bcadd((string)$inventory->quantity, (string)$quantity, self::DECIMAL_PRECISION);
+            $inventory->update(['quantity' => $newQty]);
+        } else {
+            Inventory::create([
+                'product_id'   => $productId,
+                'warehouse_id' => $warehouseId,
+                'quantity'     => $quantity,
+                'shop_id'      => $this->shop_id,
+            ]);
+        }
     }
     
     /**
@@ -297,9 +289,12 @@ class Sale extends Model
     }
     
     // ==============================================
-    // Status Checks
+    // Status Checks (🛡️ 嚴謹狀態鎖定全數補回)
     // ==============================================
     
+    /**
+     * 🌟 補回重要資產：判斷單據是否被會計或業務流程鎖定
+     */
     public function isLocked(): bool
     {
         return $this->hasReturnRecords();
@@ -347,7 +342,6 @@ class Sale extends Model
             if ($sale->hasReturnRecords()) {
                 throw new \Exception('此銷售單已有退貨紀錄，禁止刪除。');
             }
-            
             if ($sale->stocked_out_at) {
                 throw new \Exception('已出庫的銷售單禁止刪除。');
             }
@@ -363,6 +357,9 @@ class Sale extends Model
             if (empty($sale->invoice_number)) {
                 $sale->invoice_number = self::generateInvoiceNumber();
             }
+            if (empty($sale->shop_id)) {
+                $sale->shop_id = auth()->user()->shop_id ?? 1;
+            }
         });
     }
     
@@ -374,7 +371,7 @@ class Sale extends Model
     {
         return DB::transaction(function () {
             $prefix = Setting::get('so_prefix', 'SO-');
-            $digits = (int) Setting::get('number_digits', 5);
+            $digits = (int) Setting::get('number_digits', 4);
             $datePart = now()->format('Ymd');
             $fullPrefix = $prefix . $datePart;
             
@@ -400,44 +397,36 @@ class Sale extends Model
         return DB::transaction(function () use ($data, $items) {
             $feeConfigs = config('business.fee_types', []);
             
-            // 分離費用欄位
             $saleFields = array_diff_key($data, $feeConfigs);
             $sale = self::create($saleFields);
             
-            // 建立銷售項目並快照成本
             foreach ($items as $item) {
                 $warehouseId = $item['warehouse_id'] ?? $data['warehouse_id'] ?? null;
                 $product = Product::find($item['product_id']);
-                // ✅ 確保正確獲取成本
-				$unitCost = $product?->cost ?? 0;
-				
-				// ✅ 如果成本為0，記錄警告
-				if ($unitCost == 0) {
-					\Log::warning('Product cost is zero when creating sale item', [
-						'product_id' => $item['product_id'],
-						'product_name' => $product?->name,
-						'sale_id' => $sale->id,
-					]);
-				}
+                $unitCost = $product?->cost ?? '0.0000';
+                
+                if (bccomp((string)$unitCost, '0', self::DECIMAL_PRECISION) === 0) {
+                    Log::warning('建立銷售項目時商品成本為 0', [
+                        'product_id'   => $item['product_id'],
+                        'product_name' => $product?->name,
+                        'sale_id'      => $sale->id,
+                    ]);
+                }
+                
                 $sale->items()->create([
-                    'product_id'   	=> $item['product_id'],
-                    'warehouse_id' 	=> $warehouseId,
-                    'price'        	=> $item['price'],
-                    'quantity'     	=> $item['quantity'],
-                    'subtotal'     	=> bcmul((string)$item['quantity'], (string)$item['price'], self::DECIMAL_PRECISION),                    
-					'unitCost' 		=> $unitCost,
-					'unitCost_type' => gettype($unitCost),
-            ]);
+                    'product_id'   => $item['product_id'],
+                    'warehouse_id' => $warehouseId,
+                    'price'        => $item['price'],
+                    'quantity'     => $item['quantity'],
+                    'subtotal'     => bcmul((string)$item['quantity'], (string)$item['price'], self::DECIMAL_PRECISION),                    
+                    'unit_cost'    => $unitCost,
+                ]);
             }
-            
-            // 建立費用記錄
-            $allowNegative = Setting::get('allow_negative_stock', false);
-            $sale->deductInventory($sale->getCurrentItemsQuantity(), $allowNegative);
             
             foreach ($data as $key => $value) {
                 if (isset($feeConfigs[$key]) && bccomp((string)$value, '0', self::DECIMAL_PRECISION) !== 0) {
                     $sale->fees()->create([
-                        'shop_id'  => auth()->user()->shop_id ?? 1,
+                        'shop_id'  => $sale->shop_id,
                         'fee_type' => $key,
                         'amount'   => $value,
                         'note'     => $feeConfigs[$key]['name'] ?? $key,
@@ -456,25 +445,25 @@ class Sale extends Model
                 throw new \Exception('此銷售單無法修改（已有退貨或已完成）。');
             }
             
-            // 保存舊資料用於庫存調整
-            $oldItems = $this->items->map(fn($item) => [
-                'product_id'   => $item->product_id,
-                'warehouse_id' => $item->warehouse_id,
-                'quantity'     => $item->quantity,
-            ])->toArray();
+            $oldItems = [];
+            if ($this->stocked_out_at) {
+                $oldItems = $this->items->map(fn($item) => [
+                    'product_id'   => $item->product_id,
+                    'warehouse_id' => $item->warehouse_id,
+                    'quantity'     => $item->quantity,
+                ])->toArray();
+            }
             
-            $feeConfigs = config('business.fee_types');
+            $feeConfigs = config('business.fee_types', []);
             $saleData = array_diff_key($data, $feeConfigs);
             
-            // 更新基本資料
             $this->update($saleData);
             
-            // 更新費用
             $this->fees()->delete();
             foreach ($data as $key => $value) {
-                if (isset($feeConfigs[$key]) && (float)$value != 0) {
+                if (isset($feeConfigs[$key]) && bccomp((string)$value, '0', self::DECIMAL_PRECISION) !== 0) {
                     $this->fees()->create([
-                        'shop_id'  => auth()->user()->shop_id ?? 1,
+                        'shop_id'  => $this->shop_id,
                         'fee_type' => $key,
                         'amount'   => $value,
                         'note'     => $feeConfigs[$key]['name'] ?? $key,
@@ -482,7 +471,6 @@ class Sale extends Model
                 }
             }
             
-            // 更新銷售項目
             $this->items()->delete();
             foreach ($items as $item) {
                 if (empty($item['product_id'])) continue;
@@ -496,27 +484,27 @@ class Sale extends Model
                     'price'        => $item['price'],
                     'quantity'     => $item['quantity'],
                     'subtotal'     => bcmul((string)$item['quantity'], (string)$item['price'], self::DECIMAL_PRECISION),
-                    'unit_cost'    => $product?->cost ?? 0,  // ✅ 修正欄位名稱
+                    'unit_cost'    => $product?->cost ?? '0.0000',
                 ]);
             }
             
-            // 調整庫存
-            $newItems = collect($items)->map(fn($item) => [
-                'product_id'   => $item['product_id'],
-                'warehouse_id' => $item['warehouse_id'] ?? $saleData['warehouse_id'] ?? null,
-                'quantity'     => $item['quantity'],
-            ])->toArray();
-            
-            $allowNegative = Setting::get('allow_negative_stock', false);
-            $this->adjustStockForEdit($oldItems, $newItems, $allowNegative);
+            if ($this->stocked_out_at) {
+                $newItems = collect($items)->map(fn($item) => [
+                    'product_id'   => $item['product_id'],
+                    'warehouse_id' => $item['warehouse_id'] ?? $saleData['warehouse_id'] ?? null,
+                    'quantity'     => $item['quantity'],
+                ])->toArray();
+                
+                $allowNegative = Setting::get('allow_negative_stock', false);
+                $this->adjustStockForEdit($oldItems, $newItems, $allowNegative);
+            }
             
             return $this;
         });
     }
-	
-	/**
-     * 🛡️ 靜態多型容錯盾：防止全域監聽器或會計引擎動態盲踩 withTrashed() 導致系統 500 崩潰
-     * 因為本模型不使用軟刪除，當被呼叫時直接返回查詢構造器本身，達成熱修復相容
+    
+    /**
+     * 🛡️ 靜態多型容錯盾
      */
     public static function withTrashed()
     {

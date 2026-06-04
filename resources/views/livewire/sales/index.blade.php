@@ -40,7 +40,7 @@
                     <span class="font-bold text-info">NT$ {{ number_format($sale->customer_total, 0) }}</span>
                 @endscope
 				@scope('cell_final_net_amount', $sale)
-                    <span class="font-bold text-success">NT$ {{ number_format($sale->calculated_final_net_amount, 0) }}</span>
+                    <span class="font-bold text-success">NT$ {{ number_format($sale->final_net_amount, 0) }}</span>
                 @endscope
             </x-table>
         </div>
