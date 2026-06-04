@@ -1,6 +1,23 @@
 <?php
+// config/business.php
+// 標註檔案路徑：config/business.php
 
 return [
+
+    // =========================================================================
+    // 會計全動態科目策略定義 (供後台 Mary UI 下拉選單使用)
+    // =========================================================================
+    'accounting_dynamic_options' => [
+        ['value' => 'DYNAMIC:auto:inventory',       'label' => '動態：庫存商品 (依商品類別)'],
+        ['value' => 'DYNAMIC:sale:revenue',         'label' => '動態：銷貨收入 (依銷售通路)'],
+        ['value' => 'DYNAMIC:sale:payment',         'label' => '動態：應收帳款/代收款 (依付款管道)'], 
+        ['value' => 'DYNAMIC:sale:cost',            'label' => '動態：銷貨成本 (依商品類別自動結轉)'],
+        ['value' => 'DYNAMIC:sale:channel_fee',     'label' => '動態：通路摩擦手續費 (依銷售通路如蝦皮)'],
+        ['value' => 'DYNAMIC:sale:return_fee:shipping', 'label' => '動態：退貨運費支出 (依銷售通路規範)'],
+        ['value' => 'DYNAMIC:purchase:expense',     'label' => '動態：進口/採購附加費 (依費用項目如關稅)'],
+        ['value' => 'DYNAMIC:sale:discount',        'label' => '動態：銷貨折讓/扣抵 (依活動或通路折價券)'],
+    ],
+
 	// 🎯 採購專用付款方式（新增微信支付，將預設應付帳款語意調整為大陸廠商應付）
     'purchase_methods' => [
         'wechat_pay'  => ['name' => '微信支付', 'icon' => 'o-chat-bubble-left-right', 'default_account' => '101207'],
@@ -114,16 +131,17 @@ return [
 	
 	// 退貨費用類型
     'return_fee_types' => [
-        'shipping_fee' => [
-			'name' 	   => '退貨運費（買家付為正數，賣家付為負數）',
-			'operator' => 'add'
-		],
 		'restocking_fee' => [
-			'name' 	   => '整新費',
-			'operator' => 'sub',
-		],        
-    ],
-
+			'name' => '退貨處理費',
+			'target' => 'customer',  // 買家負擔，從退款中扣除
+			'operator' => 'subtract',
+		],
+		'return_shipping_fee' => [
+			'name' => '退貨運費',
+			'target' => 'seller',    // 賣家負擔，額外支出
+			'operator' => 'add',
+		],
+	],
 
 	'currencies' => [
 		'TWD' => ['symbol' => 'NT$', 'name' => '新台幣', 'precision' => 0, 'default_rate' => '1.0000'],

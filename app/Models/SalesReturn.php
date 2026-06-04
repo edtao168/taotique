@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Traits\HasAccounting;
 use App\Traits\HasShop;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -10,7 +11,7 @@ use Illuminate\Support\Facades\DB;
 
 class SalesReturn extends Model
 {
-    use HasShop;
+    use HasShop, HasAccounting;
 	
 	protected $fillable = [
         'shop_id',
@@ -34,59 +35,20 @@ class SalesReturn extends Model
 		'exchange_rate'       => 'decimal:6',
         'approved_at'         => 'datetime',
     ];
-
-    // 關聯費用明細
-    public function fees(): HasMany
-    {
-        return $this->hasMany(SalesReturnFee::class, 'sales_return_id');
-    }
 	
-	// 關聯客戶
-	public function customer(): BelongsTo
-    {
-        return $this->belongsTo(Customer::class);
-    }
-	
-	// 關聯營業點
-	public function shop(): BelongsTo
-    {
-        return $this->belongsTo(Shop::class);
-    }
-	
-	// 關聯庫別
-	public function warehouse(): BelongsTo
-    {
-        return $this->belongsTo(Warehouse::class);
-    }
-	
-	// 關聯明細
-    public function items(): HasMany
-    {
-        return $this->hasMany(SalesReturnItem::class);
-    }
-
-    // 關聯原訂單
-    public function sale(): BelongsTo
-    {
-        return $this->belongsTo(Sale::class, 'sale_id');
-    }
-	
-	/**
-     * 建立者
-     */
-	 public function user(): BelongsTo
-	{
-		return $this->belongsTo(User::class);
-	}
+	// 退貨費用配置
+	private static ?array $returnFeeTypesCache = null;
 
 	/**
 	 * 動態攔截退貨費用屬性
 	 */
 	public function getAttribute($key)
 	{
-		$returnFeeConfigs = config('business.return_fee_types', []);
+		if (self::$returnFeeTypesCache === null) {
+        self::$returnFeeTypesCache = config('business.return_fee_types', []);
+		}
 		
-		if (isset($returnFeeConfigs[$key])) {
+		if (isset(self::$returnFeeTypesCache[$key])) {
 			if ($this->relationLoaded('fees')) {
 				return (string) $this->fees->where('fee_type', $key)->sum('amount');
 			}
@@ -167,13 +129,13 @@ class SalesReturn extends Model
         throw new \Exception("單據 #{$this->return_no} 目前狀態為 {$this->status}，不符合過帳條件。");
     }
 
-		// 3. 安全審計檢查：確保有審核人與時間 (這對應了您 Migration 中的欄位)
+		// 安全審計檢查：確保有審核人與時間
 		if (empty($this->approved_by) || empty($this->approved_at)) {
 			throw new \Exception('單據缺少審核人資訊，無法執行財務過帳。');
 		}
 
 		return DB::transaction(function () {
-			// 規範 2: 針對相關記錄進行 lockForUpdate()
+			// 針對相關記錄進行 lockForUpdate()
 			$this->load(['items.product']);
 			
 			foreach ($this->items as $item) {
@@ -185,7 +147,7 @@ class SalesReturn extends Model
 					->lockForUpdate()
 					->firstOrFail();
 
-				// 規範 1: 強制 BCMath 運算
+				// 強制 BCMath 運算
 				$newQty = bcadd($stock->quantity, $item->quantity, 4);
 				
 				$stock->update(['quantity' => $newQty]);
@@ -203,9 +165,114 @@ class SalesReturn extends Model
 				]);
 			}
 
-			// 4. 更新單據最終狀態
+			 // 會計過帳
+			$this->postJournal('sale_return_revenue');
+			$this->postJournal('sale_return_cost');
+			
+			// 如果有退貨費用，才產生費用傳票
+			if (bccomp($this->restocking_fee ?? '0', '0', 4) !== 0) {
+				$this->postJournal('sale_return_fee');
+			}
+
+			// 更新單據狀態
 			$this->status = 'completed';
 			return $this->save();
 		});
     }
+	
+	public function getAccountingRules(string $eventType): array
+	{
+		return match($eventType) {
+			// 收入沖減（退貨處理費 + 退款）
+			'sale_return_revenue' => [
+				// 借：收入沖減（退貨商品金額）
+				['entry_type' => 'debit',  'account_code' => 'DYNAMIC:revenue', 
+				 'amount_source' => 'subtotal_after_discount'],
+				
+				// 借：銷項稅額沖減
+				['entry_type' => 'debit',  'account_code' => '222103', 
+				 'amount_source' => 'tax_amount'],
+				
+				// 貸：退款金額（現金/應收）
+				['entry_type' => 'credit', 'account_code' => 'DYNAMIC:payment', 
+				 'amount_source' => 'customer_total'],
+			],
+			
+			// 成本調整（商品回庫）
+			'sale_return_cost' => [
+				// 借：庫存商品（依商品類別）
+				['entry_type' => 'debit',  'account_code' => 'DYNAMIC:inventory', 
+				 'amount_source' => 'items.sum:cost*quantity'],
+				
+				// 貸：沖減主營業務成本
+				['entry_type' => 'credit', 'account_code' => '5401', 
+				 'amount_source' => 'items.sum:cost*quantity'],
+			],
+			
+			// ✅ 關鍵：退貨費用（一套規則，動態科目）
+			'sale_return_fee' => [
+				// 退貨處理費（買家負擔，從退款扣除 → 貸方減少退款）
+				// 借：應付退款減少 / 貸：收入沖減
+				['entry_type' => 'credit', 'account_code' => 'DYNAMIC_FEE:restocking_fee', 
+				 'amount_source' => 'restocking_fee'],
+				
+				// 退貨運費（賣家負擔 → 借：運費/手續費 貸：應付/現金）
+				// 注意：根據方向決定借貸，這裡假設運費是額外支出
+				// 實際要看您的退貨費用是「向買家收取」還是「賣家吸收」
+			],
+			
+			default => throw new \RuntimeException("未知的事件類型: {$eventType}"),
+		};
+	}
+	
+	public function getSubtotalAfterDiscountAttribute(): string
+	{
+		$subtotal = $this->items->sum('subtotal');
+		// 退貨沒有 seller_discount，直接返回 subtotal
+		return (string) $subtotal;
+	}
+	
+    // 關聯費用明細
+    public function fees(): HasMany
+    {
+        return $this->hasMany(SalesReturnFee::class, 'sales_return_id');
+    }
+	
+	// 關聯客戶
+	public function customer(): BelongsTo
+    {
+        return $this->belongsTo(Customer::class);
+    }
+	
+	// 關聯營業點
+	public function shop(): BelongsTo
+    {
+        return $this->belongsTo(Shop::class);
+    }
+	
+	// 關聯庫別
+	public function warehouse(): BelongsTo
+    {
+        return $this->belongsTo(Warehouse::class);
+    }
+	
+	// 關聯明細
+    public function items(): HasMany
+    {
+        return $this->hasMany(SalesReturnItem::class);
+    }
+
+    // 關聯原訂單
+    public function sale(): BelongsTo
+    {
+        return $this->belongsTo(Sale::class, 'sale_id');
+    }
+	
+	/**
+     * 建立者
+     */
+	 public function user(): BelongsTo
+	{
+		return $this->belongsTo(User::class);
+	}
 }

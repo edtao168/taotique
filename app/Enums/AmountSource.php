@@ -24,6 +24,8 @@ enum AmountSource: string
     case PLATFORM_FEE = 'platform_fee';
     case ORDER_ADJUSTMENT = 'order_adjustment';
     case COMMISSION = 'commission';
+	case RESTOCKING_FEE = 'restocking_fee';        // 退貨處理費（買家負擔）
+	case RETURN_SHIPPING_FEE = 'return_shipping_fee'; // 退貨運費（賣家負擔）
     
     // ==============================================
     // 稅額
@@ -97,6 +99,8 @@ enum AmountSource: string
             self::TOTAL_FEES => 'total_fees (費用總額)',
             
             self::AMOUNT => 'amount (金額)',
+			self::RESTOCKING_FEE => 'restocking_fee (買家支付退貨處理費)',
+			self::RETURN_SHIPPING_FEE => 'return_shipping_fee (賣家支付退貨運費)',
         };
     }
     
@@ -119,6 +123,8 @@ enum AmountSource: string
             self::PLATFORM_FEE,
             self::ORDER_ADJUSTMENT,
             self::COMMISSION,
+			self::RESTOCKING_FEE,
+			self::RETURN_SHIPPING_FEE,
         ]);
     }
     
