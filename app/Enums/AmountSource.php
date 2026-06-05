@@ -1,22 +1,23 @@
 <?php
-// app/Enums/AmountSource.php
+// 檔案路徑：app/Enums/AmountSource.php
 
 namespace App\Enums;
 
 enum AmountSource: string
 {
     // ==============================================
-    // Sale Model 直接欄位
+    // Sale Model 直接欄位與核心計算
     // ==============================================
-    
     case SUBTOTAL = 'subtotal';
     case CUSTOMER_TOTAL = 'customer_total';
     case FINAL_NET_AMOUNT = 'final_net_amount';
-    
+    case SUBTOTAL_AFTER_DISCOUNT = 'subtotal_after_discount';
+    case TOTAL_FEES = 'total_fees';
+    case COST_AMOUNT = 'cost_amount'; // 銷貨總成本累加基準
+
     // ==============================================
-    // 費用類型
+    // 費用類型（電商摩擦費、物流費、退貨處理費）
     // ==============================================
-    
     case SHIPPING_FEE_CUSTOMER = 'shipping_fee_customer';
     case SELLER_DISCOUNT = 'seller_discount';
     case PLATFORM_COUPON = 'platform_coupon';
@@ -24,95 +25,84 @@ enum AmountSource: string
     case PLATFORM_FEE = 'platform_fee';
     case ORDER_ADJUSTMENT = 'order_adjustment';
     case COMMISSION = 'commission';
-	case RESTOCKING_FEE = 'restocking_fee';        // 退貨處理費（買家負擔）
-	case RETURN_SHIPPING_FEE = 'return_shipping_fee'; // 退貨運費（賣家負擔）
-    
+    case RESTOCKING_FEE = 'restocking_fee';           // 退貨處理費（買家負擔）
+    case RETURN_SHIPPING_FEE = 'return_shipping_fee';   // 退貨運費（賣家負擔）
+
     // ==============================================
-    // 稅額
+    // 稅額與通用金額
     // ==============================================
-    
-    /** 銷項稅額 (Sale) */
     case TAX = 'tax_amount';
-    
+    case FREIGHT_AMOUNT = 'freight_amount';
+    case AMOUNT = 'amount';
+
     // ==============================================
-    // 採購相關
+    // 採購與費用相關
     // ==============================================
-    
     case PURCHASE_TOTAL = 'total_amount';
     case PURCHASE_ITEMS_AMOUNT = 'items_amount';
-    
-    /** 進項稅額 (Purchase) - 使用不同值避免重複 */
     case PURCHASE_TAX = 'purchase_tax_amount';
-    
+    case EXPENSE_AMOUNT = 'expense_amount';
+
     // ==============================================
-    // 明細加總
+    // 銷退/採退相關
     // ==============================================
-    
+    case RETURN_TOTAL = 'return_total';
+    case RETURN_COST = 'return_cost';
+
+    // ==============================================
+    // 明細加總舊配置（留存相容）
+    // ==============================================
     case ITEMS_COST = 'items.sum:cost*quantity';
-	case ITEMS_PRODUCT_COST = 'items.sum:product.cost*quantity';
-    
-    // ==============================================
-    // 計算型金額來源
-    // ==============================================
-    
-    /** 折讓後收入 (subtotal - seller_discount) */
-    case SUBTOTAL_AFTER_DISCOUNT = 'subtotal_after_discount';
-    
-    /** 費用總額 */
-    case TOTAL_FEES = 'total_fees';
-    
-    // ==============================================
-    // 通用
-    // ==============================================
-    
-    case AMOUNT = 'amount';
-    
-    // ==============================================
-    // 方法
-    // ==============================================
-    
+    case ITEMS_PRODUCT_COST = 'items.sum:product.cost*quantity';
+
+    /**
+     * 提供給後台 AccountingRule 設定頁面的 Mary UI 下拉選單繁體標籤
+     */
     public function label(): string
     {
         return match($this) {
-            self::SUBTOTAL => 'subtotal (商品小計)',
-            self::CUSTOMER_TOTAL => 'customer_total (客戶實付)',
-            self::FINAL_NET_AMOUNT => 'final_net_amount (賣家淨額)',
-            
-            self::SHIPPING_FEE_CUSTOMER => 'shipping_fee_customer (買家運費)',
-            self::SELLER_DISCOUNT => 'seller_discount (賣場折扣)',
-            self::PLATFORM_COUPON => 'platform_coupon (平台優惠券)',
-            self::SHIPPING_FEE_PLATFORM => 'shipping_fee_platform (平台代付運費)',
-            self::PLATFORM_FEE => 'platform_fee (平台手續費)',
-            self::ORDER_ADJUSTMENT => 'order_adjustment (帳款調整)',
-            self::COMMISSION => 'commission (佣金)',
-            
-            self::TAX => 'tax_amount (銷項稅額)',
-            
-            self::PURCHASE_TOTAL => 'total_amount (採購總額)',
-            self::PURCHASE_ITEMS_AMOUNT => 'items_amount (採購商品金額)',
-            self::PURCHASE_TAX => 'purchase_tax_amount (進項稅額)',
-            
-            self::ITEMS_COST => 'items.sum:cost*quantity (商品成本)',
-			self::ITEMS_PRODUCT_COST => 'items.sum:product.cost*quantity (商品成本-關聯)',
-            
-            self::SUBTOTAL_AFTER_DISCOUNT => 'subtotal_after_discount (折讓後收入)',
-            self::TOTAL_FEES => 'total_fees (費用總額)',
-            
-            self::AMOUNT => 'amount (金額)',
-			self::RESTOCKING_FEE => 'restocking_fee (買家支付退貨處理費)',
-			self::RETURN_SHIPPING_FEE => 'return_shipping_fee (賣家支付退貨運費)',
+            self::SUBTOTAL => '商品小計 (subtotal)',
+            self::CUSTOMER_TOTAL => '買家實付總額 (customer_total)',
+            self::FINAL_NET_AMOUNT => '賣家最終實收 (final_net_amount)',
+            self::SUBTOTAL_AFTER_DISCOUNT => '折讓後純商品淨額 (subtotal_after_discount)',
+            self::TOTAL_FEES => '平台摩擦費用總計 (total_fees)',
+            self::COST_AMOUNT => '銷貨加權成本總計 (cost_amount)',
+
+            self::SHIPPING_FEE_CUSTOMER => '買家自付運費 (shipping_fee_customer)',
+            self::SELLER_DISCOUNT => '賣場自營折扣 (seller_discount)',
+            self::PLATFORM_COUPON => '平台優惠券補貼 (platform_coupon)',
+            self::SHIPPING_FEE_PLATFORM => '平台代付運費 (shipping_fee_platform)',
+            self::PLATFORM_FEE => '平台手續費 (platform_fee)',
+            self::ORDER_ADJUSTMENT => '平台帳款調整 (order_adjustment)',
+            self::COMMISSION => '平台佣金抽成 (commission)',
+            self::RESTOCKING_FEE => '買家支付退貨處理費 (restocking_fee)',
+            self::RETURN_SHIPPING_FEE => '賣家承擔退貨運費 (return_shipping_fee)',
+
+            self::TAX => '銷項稅額 (tax_amount)',
+            self::FREIGHT_AMOUNT => '常規運費欄位 (freight_amount)',
+            self::AMOUNT => '通用單一金額 (amount)',
+
+            self::PURCHASE_TOTAL => '採購單總金額 (total_amount)',
+            self::PURCHASE_ITEMS_AMOUNT => '採購商品總價 (items_amount)',
+            self::PURCHASE_TAX => '採購進項稅額 (purchase_tax_amount)',
+            self::EXPENSE_AMOUNT => '採購附加費用金額 (expense_amount)',
+
+            self::RETURN_TOTAL => '退款/退貨總金額 (return_total)',
+            self::RETURN_COST => '退貨回庫成本總計 (return_cost)',
+
+            self::ITEMS_COST => '商品成本歷史快照累加 (舊式)',
+            self::ITEMS_PRODUCT_COST => '關聯商品即時成本累加 (舊式)',
         };
     }
-    
+
     public function sourceType(): string
     {
         return match($this) {
-            self::ITEMS_COST => 'items_sum',
-			self::ITEMS_PRODUCT_COST => 'items_sum', 
+            self::ITEMS_COST, self::ITEMS_PRODUCT_COST => 'items_sum', 
             default => 'direct_field',
         };
     }
-    
+
     public function isFeeType(): bool
     {
         return in_array($this, [
@@ -123,11 +113,11 @@ enum AmountSource: string
             self::PLATFORM_FEE,
             self::ORDER_ADJUSTMENT,
             self::COMMISSION,
-			self::RESTOCKING_FEE,
-			self::RETURN_SHIPPING_FEE,
+            self::RESTOCKING_FEE,
+            self::RETURN_SHIPPING_FEE,
         ]);
     }
-    
+
     public static function options(): array
     {
         return collect(self::cases())->map(fn($case) => [

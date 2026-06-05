@@ -75,26 +75,27 @@ class Index extends Component
      * 執行出庫扣減庫存，同步產生會計日記帳與主營成本結轉
      */
     public function submitStockOut(int $saleId)
-    {        
+	{        
         try {
             $sale = Sale::find($saleId);
             if (!$sale) {
-                throw new \Exception("找不到該銷售單據");
+                throw new \Exception("找不到該銷售單據。");
             }
 
-            // 1. 從系統設定讀取是否允許負庫存開關
+            // 1. 從系統配置表讀取是否允許負庫存開關
             $allowNegative = (bool) Setting::get('allow_negative_inventory', false);
             
-            // 2. 呼叫 Model 層的厚邏輯（列表頁直接出庫，代表非修改單據狀態，舊明細傳空陣列）
-            $sale->processStockOut($allowNegative, []);
+            // 2. 呼叫 Model 修正後的厚邏輯（移除原本多傳的空陣列 []）
+            $sale->processStockOut($allowNegative);
             
-            // 3. 重置前端控制狀態並重新整理
+            // 3. 狀態重置
             $this->drawer = false;
             $this->selectedSale = null;
             
-            $this->success("銷售單 {$sale->invoice_number} 已成功完成出庫、日記帳自動過帳與成本結轉！");
+            $this->success("銷售單 {$sale->invoice_number} 已成功完成出庫、三份財務傳票自動驗證過帳！");
         } catch (\Exception $e) {
-            $this->error('出庫失敗：' . $e->getMessage());
+            // 如果中間任何一份傳票不平衡、未啟用或金額不正確，會在這裡被精準攔截，並完全回滾庫存異動
+            $this->error('自動結轉失敗阻斷：' . $e->getMessage());
         }
     }
 
