@@ -1,7 +1,5 @@
 <?php
 // app/Traits/HasAccountAndDynamicSearch.php
-// [代碼開頭標註位置：app/Traits/HasAccountAndDynamicSearch.php]
-// [費曼註釋：終極修復聯邦搜尋，支援主鍵 ID、科目 Code 與名稱多重搜尋，並支援指定包容 ID 快照]
 
 namespace App\Traits;
 
@@ -17,19 +15,28 @@ trait HasAccountAndDynamicSearch
     public function searchAccounts(string $value = '', array $includeIds = [])
     {
         $dynamicOptions = [
+			// 銷售與庫存路由
             ['id' => 'DYNAMIC:sale:payment', 'name' => '⚙️ 銷售金流路由 (DYNAMIC:sale:payment)'],
             ['id' => 'DYNAMIC:auto:inventory', 'name' => '⚙️ 庫存資產路由 (DYNAMIC:auto:inventory)'],
             ['id' => 'DYNAMIC:auto:cost', 'name' => '⚙️ 銷貨成本路由 (DYNAMIC:auto:cost)'],
+			['id' => 'DYNAMIC:sale:revenue', 'name' => '⚙️ 銷貨收入路由 (DYNAMIC:sale:revenue)'],
+            ['id' => 'DYNAMIC:sale:channel_fee', 'name' => '⚙️ 通路摩擦手續費 (DYNAMIC:sale:channel_fee)'],
+            ['id' => 'DYNAMIC:sale:return_fee:shipping', 'name' => '⚙️ 退貨運費支出 (DYNAMIC:sale:return_fee:shipping)'],
+            ['id' => 'DYNAMIC:sale:discount', 'name' => '⚙️ 銷貨折讓/扣抵 (DYNAMIC:sale:discount)'],
+		
+			// 採購路由
+            ['id' => 'DYNAMIC:purchase:payment', 'name' => '⚙️ 採購金流/應付路由 (DYNAMIC:purchase:payment)'],
+            ['id' => 'DYNAMIC:purchase:expense', 'name' => '⚙️ 進口/採購附加費路由 (DYNAMIC:purchase:expense)'],
         ];
 
-        // 1. 處理實體科目查詢
+        // 處理實體科目查詢
         $query = Account::where('is_active', true);
         
         if (!empty($value)) {
             $query->where(function($q) use ($value) {
-                $q->where('id', $value) // 🎯 支援直接輸入實體資料庫 ID（如 107）
-                  ->orWhere('code', 'like', "%{$value}%") // 🎯 支援輸入科目代碼（如 500105）
-                  ->orWhere('name', 'like', "%{$value}%"); // 🎯 支援輸入中文名稱
+                $q->where('id', $value)
+                  ->orWhere('code', 'like', "%{$value}%")
+                  ->orWhere('name', 'like', "%{$value}%");
             });
         }
 
@@ -42,17 +49,9 @@ trait HasAccountAndDynamicSearch
             ->get()
             ->map(fn($account) => [
                 'id' => (string)$account->id,
-                'name' => "【{$account->code}】{$account->name}", // 🎯 將代碼、ID 與名稱全部清晰暴露，防擠壓
+                'name' => "【{$account->code}】{$account->name}", 
             ])
             ->toArray();
-
-        // 2. 處理動態路由關鍵字過濾
-        if (!empty($value)) {
-            $dynamicOptions = array_values(array_filter($dynamicOptions, function($item) use ($value) {
-                return str_contains(strtolower($item['name']), strtolower($value)) || 
-                       str_contains(strtolower($item['id']), strtolower($value));
-            }));
-        }
 
         return array_merge($dynamicOptions, $accounts);
     }

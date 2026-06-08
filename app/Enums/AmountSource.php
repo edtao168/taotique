@@ -36,12 +36,23 @@ enum AmountSource: string
     case AMOUNT = 'amount';
 
     // ==============================================
-    // 採購與費用相關
+    // 採購專用金額來源（本幣換算後）
     // ==============================================
-    case PURCHASE_TOTAL = 'total_amount';
-    case PURCHASE_ITEMS_AMOUNT = 'items_amount';
-    case PURCHASE_TAX = 'purchase_tax_amount';
-    case EXPENSE_AMOUNT = 'expense_amount';
+    case PURCHASE_BASE_TOTAL = 'purchase_base_total';        // 本幣應付總額
+    case PURCHASE_BASE_ITEMS = 'purchase_base_items';        // 本幣商品總值
+    case PURCHASE_BASE_TAX = 'purchase_base_tax';            // 本幣進項稅額
+    case PURCHASE_BASE_SHIPPING = 'purchase_base_shipping';  // 本幣運費
+    case PURCHASE_BASE_OTHER_FEES = 'purchase_base_other_fees'; // 本幣其他費用
+
+    // ==============================================
+    // 採購外幣原始金額（未換算）
+    // ==============================================
+    case PURCHASE_FOREIGN_SUBTOTAL = 'subtotal';      // 外幣商品總額
+    case PURCHASE_FOREIGN_SHIPPING = 'shipping_fee';  // 外幣運費
+    case PURCHASE_FOREIGN_TAX = 'tax';                // 外幣進項稅
+    case PURCHASE_FOREIGN_OTHER_FEES = 'other_fees';  // 外幣其他費
+    case PURCHASE_FOREIGN_DISCOUNT = 'discount';      // 外幣折讓
+    case PURCHASE_FOREIGN_TOTAL = 'total_amount';     // 外幣應付總額
 
     // ==============================================
     // 銷退/採退相關
@@ -92,6 +103,13 @@ enum AmountSource: string
 
             self::ITEMS_COST => '商品成本歷史快照累加 (舊式)',
             self::ITEMS_PRODUCT_COST => '關聯商品即時成本累加 (舊式)',
+			self::PURCHASE_SUBTOTAL => '採購外幣純商品總額',
+            self::PURCHASE_TOTAL_AMOUNT => '採購外幣應付總額',
+            self::PURCHASE_BASE_TOTAL => '採購本幣({$currency})總金額',
+            self::PURCHASE_BASE_ITEMS => '採購本幣({$currency})商品淨額(換算後)',
+            self::PURCHASE_BASE_TAX => '採購本幣({$currency})進項稅額(換算後)',
+            self::PURCHASE_BASE_SHIPPING => '採購本幣({$currency})運費支出(換算後)',
+            self::PURCHASE_BASE_OTHER_FEES => '採購本幣({$currency})附加費(換算後)',
         };
     }
 

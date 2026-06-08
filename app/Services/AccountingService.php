@@ -1,135 +1,229 @@
 <?php
-
 // app/Services/AccountingService.php
 
 namespace App\Services;
 
-use App\Enums\AmountSource;
 use App\Models\Account;
-use App\Models\Journal;
-use App\Models\JournalItem;
 use App\Models\AccountingRule;
 use App\Models\AccountingRuleLine;
+use App\Models\Journal;
+use App\Models\JournalItem;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class AccountingService
 {
-    /**
-     * [費曼註釋：來源類型對應的 Model 類別與單據編號欄位]
-     */
-    private const SOURCE_MAP = [
-        'purchase' => [
-            'model' => \App\Models\Purchase::class,
-            'number_field' => 'purchase_number',
-        ],
-        'sale' => [
-            'model' => \App\Models\Sale::class,
-            'number_field' => 'invoice_number',
-        ],        
-        'purchase_return' => [
-            'model' => \App\Models\PurchaseReturn::class,
-            'number_field' => 'return_number',
-        ],
-        'sale_return' => [
-            'model' => \App\Models\SaleReturn::class,
-            'number_field' => 'return_number',
-        ],
-        'inventory_adjustment' => [
-            'model' => \App\Models\InventoryAdjustment::class,
-            'number_field' => 'adjustment_number',
-        ],
-    ];
+    private const DECIMAL_PRECISION = 4;
 
     /**
-     * 核心過帳引擎：支持全業務事件（sale_revenue, sale_cost, purchase_post, sales_return_post 等）
+     * 核心過帳引擎
      */
     public function postFromRules(string $eventType, Model $source, ?string $context = null): ?Journal
     {
-        $shopId = $source->shop_id ?? 1;
+        return DB::transaction(function () use ($eventType, $source, $context) {
+            $rule = $this->getRule($eventType);
 
-        return DB::transaction(function () use ($eventType, $source, $context, $shopId) {
-            // 1. 撈取並鎖定對應的過帳規則
-            $rule = AccountingRule::where('event_type', $eventType)
-                ->where('is_active', true)
-                ->lockForUpdate()
-                ->first();
+            // 🎯 核心修復：傳入 eventType，讓每個事件類型擁有獨立的 Journal
+            $journal = $this->getOrCreateJournal($source, $eventType);
 
-            if (!$rule) {
-                // 💡 強阻斷防禦：如果不該跳過卻沒設規則，直接拋出異常，不讓系統佛系走下去
-                throw new \RuntimeException("會計自動過帳失敗：找不到已啟用的過帳規則 [{$eventType}]，店鋪 ID: {$shopId}。請先至後台配置規則！");
-            }
+            $entries = $this->buildEntries($rule->lines, $source, $context);
 
-            $referenceType = $this->resolveReferenceType($source);
-            $journal = $this->getOrCreateJournal($source, $referenceType, $eventType);
-
-            $entries = [];
-
-            // 2. 解析規則明細
-            foreach ($rule->lines as $line) {
-                if (!$line->is_active) continue;
-
-                $accountId = $this->resolveAccountIdFromRule($line, $source, $context);
-                if (!$accountId) {
-                    throw new \RuntimeException("過帳規則解析失敗：事件 [{$eventType}] 線路 ID [{$line->id}] 無法解析會計科目。");
-                }
-
-                $baseAmount = $this->getAmountFromSource($source, $line->amount_source, $eventType);
-                $amount = bcmul($baseAmount, (string)$line->ratio, 4);
-
-                if (bccomp($amount, '0.0000', 4) === 0) {
-                    continue;
-                }
-
-                $entries[] = [
-                    'account_id' => $accountId,
-                    'entry_type' => $line->entry_type, // debit 或 credit
-                    'amount'     => $amount,
-                ];
-            }
-
-            // 🎯 【核心修復點】拒絕默默返回 null！如果解析後的過帳分錄金額總計為 0，直接拋出強烈異常觸發 Rollback
-            if (empty($entries)) {
-                throw new \RuntimeException("會計過帳拒絕：單據事件 [{$eventType}] 解析後的過帳分錄明細金額總計為 0。單據 ID: {$source->id}，請檢查單據相關金額或會計規則配比。");
-            }
-
-            // 3. 合併同科目分錄
+            $this->validateNotEmpty($entries, $eventType, $source);
             $cleanedEntries = $this->netSameAccountEntries($entries);
-
-            // 4. 借貸平衡嚴謹校驗
             $this->validateBalance($cleanedEntries, $eventType, $source);
 
-            // 5. 寫入傳票明細
-            foreach ($cleanedEntries as $entry) {
-                JournalItem::create([
-                    'journal_id' => $journal->id,
-                    'account_id' => $entry['account_id'],
-                    'entry_type' => $entry['entry_type'],
-                    'debit'      => $entry['entry_type'] === 'debit' ? $entry['amount'] : '0.0000',
-                    'credit'     => $entry['entry_type'] === 'credit' ? $entry['amount'] : '0.0000',
-                ]);
-            }
+            $this->createJournalItems($journal, $cleanedEntries);
 
             return $journal;
         });
     }
-	
-    protected function resolveAccountIdFromRule(AccountingRuleLine $line, Model $source, ?string $context): int
+
+    /**
+     * 建立分錄陣列（內部使用，包含借貸標記）
+     */
+    private function buildEntries($lines, Model $source, ?string $context): array
+    {
+        $entries = [];
+
+        foreach ($lines as $line) {
+            if (!$line->is_active) continue;
+
+            $amount = $source->getAmountFromSource($line->amount_source, $context);
+            $adjustedAmount = bcmul($amount, (string)$line->ratio, self::DECIMAL_PRECISION);
+
+            if (bccomp($adjustedAmount, '0.0000', self::DECIMAL_PRECISION) === 0) continue;
+
+            $accountId = $this->resolveAccountId($line, $source, $context);
+
+            $entries[] = [
+                'account_id' => $accountId,
+                'is_debit'   => $line->entry_type === 'debit',
+                'amount'     => $adjustedAmount,
+            ];
+        }
+
+        return $entries;
+    }
+
+    /**
+     * 批次建立傳票明細（符合你的資料表結構）
+     */
+    private function createJournalItems(Journal $journal, array $entries): void
+    {
+        $items = collect($entries)->map(fn($entry) => [
+            'journal_id'      => $journal->id,
+            'account_id'      => $entry['account_id'],
+            'shop_id'         => $journal->shop_id,
+            'currency'        => 'TWD',
+            'debit'           => $entry['is_debit'] ? $entry['amount'] : '0.0000',
+            'credit'          => !$entry['is_debit'] ? $entry['amount'] : '0.0000',
+            'debit_currency'  => $entry['is_debit'] ? $entry['amount'] : '0.0000',
+            'credit_currency' => !$entry['is_debit'] ? $entry['amount'] : '0.0000',
+            'exchange_rate'   => '1.000000',
+            'created_at'      => now(),
+            'updated_at'      => now(),
+        ])->toArray();
+
+        JournalItem::insert($items);
+    }
+
+    /**
+     * 獲取或建立傳票
+     * 
+     * 🎯 核心修復點：
+     * 將 event_type 編碼到 reference_type 中，格式為 "{model_type}:{event_type}"
+     * 例如："sale:sale_revenue", "sale:sale_fee", "sale:sale_cost"
+     * 這樣每個業務事件都能擁有獨立的傳票，互不覆蓋
+     * 
+     * 🎯 冪等性設計：
+     * 如果傳票已存在（如網絡中斷導致部分寫入），刪除舊 items 並重建。
+     * 這是底層服務的冪等保證，與業務層的「是否允許重新觸發」是不同層次的問題。
+     * 業務層（如 Sale::processStockOut）負責決定是否呼叫本方法。
+     */
+    private function getOrCreateJournal(Model $source, string $eventType): Journal
+    {
+        $baseReferenceType = $source::getReferenceType(); // 例如 'sale'
+        $referenceType = "{$baseReferenceType}:{$eventType}"; // 例如 'sale:sale_revenue'
+        $referenceId = $source->id;
+        $shopId = $source->shop_id ?? 1;
+
+        $journal = Journal::where('reference_type', $referenceType)
+            ->where('reference_id', $referenceId)
+            ->where('shop_id', $shopId)
+            ->first();
+
+        if ($journal) {
+            // 🎯 冪等性保證：已存在則清空重建（適用於網絡中斷等異常恢復場景）
+            // 注意：這不會改變傳票狀態（如 posted -> draft），只重建明細
+            $journal->items()->delete();
+
+            // 更新描述和日期，確保資訊最新
+            $journal->update([
+                'description' => "自動過帳 [{$eventType}] - 單據編號: {$source->getDocumentNumber()}",
+                'entry_date'  => now()->format('Y-m-d'),
+                'updated_at'  => now(),
+            ]);
+
+            return $journal;
+        }
+
+        return Journal::create([
+            'shop_id'         => $shopId,
+            'currency'        => 'TWD',
+            'exchange_rate'   => '1.0000',
+            'entry_date'      => now()->format('Y-m-d'),
+            'description'     => "自動過帳 [{$eventType}] - 單據編號: {$source->getDocumentNumber()}",
+            'status'          => 'posted',
+            'reference_type'  => $referenceType,
+            'reference_id'    => $referenceId,
+            'created_by'      => auth()->id() ?? 'system',
+        ]);
+    }
+
+    /**
+     * 合併同科目分錄
+     */
+    private function netSameAccountEntries(array $entries): array
+    {
+        return collect($entries)
+            ->groupBy(fn($entry) => $entry['account_id'])
+            ->map(function($group) {
+                $debitTotal = $group->where('is_debit', true)->sum('amount');
+                $creditTotal = $group->where('is_debit', false)->sum('amount');
+
+                if (bccomp($debitTotal, $creditTotal, self::DECIMAL_PRECISION) > 0) {
+                    return [
+                        'account_id' => $group->first()['account_id'],
+                        'is_debit'   => true,
+                        'amount'     => bcsub($debitTotal, $creditTotal, self::DECIMAL_PRECISION),
+                    ];
+                } elseif (bccomp($creditTotal, $debitTotal, self::DECIMAL_PRECISION) > 0) {
+                    return [
+                        'account_id' => $group->first()['account_id'],
+                        'is_debit'   => false,
+                        'amount'     => bcsub($creditTotal, $debitTotal, self::DECIMAL_PRECISION),
+                    ];
+                }
+
+                return null;
+            })
+            ->filter()
+            ->values()
+            ->toArray();
+    }
+
+    /**
+     * 驗證借貸平衡
+     */
+    private function validateBalance(array $entries, string $eventType, Model $source): void
+    {
+        $debitTotal = '0.0000';
+        $creditTotal = '0.0000';
+
+        foreach ($entries as $entry) {
+            if ($entry['is_debit']) {
+                $debitTotal = bcadd($debitTotal, $entry['amount'], self::DECIMAL_PRECISION);
+            } else {
+                $creditTotal = bcadd($creditTotal, $entry['amount'], self::DECIMAL_PRECISION);
+            }
+        }
+
+        if (bccomp($debitTotal, $creditTotal, self::DECIMAL_PRECISION) !== 0) {
+            throw new \RuntimeException(
+                sprintf("分錄借貸不平衡！事件: %s，借方: %s，貸方: %s", $eventType, $debitTotal, $creditTotal)
+            );
+        }
+    }
+
+    /**
+     * 解析科目ID（含詳細錯誤資訊）
+     */
+    private function resolveAccountId(AccountingRuleLine $line, Model $source, ?string $context): int
     {
         if (!empty($line->account_id)) {
             return $line->account_id;
         }
 
         $code = $line->account_code;
-        $shopId = $source->shop_id ?? 1;
 
         if ($code && str_starts_with($code, 'DYNAMIC:')) {
-            $dynamicSpec = substr($code, 8); 
-            $resolvedCode = $this->resolveDynamicAccount($source, $dynamicSpec, $context);
-            
-            // 🎯 【核心修復點】動態翻譯科目代碼（如將中國標準的 500101 轉為台灣的 4111 銷貨收入）
-            //$resolvedCode = $this->convertToTaiwanAccount($resolvedCode);
+            $dynamicSpec = substr($code, 8);
+
+            try {
+                $resolvedCode = $source->resolveDynamicAccount($dynamicSpec, $context);
+            } catch (\Exception $e) {
+                throw new \RuntimeException(
+                    sprintf(
+                        '動態科目解析失敗 [規則ID: %d, 動態規格: %s, Model: %s#%d]: %s',
+                        $line->rule_id,
+                        $dynamicSpec,
+                        get_class($source),
+                        $source->id,
+                        $e->getMessage()
+                    )
+                );
+            }
 
             $account = Account::where('code', $resolvedCode)->first();
 
@@ -137,210 +231,63 @@ class AccountingService
                 return $account->id;
             }
 
-            throw new \RuntimeException("全動態科目對齊失敗：依準則解析出台灣會計科目代碼 [{$resolvedCode}]，但 accounts 資料表中無此店鋪(#{$shopId})紀錄。請確認會計科目表已初始化。");
-        }
-
-        throw new \RuntimeException("過帳規則設定錯誤：缺少實體科目 ID 或全動態科目策略代碼。");
-    }
-
-    /**
-     * 🚀 全動態路由翻譯機（支持小企業會計準則）
-     */
-    protected function resolveDynamicAccount(Model $source, string $dynamicSpec, ?string $context): string
-    {
-        $parts = explode(':', $dynamicSpec);
-        $domain = $parts[0] ?? ''; 
-        $type = $parts[1] ?? '';   
-        
-        return match($domain) {
-            'auto'     => $this->resolveAutoDomainAccount($source, $type),
-            'sale'     => $this->resolveSaleDomainAccount($source, $type, $parts[2] ?? null),
-            'purchase' => $this->resolvePurchaseDomainAccount($source, $type, $context),
-            default    => throw new \RuntimeException("未知的全動態網域命名空間: {$domain}"),
-        };
-    }
-
-    protected function resolveAutoDomainAccount(Model $source, string $type): string
-    {
-        return match($type) {
-            'inventory' => $source->category_accounting_code ?? '140501', // 1405 庫存商品
-            default     => throw new \RuntimeException("未知的商品庫存域動態科目: {$type}"),
-        };
-    }
-
-    protected function resolveSaleDomainAccount(Model $source, string $type, ?string $subType): string
-    {
-        $payment = $source->payment_method ?? 'cash';
-
-        return match($type) {
-            'payment' => match($payment) {
-                'shopee_wallet' => '113101', // 應收帳款-蝦皮代收
-                'line_pay'      => '113102', // 應收帳款-LINE Pay
-                'credit_card'   => '113103', // 應收帳款-信用卡
-                default         => '100101', // 門市現金
-            },
-            'revenue'     => '500101', // 主營業務收入
-            'cost'        => '5401',   // 主營業務成本
-            'channel_fee' => '560105', // 財務費用-手續費
-            'discount'    => '500110', // 銷售折扣與折讓
-            'return_fee'  => '560106', // 銷售費用-平台運費支出
-            default => throw new \RuntimeException("未知的銷售域動態科目: {$type}"),
-        };
-    }
-
-    /**
-     * 🚀 補回：採購與費用網域動態科目解析 (DYNAMIC:purchase:xxx)
-     */
-    protected function resolvePurchaseDomainAccount(Model $source, string $type, ?string $context): string
-    {
-        return match($type) {
-            'expense' => match($context) {
-                'tariff' => '140502',      // 庫存商品-附加關稅 (依準則計入存貨成本成本)
-                'freight' => '560201',     // 管理費用-運費 或 計入採購附加
-                default => '560202',       // 其他附加費
-            },
-            default => '220201',           // 預設應付帳款-供應商
-        };
-    }
-
-    /**
-     * 嚴謹解算所有業務單據的金額來源（涵蓋銷售、採購、銷退）
-     */
-    protected function getAmountFromSource(Model $source, string $amountSource, string $eventType): string
-    {
-        // 🎯 銷貨成本自動結轉金額 (加權平均成本總計)
-        if ($amountSource === 'cost_amount' || $amountSource === 'return_cost') {
-            
-            // 🛡️ 【關鍵修復點 1】強制執行 fresh 震碎並重新由資料庫撈取最新的關聯，防範 Livewire 記憶體快照污染
-            if (method_exists($source, 'fresh')) {
-                $source = $source->fresh(['items.product']);
-            } else {
-                $source->load(['items.product']);
-            }
-            
-            $totalCost = '0.0000';
-            
-            foreach ($source->items as $item) {
-                // 優先讀取銷售單明細表中的單位成本快照
-                $itemCost = (string)($item->unit_cost ?? '0.0000');
-                
-                // 🛡️ 【關鍵修復點 2：降級安全盾】如果快照不幸為 0 或空，自動向外層關聯的 products.cost (70.04) 索取即時成本
-                if (bccomp($itemCost, '0.0000', 4) === 0 && $item->product) {
-                    $itemCost = (string)($item->product->cost ?? '0.0000');
-                }
-                
-                $itemQty   = (string)($item->quantity ?? '0.0000');
-                
-                // 執行高精度嚴謹運算
-                $totalCost = bcadd($totalCost, bcmul($itemCost, $itemQty, 4), 4);
-            }
-            
-            return $totalCost;
-        }
-
-        // 2. 銷售摩擦費總計
-        if ($amountSource === 'total_fees') {
-            $platformFee     = (string)($source->platform_fee ?? '0.0000');
-            $commission      = (string)($source->commission ?? '0.0000');
-            $sellerDiscount  = (string)($source->seller_discount ?? '0.0000');
-            $shippingFeePlat = (string)($source->shipping_fee_platform ?? '0.0000');
-
-            $total = bcadd($platformFee, $commission, 4);
-            $total = bcadd($total, $sellerDiscount, 4);
-            return bcadd($total, $shippingFeePlat, 4);
-        }
-
-        // 3. 通用高精度欄位清洗反射
-        $val = match ($amountSource) {
-            'customer_total'          => $source->customer_total,
-            'subtotal_after_discount' => $source->subtotal_after_discount,
-            'final_net_amount'        => $source->final_net_amount,
-            'tax_amount'              => $source->tax_amount,
-            'freight_amount'          => $source->freight_amount,
-            'subtotal'                => $source->subtotal,
-            default                   => $source->getAttribute($amountSource) ?? 0,
-        };
-
-        return number_format((float)$val, 4, '.', '');
-    }
-
-    protected function netSameAccountEntries(array $entries): array
-    {
-        $grouped = [];
-        foreach ($entries as $entry) {
-            $key = $entry['account_id'] . '_' . $entry['entry_type'];
-            if (!isset($grouped[$key])) {
-                $grouped[$key] = $entry;
-            } else {
-                $grouped[$key]['amount'] = bcadd($grouped[$key]['amount'], $entry['amount'], 4);
-            }
-        }
-        return array_values($grouped);
-    }
-
-    protected function validateBalance(array $entries, string $eventType, Model $source): void
-    {
-        $debitTotal  = '0.0000';
-        $creditTotal = '0.0000';
-
-        foreach ($entries as $entry) {
-            if ($entry['entry_type'] === 'debit') {
-                $debitTotal = bcadd($debitTotal, $entry['amount'], 4);
-            } else {
-                $creditTotal = bcadd($creditTotal, $entry['amount'], 4);
-            }
-        }
-
-        if (bccomp($debitTotal, $creditTotal, 4) !== 0) {
             throw new \RuntimeException(
-                "會計過帳拒絕：分錄借貸不平衡！事件: [{$eventType}]。借方: {$debitTotal}, 貸方: {$creditTotal}。"
+                sprintf('動態科目對應的會計科目不存在：代碼 %s (來源: %s)', $resolvedCode, $dynamicSpec)
+            );
+        }
+
+        $account = Account::where('code', $code)->first();
+        if ($account) {
+            return $account->id;
+        }
+
+        throw new \RuntimeException("無法解析科目：{$code}");
+    }
+
+    /**
+     * 獲取過帳規則（全公司共用）
+     */
+    private function getRule(string $eventType): AccountingRule
+    {
+        \Log::info('getRule called', ['eventType' => $eventType]);
+
+        $rule = AccountingRule::where('event_type', $eventType)
+            ->where('is_active', true)
+            ->lockForUpdate()
+            ->first();
+
+        \Log::info('getRule result', [
+            'eventType' => $eventType,
+            'found' => $rule ? 'yes' : 'no',
+            'rule_id' => $rule?->id,
+            'lines_count' => $rule?->lines->count()
+        ]);
+
+        if (!$rule) {
+            throw new \RuntimeException("找不到已啟用的過帳規則 [{$eventType}]");
+        }
+
+        return $rule->load(['lines' => fn($q) => $q->orderBy('sort_order')]);
+    }
+
+    /**
+     * 驗證分錄不為空
+     */
+    private function validateNotEmpty(array $entries, string $eventType, Model $source): void
+    {
+        if (empty($entries)) {
+            throw new \RuntimeException(
+                sprintf("過帳分錄金額總計為 0，單據類型: %s#%d，事件: %s", get_class($source), $source->id, $eventType)
             );
         }
     }
 
-    protected function resolveReferenceType(Model $source): string
-    {
-        return match (get_class($source)) {
-            \App\Models\Sale::class        => 'sale',
-            \App\Models\PurchaseOrder::class => 'purchase',
-            \App\Models\SalesReturn::class => 'sales_return',
-            default                        => 'manual',
-        };
-    }
-
-    protected function getOrCreateJournal(Model $source, string $referenceType, string $eventType): Journal
-    {
-        $referenceId = $source->id;
-        $shopId = $source->shop_id ?? 1;
-
-        $journal = Journal::where('reference_type', $referenceType)
-            ->where('reference_id', $referenceId)
-            ->where('shop_id', $shopId)
-            ->where('description', 'like', "%{$eventType}%") 
-            ->first();
-
-        if ($journal) {
-            $journal->items()->delete();
-            return $journal;
-        }
-
-        $docNumber = $source->invoice_number ?? $source->purchase_number ?? $source->return_number ?? ('DOC-' . now()->format('YmdHis'));
-
-        return Journal::create([
-            'shop_id'         => $shopId,
-            'journal_number'  => 'JV-' . now()->format('Ymd') . '-' . sprintf('%05d', rand(1, 99999)),
-            'reference_type'  => $referenceType,
-            'reference_id'    => $referenceId,
-            'document_number' => $docNumber,
-            'entry_date'      => now()->format('Y-m-d'),
-            'description'     => "自動過帳 [{$eventType}] - 單據編號: {$docNumber}",
-            'status'          => 'posted',
-            'created_by'      => 1,
-        ]);
-    }
-
     /**
-     * 🛡️ 補回：前端多型反查原始單據編號安全盾
+     * 前端反查單據編號（從 Journal 記錄反查原始單據）
+     * 
+     * 🎯 核心修復點：
+     * reference_type 現在格式為 "{model_type}:{event_type}"
+     * 需要拆分出基礎 model 類型來反查
      */
     public function resolveSourceNumber(?string $referenceType, ?int $referenceId): ?string
     {
@@ -348,32 +295,127 @@ class AccountingService
             return '手工分錄';
         }
 
-        $config = self::SOURCE_MAP[$referenceType] ?? null;
-        if (!$config) {
+        $baseReferenceType = $this->extractBaseReferenceType($referenceType);
+
+        $modelClass = $this->getModelClassByReferenceType($baseReferenceType);
+
+        if (!$modelClass || !method_exists($modelClass, 'getDocumentNumberField')) {
             return "未知單據 (#{$referenceId})";
         }
 
-        $modelClass = $config['model'];
-        $numberField = $config['number_field'];
+        $numberField = $modelClass::getDocumentNumberField();
         $source = $modelClass::where('id', $referenceId)->first([$numberField]);
 
         return $source ? $source->{$numberField} : "單據已刪除 (#{$referenceId})";
     }
-	
-	/**
-	 * 🔄 未來中間層處理：將大陸科目代碼動態翻譯為台灣在地會計科目代碼
-	 * 確保多店預留與跨境報表合併時的資料一致性
-	 */
-	protected function convertToTaiwanAccount(string $chinaCode, int $shopId): string
-	{
-		$mapping = [
-			'500101' => '4111', // 主營業務收入-零售 -> 銷貨收入
-			'5401'   => '5111', // 主營業務成本 -> 銷貨成本
-			'140501' => '1210', // 庫存商品 -> 商品存貨
-			'222103' => '2261', // 應交稅費-銷項稅 -> 銷項稅額
-		];
 
-		// 返回對應後的代碼，若無對應則返回原代碼
-		return $mapping[$chinaCode] ?? $chinaCode;
-	}
+    /**
+     * 從編碼後的 reference_type 中提取基礎 model 類型
+     * 
+     * 例如："sale:sale_revenue" -> "sale"
+     *       "purchase:purchase_inbound" -> "purchase"
+     *       "sale" -> "sale" (向後兼容)
+     */
+    private function extractBaseReferenceType(string $referenceType): string
+    {
+        if (str_contains($referenceType, ':')) {
+            return explode(':', $referenceType)[0];
+        }
+        return $referenceType;
+    }
+
+    /**
+     * 參考類型 → Model 類別對應
+     */
+    private function getModelClassByReferenceType(string $referenceType): ?string
+    {
+        return match($referenceType) {
+            'sale'           => \App\Models\Sale::class,
+            'purchase'       => \App\Models\Purchase::class,
+            'sales_return'   => \App\Models\SalesReturn::class,
+            'purchase_return'=> \App\Models\PurchaseReturn::class,
+            'conversion'     => \App\Models\Conversion::class,
+            default          => null,
+        };
+    }
+
+    /**
+     * 取得參考類型的中文標籤
+     * 
+     * 🎯 核心修復點：
+     * 處理帶 event_type 的 reference_type
+     */
+    public function getSourceTypeLabel(?string $referenceType): string
+    {
+        if (!$referenceType) {
+            return '未知單據';
+        }
+
+        if (str_contains($referenceType, ':')) {
+            [$baseType, $eventType] = explode(':', $referenceType, 2);
+            $baseLabel = match($baseType) {
+                'sale'           => '銷售單',
+                'purchase'       => '採購單',
+                'sales_return'   => '銷售退貨單',
+                'purchase_return'=> '採購退貨單',
+                'conversion'     => '轉換單',
+                'manual'         => '手工分錄',
+                default          => '未知單據',
+            };
+            return "{$baseLabel} [{$eventType}]";
+        }
+
+        return match($referenceType) {
+            'sale'           => '銷售單',
+            'purchase'       => '採購單',
+            'sales_return'   => '銷售退貨單',
+            'purchase_return'=> '採購退貨單',
+            'conversion'     => '轉換單',
+            'manual'         => '手工分錄',
+            default          => '未知單據',
+        };
+    }
+
+    /**
+     * 🎯 新增：檢查指定業務事件的傳票是否已存在
+     * 供業務層判斷是否需要觸發過帳
+     */
+    public function hasJournal(string $eventType, Model $source): bool
+    {
+        $baseReferenceType = $source::getReferenceType();
+        $referenceType = "{$baseReferenceType}:{$eventType}";
+
+        return Journal::where('reference_type', $referenceType)
+            ->where('reference_id', $source->id)
+            ->where('shop_id', $source->shop_id ?? 1)
+            ->exists();
+    }
+
+    /**
+     * 🎯 新增：撤銷（軟刪除）指定業務事件的傳票
+     * 供業務層在「取消出庫/入庫」等場景呼叫
+     */
+    public function reverseJournal(string $eventType, Model $source): void
+    {
+        $baseReferenceType = $source::getReferenceType();
+        $referenceType = "{$baseReferenceType}:{$eventType}";
+
+        DB::transaction(function () use ($referenceType, $source) {
+            $journal = Journal::where('reference_type', $referenceType)
+                ->where('reference_id', $source->id)
+                ->where('shop_id', $source->shop_id ?? 1)
+                ->first();
+
+            if ($journal) {
+                // 軟刪除：將狀態改為 reversed，保留審計軌跡
+                $journal->update([
+                    'status' => 'reversed',
+                    'description' => $journal->description . ' [已撤銷於 ' . now()->format('Y-m-d H:i:s') . ']',
+                ]);
+
+                // 可選：建立反向分錄（紅字沖銷）
+                // 此處僅標記狀態，實際紅字沖銷可依業務需求擴展
+            }
+        });
+    }
 }

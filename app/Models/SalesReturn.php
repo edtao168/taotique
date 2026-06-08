@@ -232,6 +232,21 @@ class SalesReturn extends Model
 		return (string) $subtotal;
 	}
 	
+	public static function getDocumentNumberField(): string
+    {
+        return 'return_number';
+    }
+    
+    public function getDocumentNumber(): string
+    {
+        return $this->return_number ?? 'SR-' . $this->id;
+    }
+    
+    public static function getReferenceType(): string
+    {
+        return 'sales_return';
+    }
+	
     // 關聯費用明細
     public function fees(): HasMany
     {
