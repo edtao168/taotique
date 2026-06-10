@@ -55,27 +55,6 @@ class SalesReturn extends Model
     // =========================================================================
 
     /**
-     * 🎯 實作 HasAccounting Trait 的抽象方法
-     * 從資料庫讀取會計規則（由 AccountingService 調用）
-     */
-    public function getAccountingRules(string $eventType): array
-    {
-        $shopId = $this->shop_id ?? 1;
-        
-        $rule = \App\Models\AccountingRule::where('event_type', $eventType)
-            ->where('shop_id', $shopId)
-            ->where('is_active', true)
-            ->with(['lines' => fn($q) => $q->orderBy('sort_order')])
-            ->first();
-
-        if (!$rule) {
-            throw new \RuntimeException("找不到退貨會計規則：{$eventType}，店鋪 ID: {$shopId}");
-        }
-
-        return $rule->lines->toArray();
-    }
-
-    /**
      * 🎯 實作 HasAccountAndDynamicSearch Trait 的抽象方法
      * 解析動態會計科目
      * 

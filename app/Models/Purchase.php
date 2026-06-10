@@ -60,7 +60,7 @@ class Purchase extends Model
             'total_amount'  => 'decimal:4',
         ];
     }
-	
+
 	/**
      * 判定採購單是否已鎖定 (不允許任何修改)
      */
@@ -87,6 +87,26 @@ class Purchase extends Model
     {
         return !$this->hasReturnRecords();
     }
+	
+	// =========================================================================
+	// SECTION: 會計自動規則對齊介面
+	// =========================================================================
+
+	public static function getDocumentNumberField(): string
+	{
+		return 'purchase_number';
+	}
+
+	public function getDocumentNumber(): string
+	{
+		return $this->purchase_number ?? 'PO-' . $this->id;
+	}
+
+	public static function getReferenceType(): string
+	{
+		return 'purchase';
+	}
+	
 
     // --- 新增的單號生成邏輯 (參考 Sale.php) ---
     protected static function booted()
@@ -117,67 +137,6 @@ class Purchase extends Model
 		$this->total_twd = bcmul($this->total_amount, $this->exchange_rate, 4);
 	}
 
-	/**
-     * 實作會計動態規則接口
-     */
-    public function getAccountingRules(string $eventType): array
-	{
-		if ($eventType !== 'purchase_stock_in') {
-			return [];
-		}
-
-		// 🎯 回傳格式須符合 AccountingService 預期：包含 lines 索引
-		return [
-			'lines' => [
-				// 借方：庫存商品（動態依商品類別）
-				[
-					'account_code'   => 'DYNAMIC:auto:inventory',
-					'entry_type'     => 'debit',
-					'amount_source'  => AmountSource::PURCHASE_BASE_ITEMS->value,
-					'ratio'          => '1.0000',
-					'is_active'      => true,
-					'sort_order'     => 1,
-				],
-				// 借方：進項稅額（固定科目）
-				[
-					'account_code'   => '222101',  // 應交稅費-應交增值稅(進項)
-					'entry_type'     => 'debit',
-					'amount_source'  => AmountSource::PURCHASE_BASE_TAX->value,
-					'ratio'          => '1.0000',
-					'is_active'      => true,
-					'sort_order'     => 2,
-				],
-				// 借方：運費附加費（動態依費用類型）
-				[
-					'account_code'   => 'DYNAMIC:purchase:expense',
-					'entry_type'     => 'debit',
-					'amount_source'  => AmountSource::PURCHASE_BASE_SHIPPING->value,
-					'ratio'          => '1.0000',
-					'is_active'      => true,
-					'sort_order'     => 3,
-				],
-				// 借方：其他附加費
-				[
-					'account_code'   => 'DYNAMIC:purchase:expense',
-					'entry_type'     => 'debit',
-					'amount_source'  => AmountSource::PURCHASE_BASE_OTHER_FEES->value,
-					'ratio'          => '1.0000',
-					'is_active'      => true,
-					'sort_order'     => 4,
-				],
-				// 貸方：應付帳款/付款管道（動態）
-				[
-					'account_code'   => 'DYNAMIC:purchase:payment',
-					'entry_type'     => 'credit',
-					'amount_source'  => AmountSource::PURCHASE_BASE_TOTAL->value,
-					'ratio'          => '1.0000',
-					'is_active'      => true,
-					'sort_order'     => 5,
-				],
-			],
-		];
-	}
-
     /**
      * 執行採購入庫厚邏輯（高併發庫存鎖定、加權平均成本計算、會計自動過帳）
      */
@@ -186,8 +145,10 @@ class Purchase extends Model
         if ($this->stocked_in_at) {
             throw new Exception("該採購單已執行過入庫，不可重複操作。");
         }
+		
+		$paymentMode = $paymentMode ?? 'prepaid';
 
-        DB::transaction(function () {
+        DB::transaction(function () use ($paymentMode) {
             $shopId = $this->shop_id ?? 1;
             $warehouseId = $this->warehouse_id;
             $rate = $this->exchange_rate ?? '1.0000';
@@ -251,18 +212,30 @@ class Purchase extends Model
             // 4. 變更採購單完工狀態快照
 			$this->stocked_in_at = now();
 			$this->save();
+			
+			// 根據付款模式決定 eventType
+			$eventType = match($paymentMode) {
+				'prepaid' => 'purchase_stock_in_prepaid',
+				'cash'    => 'purchase_stock_in_cash',
+				'credit'  => 'purchase_stock_in_credit',
+				default   => 'purchase_stock_in_prepaid',
+			};
 
-			// 5. 🎯 呼叫 Trait 核心，連動 AccountingService 自動過帳
-			$journal = $this->postJournal('purchase_stock_in');
+			// 5. 呼叫 Trait 核心，連動 AccountingService 自動過帳
+			 $journal = $this->postJournal($eventType, $paymentMode);
 			
 			if (!$journal) {
-				throw new Exception("會計過帳失敗：postJournal 返回 null，請檢查 purchase_stock_in 規則配置。");
+				throw new Exception("會計過帳失敗：請檢查 {$eventType} 規則配置。");
 			}
 			
-			Log::info("採購單入庫完成", [
-				'purchase_id' => $this->id,
-				'purchase_number' => $this->purchase_number,
-				'journal_id' => $journal->id
+			$this->stocked_in_at = now();
+			$this->save();
+		
+			logger("採購單入庫完成", [
+				'purchase_id'		=> $this->id,
+				'purchase_number'	=> $this->purchase_number,
+				'journal_id'		=> $journal->id,
+				'payment_mode'		=> $paymentMode ?? 'default'
 			]);
         });
     }
@@ -347,111 +320,142 @@ class Purchase extends Model
         
         return bcmul($foreignAmount, $rate, 4);
     }
-    
-    // =========================================================================
-    // SECTION: 動態科目解析（專屬於 Purchase）
-    // =========================================================================
-    public static function getDocumentNumberField(): string
-    {
-        return 'purchase_number';
-    }
-    
-    public function getDocumentNumber(): string
-    {
-        return $this->purchase_number ?? 'PO-' . $this->id;
-    }
-    
-    public static function getReferenceType(): string
-    {
-        return 'purchase';
-    }
-	
-/**
- * 解析動態科目代碼（供 AccountingService 呼叫）
- */
-public function resolveDynamicAccount(string $dynamicSpec, ?string $context = null): string
-{
-    $parts = explode(':', $dynamicSpec);
-    $domain = $parts[0] ?? '';
-    $type = $parts[1] ?? '';
-    
-    return match($domain) {
-        'auto'     => $this->resolveAutoDomainAccount($type),
-        'purchase' => $this->resolvePurchaseDomainAccount($type, $context),
-        default => throw new \RuntimeException("未知的動態科目網域: {$domain}"),
-    };
-}
+  
+	// =========================================================================
+	// SECTION: 動態科目解析（專屬於 Purchase）- 參照 Sale 架構重構
+	// =========================================================================
 
-/**
- * 處理 auto 域動態科目（庫存相關）
- */
-private function resolveAutoDomainAccount(string $type): string
-{
-    if ($type !== 'inventory') {
-        throw new \RuntimeException("未知的 auto 域動態科目類型: {$type}");
-    }
-    
-    // 從第一個採購明細取得商品類別
-    $firstItem = $this->items->first();
-    $category = $firstItem?->product?->category_code ?? 'default';
-    
-    return match($category) {
-        '1', 'pendant'  => '140501',  // 吊墜項鍊
-        '2', 'bracelet' => '140502',  // 手鍊手鐲
-        '3', 'earring'  => '140505',  // 耳環
-        '4', 'ring'     => '140506',  // 戒指
-        '5', 'general'  => '140503',  // 百貨
-        '6', 'package'  => '140901',  // 禮盒包材
-        '7', 'part'     => '140509',  // 配件半成品
-        default         => '140599',  // 其他庫存
-    };
-}
+	public function resolveDynamicAccount(string $dynamicSpec, ?string $context = null): string
+	{
+		$parts = explode(':', $dynamicSpec);
+		$domain = $parts[0] ?? '';
+		$type = $parts[1] ?? '';
+		$subType = $parts[2] ?? null;
+		
+		return match($domain) {
+			'auto'     => $this->resolveAutoDynamicAccount($type, $subType),
+			'purchase' => $this->resolvePurchaseDynamicAccount($type, $subType, $context),
+			default => throw new \RuntimeException("未知的動態科目網域: {$domain}"),
+		};
+	}
 
-/**
- * 處理 purchase 域動態科目
- */
-private function resolvePurchaseDomainAccount(string $type, ?string $context): string
-{
-    return match($type) {
-        'payment' => $this->resolvePaymentAccount(),
-        'expense' => $this->resolveExpenseAccount($context),
-        default => throw new \RuntimeException("未知的採購動態科目類型: {$type}"),
-    };
-}
+	/**
+	 * 處理 auto 域動態科目（與 Sale 保持一致）
+	 */
+	private function resolveAutoDynamicAccount(string $type, ?string $subType = null): string
+	{
+		return match($type) {
+			'inventory' => config('business.accounting_accounts.cost.inventory', '1405'),
+			'cost'      => config('business.accounting_accounts.cost.cost_of_goods_sold', '5401'),
+			default => throw new \RuntimeException("未知的 auto 域動態科目類型: {$type}"),
+		};
+	}
 
-/**
- * 依付款方式動態決定應付帳款科目
- */
-private function resolvePaymentAccount(): string
-{
-    $paymentMethod = $this->payment_method ?? 'credit';
-    
-    return match($paymentMethod) {
-        'cash_twd', 'cash'    => '1001',     // 庫存現金
-        'bank_cathay'         => '100201',   // 銀行存款-新台幣帳戶
-        'wechat_pay'          => '100207',   // 銀行存款-微信
-        'alipay'              => '100208',   // 銀行存款-支付寶
-        'credit'              => '2202',     // 應付帳款（賒購）
-        'china_ap'            => '220201',   // 應付帳款-大陸廠商
-        default               => '2202',     // 預設應付帳款
-    };
-}
+	/**
+	 * 處理 purchase 域動態科目
+	 */
+	private function resolvePurchaseDynamicAccount(string $type, ?string $subType = null, ?string $context = null): string
+	{
+		return match($type) {
+			'payment' => $this->resolvePaymentAccount($context),
+			'expense' => $this->resolveExpenseAccount($subType, $context),
+			default => throw new \RuntimeException("未知的採購動態科目類型: {$type}"),
+		};
+	}
 
-/**
- * 依費用類型動態決定科目
- */
-private function resolveExpenseAccount(?string $context): string
-{
-    return match($context) {
-        'tariff', 'duty' => '140502',   // 關稅計入庫存成本
-        'freight'        => '140503',   // 運費計入庫存成本
-        'handling'       => '140504',   // 手續費計入庫存成本
-        default          => '140599',   // 其他費用計入庫存成本
-    };
-}
+	/**
+	 * 依付款方式動態決定貸方科目
+	 * 
+	 * 🎯 核心：根據付款方式和交易模式（context）決定科目
+	 * context 可能的值：
+	 * - 'prepaid': 先付款後發貨 → 貸：預付賬款
+	 * - 'cash': 一手交錢一手交貨 → 貸：銀行存款/現金
+	 * - 'credit': 先貨後款/月結 → 貸：應付賬款
+	 * - null: 根據 payment_method 判斷
+	 */
+	private function resolvePaymentAccount(?string $context = null): string
+	{
+		// 如果有 context，優先根據交易模式決定
+		if ($context) {
+			return match($context) {
+				'prepaid' => '1123',      // 預付賬款（資產類）
+				'cash'    => $this->getCashAccountByPaymentMethod(),
+				'credit'  => $this->getCreditAccountByPaymentMethod(),
+				default   => $this->getDefaultPaymentAccount(),
+			};
+		}
+		
+		// 無 context 時，根據 payment_method 欄位判斷
+		return $this->getDefaultPaymentAccount();
+	}
+
+	/**
+	 * 根據付款方式取得現金/銀行科目（一手交錢）
+	 */
+	private function getCashAccountByPaymentMethod(): string
+	{
+		$paymentMethod = $this->payment_method ?? 'credit';
+		
+		return match($paymentMethod) {
+			'cash_twd', 'cash'    => '100101',   // 門市現金
+			'bank_cathay'         => '100201',   // 銀行存款-國泰世華
+			'wechat_pay'          => '100207',   // 銀行存款-微信
+			'alipay'              => '100208',   // 銀行存款-支付寶
+			default               => '100201',   // 預設銀行存款
+		};
+	}
+
+	/**
+	 * 根據付款方式取得應付帳款科目（賒購）
+	 */
+	private function getCreditAccountByPaymentMethod(): string
+	{
+		$paymentMethod = $this->payment_method ?? 'credit';
+		
+		return match($paymentMethod) {
+			'china_ap'            => '220201',   // 應付帳款-大陸廠商
+			'credit'              => '2202',     // 應付帳款（一般）
+			default               => '2202',     // 預設應付帳款
+		};
+	}
+
+	/**
+	 * 取得預設的付款科目（向後兼容）
+	 */
+	private function getDefaultPaymentAccount(): string
+	{
+		$paymentMethod = $this->payment_method ?? 'credit';
+		
+		return match($paymentMethod) {
+			'cash_twd', 'cash'    => '100101',   // 門市現金
+			'bank_cathay'         => '100201',   // 銀行存款
+			'wechat_pay'          => '100207',   // 銀行存款-微信
+			'alipay'              => '100208',   // 銀行存款-支付寶
+			'china_ap'            => '220201',   // 應付帳款-大陸廠商（月結）
+			'credit'              => '2202',     // 應付帳款（一般）
+			default               => '2202',
+		};
+	}
+
+	/**
+	 * 依費用類型動態決定借方科目
+	 * 
+	 * 🎯 根據《小企業會計準則》，採購附加費應計入存貨成本
+	 * 所以預設都進庫存商品（1405），可依費用類型細分
+	 */
+	private function resolveExpenseAccount(?string $subType = null, ?string $context = null): string
+	{
+		// 可依費用類型細分到不同的庫存明細科目
+		return match($subType) {
+			'shipping', 'freight' => '140503',   // 運費 → 庫存商品-運費分攤
+			'tariff', 'duty'      => '140504',   // 關稅 → 庫存商品-關稅分攤
+			'handling'            => '140505',   // 手續費 → 庫存商品-手續費分攤
+			default               => '140599',   // 其他 → 庫存商品-其他
+		};
+	}
 
     // 分店    
-	 public function shop(): BelongsTo { return $this->belongsTo(Shop::class); }
+	public function shop(): BelongsTo { return $this->belongsTo(Shop::class); }
 	// 明細
     public function items(): HasMany { return $this->hasMany(PurchaseItem::class, 'purchase_id'); }
 	// 供應商

@@ -6,8 +6,7 @@ namespace App\Traits;
 use App\Models\Journal;
 use App\Services\AccountingService;
 use Illuminate\Support\Facades\App;
-use Illuminate\Support\Facades\Log;  // ✅ 加上這行
-use RuntimeException;  // ✅ 加上這行
+use RuntimeException;
 
 /**
  * 費曼註釋：精簡後的會計 Trait
@@ -44,10 +43,23 @@ trait HasAccounting
         return $accountingService->postFromRules($eventType, $this, $context);
     }
 	
-	/**
-     * 抽象方法：子類別需實作，回傳會計規則
+    /**
+     * 🎯 實作 HasAccounting Trait 的抽象方法
+     * 從資料庫讀取會計規則（由 AccountingService 調用）
      */
-    abstract public function getAccountingRules(string $eventType): array;
+    public function getAccountingRules(string $eventType): array
+    {
+        $rule = \App\Models\AccountingRule::where('event_type', $eventType)            
+            ->where('is_active', true)
+            ->with(['lines' => fn($q) => $q->orderBy('sort_order')])
+            ->first();
+
+        if (!$rule) {
+            throw new \RuntimeException("找不到退貨會計規則：{$eventType}");
+        }
+
+        return $rule->lines->toArray();
+    }
 
     /**
      * 定義與 Journal 的關聯（多態）

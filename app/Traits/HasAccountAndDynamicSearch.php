@@ -52,29 +52,7 @@ trait HasAccountAndDynamicSearch
 
         return array_merge($dynamicOptions, $accounts);
     }
-    // ==================== 會計規則讀取（共用） ====================
-    
-    /**
-     * 獲取會計結轉規則（從資料庫動態讀取）
-     * 所有模塊（Sale、SalesReturn、Purchase、PurchaseReturn）共用
-     */
-    public function getAccountingRules(string $eventType): array
-    {
-        $shopId = $this->shop_id ?? 1;
-        
-        $rule = AccountingRule::where('event_type', $eventType)
-            ->where('shop_id', $shopId)
-            ->where('is_active', true)
-            ->with(['lines' => fn($q) => $q->orderBy('sort_order')])
-            ->first();
 
-        if (!$rule) {
-            throw new \RuntimeException("找不到通用的動態會計規則：[{$eventType}]，店鋪 ID: {$shopId}");
-        }
-
-        return $rule->lines->toArray();
-    }
-    
     // ==================== 動態科目解析（抽象方法，各模塊實作） ====================
     
     /**

@@ -1,4 +1,4 @@
-{{-- 檔案路徑：resources/views/livewire/purchases/index.blade.php --}}
+{{-- resources/views/livewire/purchases/index.blade.php --}}
 <div>
     <x-header title="採購清單" separator progress-indicator>
         <x-slot:middle class="!justify-end">
@@ -251,11 +251,12 @@
 						@else
 							<x-button label="修改" icon="o-pencil" :link="route('purchases.edit', $selectedPurchase->id)" class="btn-primary flex-1" />
 						<x-button 
-								label="入庫" 
+								label="入庫過帳" 
 								icon="o-archive-box-arrow-down" 
 								class="btn-warning flex-1" 
 								wire:click="processStockIn({{ $selectedPurchase->id }})"
 								wire:confirm="確定要執行入庫增加庫存嗎？這將會同步產生日記帳傳票且無法撤回。"
+								tooltip="完成入庫並產生日記賬"
 								spinner />
 							<x-button label="刪除" icon="o-trash" wire:click="delete({{ $selectedPurchase->id }})" wire:confirm="確定要刪除此單據並扣除庫存嗎？" class="btn-error btn-outline flex-1" />									
 						@endif								
