@@ -10,24 +10,19 @@ class SalesReturnItem extends Model
     protected $fillable = [
         'shop_id',
         'sales_return_id', 
-        'sales_order_item_id',
+        'sale_item_id ',
         'product_id', 
         'quantity', 
         'unit_price', 
         'subtotal', 
-        'tax_rate',
-        'tax_amount',
-        'condition',
         'is_restock',
-        'return_reason'
     ];
     
     protected $casts = [        
 		'quantity' 	 => 'decimal:4',
 		'unit_price' => 'decimal:4',
-		'subtotal'   => 'decimal:4',		
-		'tax_rate'   => 'decimal:2',
-		'tax_amount' => 'decimal:4',
+		'subtotal'   => 'decimal:4',
+		'is_restock' => 'boolean',
     ];
 
     public function saleItem(): BelongsTo

@@ -12,7 +12,7 @@
     <x-card padding="none">
         {{-- PC 端表格 --}}
         <div class="hidden md:block">
-            <x-table :headers="$headers" :rows="$rows" @row-click="$wire.edit($event.detail.id)" class="cursor-pointer">
+            <x-table :headers="$headers" :rows="$rows" @row-click="$wire.edit($event.detail.id)" sticky class="cursor-pointer">
                 @scope('cell_lines_summary', $item)
                     <div class="text-sm">
                         @foreach($item->lines as $line)

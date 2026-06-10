@@ -4,19 +4,66 @@
 
 return [
 
+	// config/business.php
+
+	'amount_sources' => [
+		// ========== 通用 ==========
+		'subtotal' => '商品小計 (subtotal)',
+		'total_amount' => '總金額 (total_amount)',
+		'tax_amount' => '稅額 (tax_amount)',
+		'freight_amount' => '運費 (freight_amount)',
+		
+		// ========== 銷售模組 ==========
+		'customer_total' => '買家實付總額 (customer_total)',
+		'final_net_amount' => '賣家最終實收 (final_net_amount)',
+		'subtotal_after_discount' => '折讓後商品淨額 (subtotal_after_discount)',
+		'cost_amount' => '銷貨成本總計 (cost_amount)',
+		
+		// 費用類型（對應 fee_types）
+		'shipping_fee_customer' => '買家運費 (shipping_fee_customer)',
+		'seller_discount' => '賣家折扣 (seller_discount)',
+		'platform_coupon' => '平台優惠券 (platform_coupon)',
+		'shipping_fee_platform' => '平台運費 (shipping_fee_platform)',
+		'platform_fee' => '平台手續費 (platform_fee)',
+		'commission' => '佣金 (commission)',
+		
+		// ========== 退貨模組 ==========
+		'return_total' => '退貨退款總額 (return_total)',
+		'return_cost' => '退貨成本-原幣 (return_cost)',
+		'return_cost_base' => '退貨成本-本幣 (return_cost_base)',
+		'restocking_fee' => '退貨處理費 (restocking_fee)',
+		'return_shipping_fee' => '退貨運費 (return_shipping_fee)',
+		
+		// ========== 採購模組 ==========
+		'purchase_base_total' => '採購本幣總額 (purchase_base_total)',
+		'purchase_base_items' => '採購本幣商品額 (purchase_base_items)',
+		'purchase_base_tax' => '採購本幣稅額 (purchase_base_tax)',
+		'purchase_base_shipping' => '採購本幣運費 (purchase_base_shipping)',
+		'purchase_base_other_fees' => '採購本幣其他費用 (purchase_base_other_fees)',
+	],
+
     // =========================================================================
     // 會計全動態科目策略定義 (供後台 Mary UI 下拉選單使用)
     // =========================================================================
-    'accounting_dynamic_options' => [
-        ['value' => 'DYNAMIC:auto:inventory',       'label' => '動態：庫存商品 (依商品類別)'],
-        ['value' => 'DYNAMIC:sale:revenue',         'label' => '動態：銷貨收入 (依銷售通路)'],
-        ['value' => 'DYNAMIC:sale:payment',         'label' => '動態：應收帳款/代收款 (依付款管道)'], 
-        ['value' => 'DYNAMIC:sale:cost',            'label' => '動態：銷貨成本 (依商品類別自動結轉)'],
-        ['value' => 'DYNAMIC:sale:channel_fee',     'label' => '動態：通路摩擦手續費 (依銷售通路如蝦皮)'],
-        ['value' => 'DYNAMIC:sale:return_fee:shipping', 'label' => '動態：退貨運費支出 (依銷售通路規範)'],
-        ['value' => 'DYNAMIC:purchase:expense',     'label' => '動態：進口/採購附加費 (依費用項目如關稅)'],
-        ['value' => 'DYNAMIC:sale:discount',        'label' => '動態：銷貨折讓/扣抵 (依活動或通路折價券)'],
-    ],
+'accounting_dynamic_options' => [
+    // ========== 共用動態科目 ==========
+    ['value' => 'DYNAMIC:auto:inventory',       'label' => '動態：庫存商品 (Inventory)'],
+    ['value' => 'DYNAMIC:auto:cost',            'label' => '動態：銷貨成本 (Cost of Goods Sold)'],
+    
+    // ========== 銷售模組 (Sale) ==========
+    ['value' => 'DYNAMIC:sale:revenue',         'label' => '動態：銷貨收入 (Sales Revenue)'],
+    ['value' => 'DYNAMIC:sale:payment',         'label' => '動態：應收帳款/代收款 (Receivables by Payment)'], 
+    ['value' => 'DYNAMIC:sale:channel_fee',     'label' => '動態：通路手續費 (Channel Fee)'],
+    ['value' => 'DYNAMIC:sale:discount',        'label' => '動態：銷貨折讓 (Sales Discount)'],
+    
+    // ========== 退貨模組 (SalesReturn) ==========
+    ['value' => 'DYNAMIC:sales_return:refund',       'label' => '動態：退貨退款科目 (Refund by Original Payment)'],
+    ['value' => 'DYNAMIC:sales_return:restocking_fee', 'label' => '動態：退貨處理費 (Restocking Fee)'],
+    ['value' => 'DYNAMIC:sales_return:shipping_fee',   'label' => '動態：退貨運費 (Return Shipping Fee, +/-)'],
+    
+    // ========== 採購模組 (Purchase) ==========
+    ['value' => 'DYNAMIC:purchase:expense',      'label' => '動態：採購附加費 (Purchase Expense)'],
+],
 
 	// 🎯 採購專用付款方式（新增微信支付，將預設應付帳款語意調整為大陸廠商應付）
     'purchase_methods' => [
@@ -133,13 +180,13 @@ return [
     'return_fee_types' => [
 		'restocking_fee' => [
 			'name' => '退貨處理費',
-			'target' => 'customer',  // 買家負擔，從退款中扣除
-			'operator' => 'subtract',
+			'icon' => 'o-arrow-path',
+			// 正數：賣家支付	// 負數：買家支付
 		],
 		'return_shipping_fee' => [
 			'name' => '退貨運費',
-			'target' => 'seller',    // 賣家負擔，額外支出
-			'operator' => 'add',
+			'icon' => 'o-truck',
+			// 正數：賣家支付	// 負數：買家支付
 		],
 	],
 

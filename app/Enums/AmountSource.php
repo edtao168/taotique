@@ -25,8 +25,8 @@ enum AmountSource: string
     case PLATFORM_FEE = 'platform_fee';
     case ORDER_ADJUSTMENT = 'order_adjustment';
     case COMMISSION = 'commission';
-    case RESTOCKING_FEE = 'restocking_fee';           // 退貨處理費（買家負擔）
-    case RETURN_SHIPPING_FEE = 'return_shipping_fee';   // 退貨運費（賣家負擔）
+    case RESTOCKING_FEE = 'restocking_fee';
+    case RETURN_SHIPPING_FEE = 'return_shipping_fee';
 
     // ==============================================
     // 稅額與通用金額
@@ -57,8 +57,9 @@ enum AmountSource: string
     // ==============================================
     // 銷退/採退相關
     // ==============================================
-    case RETURN_TOTAL = 'return_total';
-    case RETURN_COST = 'return_cost';
+    case RETURN_TOTAL = 'return_total';  // 退貨退款總額（原幣）
+    case RETURN_COST = 'return_cost';    // 退貨成本（原幣）
+    case RETURN_COST_BASE = 'return_cost_base';   // 退貨成本（本幣，已換算）
 
     // ==============================================
     // 明細加總舊配置（留存相容）
@@ -100,7 +101,7 @@ enum AmountSource: string
 
             self::RETURN_TOTAL => '退款/退貨總金額 (return_total)',
             self::RETURN_COST => '退貨回庫成本總計 (return_cost)',
-
+			self::RETURN_COST_BASE => '退貨成本-本幣 (return_cost_base, 已換算)',
             self::ITEMS_COST => '商品成本歷史快照累加 (舊式)',
             self::ITEMS_PRODUCT_COST => '關聯商品即時成本累加 (舊式)',
 			self::PURCHASE_SUBTOTAL => '採購外幣純商品總額',

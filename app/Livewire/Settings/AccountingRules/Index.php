@@ -1,6 +1,5 @@
 <?php
 // app/Livewire/Settings/AccountingRules/Index.php
-// [費曼註釋：全面重構明細結構，引入聯邦搜尋，將一般科目與動態策略完美歸一]
 
 namespace App\Livewire\Settings\AccountingRules;
 
@@ -177,19 +176,11 @@ class Index extends Component
             ->orderBy('event_type')
             ->get();
 
-        $amountSources = [
-            ['value' => 'customer_total', 'label' => '顧客實付總額 (customer_total)'],
-            ['value' => 'subtotal_after_discount', 'label' => '折讓後商品淨額 (subtotal_after_discount)'],
-            ['value' => 'tax_amount', 'label' => '銷項稅額 (tax_amount)'],
-            ['value' => 'freight_amount', 'label' => '買家自付運費 (freight_amount)'],
-            ['value' => 'platform_fee', 'label' => '平台手續費 (platform_fee)'],
-            ['value' => 'commission', 'label' => '佣金 (commission)'],
-            ['value' => 'seller_discount', 'label' => '賣家活動折讓 (seller_discount)'],
-            ['value' => 'shipping_fee_platform', 'label' => '平台代扣運費 (shipping_fee_platform)'],
-            ['value' => 'total_fees', 'label' => '費用總計 (total_fees)'],
-            ['value' => 'cost_amount', 'label' => '銷貨總成本 (cost_amount)'],
-        ];
-
+        $amountSources = [];
+		foreach (config('business.amount_sources', []) as $value => $label) {
+        $amountSources[] = ['value' => $value, 'label' => $label];
+    }
+ 
         return view('livewire.settings.accounting-rules.index', [
             'rows' => $rows,
             'headers' => $headers,
@@ -199,5 +190,23 @@ class Index extends Component
                 ['value' => 'credit', 'label' => '貸方'],
             ]
         ]);
+    }
+	
+	/**
+     * 🎯 滿足 HasAccountAndDynamicSearch Trait 的抽象方法約束
+     * 此處為 Livewire 設定後台，無需真正的單據動態科目解析，故回傳空字串。
+     */
+    public function resolveDynamicAccount(string $dynamicSpec, ?array $context = null): string
+    {
+        return '';
+    }
+
+    /**
+     * 🎯 滿足 HasAccountAndDynamicSearch Trait 的抽象方法約束
+     * 此處為 Livewire 設定後台，無需處理單據金額源，故回傳零字串。
+     */
+    public function getAmountFromSource(string $source, mixed $context = null): string
+    {
+        return '0.0000';
     }
 }

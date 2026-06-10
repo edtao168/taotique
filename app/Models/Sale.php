@@ -12,6 +12,7 @@ use App\Models\SaleFee;
 use App\Models\SalesReturn;
 use App\Models\Journal;
 use App\Services\AccountingService;
+use App\Traits\HasAccountAndDynamicSearch;
 use App\Traits\HasAccounting;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -21,7 +22,7 @@ use Illuminate\Support\Facades\Log;
 
 class Sale extends Model
 {
-    use HasAccounting;
+    use HasAccounting, HasAccountAndDynamicSearch;
 
     protected $guarded = [];
 
@@ -38,6 +39,41 @@ class Sale extends Model
 
     private static ?array $feeTypesCache = null;
     private const DECIMAL_PRECISION = 4;
+	
+	    /**
+     * 實作動態科目映射（銷售專用）
+     */
+    protected function getDynamicAccountMapping(): array
+    {
+        return [
+            'DYNAMIC:sale:payment' => $this->getPaymentAccount(),
+            'DYNAMIC:sale:revenue' => $this->getRevenueAccount(),
+            'DYNAMIC:auto:inventory' => '1405',
+            'DYNAMIC:auto:cost' => '5401',
+            'DYNAMIC:sale:channel_fee' => '5601',
+            'DYNAMIC:sale:discount' => '5602',
+        ];
+    }
+    
+    protected function getPaymentAccount(): string
+    {
+        // 根據付款方式回傳科目
+        return match($this->payment_method) {
+            'cash' => '1001',
+            'bank_transfer' => '1002',
+            default => '1122',
+        };
+    }
+    
+    protected function getRevenueAccount(): string
+    {
+        // 根據通路回傳科目
+        return match($this->channel) {
+            'retail' => '5001',
+            'online' => '5002',
+            default => '5001',
+        };
+    }
 
     // =========================================================================
     // SECTION: 前端 Mary UI 表格與卡片渲染 Accessors
@@ -111,22 +147,6 @@ class Sale extends Model
     public static function getReferenceType(): string
     {
         return 'sale';
-    }
-
-    public function getAccountingRules(string $eventType): array
-    {
-        $shopId = $this->shop_id ?? 1;
-        $rule = AccountingRule::where('event_type', $eventType)
-            ->where('shop_id', $shopId)
-            ->where('is_active', true)
-            ->with(['lines' => fn($q) => $q->orderBy('sort_order')])
-            ->first();
-
-        if (!$rule) {
-            throw new \RuntimeException("找不到通用動態會計規則：[{$eventType}]，店鋪 ID: {$shopId}");
-        }
-
-        return $rule->lines->toArray();
     }
 
     // =========================================================================
@@ -523,29 +543,137 @@ class Sale extends Model
     // SECTION: 會計金額解析（專屬於 Sale）
     // =========================================================================
 
-    public function getAmountFromSource(string $amountSource, ?string $eventType = null): string
+    /**
+     * 獲取指定金額來源的數值
+     * 🎯 依據 sale_items 真實 Schema 進行對接，根除 0 元結轉異常
+     */
+public function getAmountFromSource(string $source, mixed $context = null): string
     {
-        if ($amountSource === 'cost_amount') {
-            return $this->calculateTotalCost();
-        }
+        return match ($source) {
+            'customer_total'          => (string)($this->customer_total_amount ?? $this->customer_total ?? $this->total_amount ?? '0.0000'),
+            'subtotal_after_discount' => (string)($this->subtotal ?? '0.0000'),
+            'tax_amount'              => (string)($this->tax_amount ?? '0.0000'),
+            'freight_amount'          => (string)($this->freight_amount ?? '0.0000'),
+            
+            // 🎯 銷貨成本：呼叫本次增補的實時核心成本計算方法
+            'cost_amount'             => $this->calculateRealtimeCost(), 
 
-        if ($amountSource === 'total_fees') {
-            return $this->calculateTotalFees();
-        }
-
-        return match($amountSource) {
-            'customer_total'          => $this->customer_total,
-            'subtotal_after_discount' => $this->subtotal_after_discount,
-            'final_net_amount'        => $this->final_net_amount,
-            'tax_amount'              => $this->tax_amount ?? '0.0000',
-            'freight_amount'          => $this->freight_amount ?? '0.0000',
-            'subtotal'                => $this->subtotal ?? '0.0000',
-            'platform_fee'            => $this->platform_fee ?? '0.0000',
-            'commission'              => $this->commission ?? '0.0000',
-            'seller_discount'         => $this->seller_discount ?? '0.0000',
-            'shipping_fee_platform'   => $this->shipping_fee_platform ?? '0.0000',
-            default                   => $this->getAttribute($amountSource) ?? '0.0000',
+            // 🎯 通路摩擦費用：呼叫本次增補的獨立封裝方法，保持 match 區塊極致乾淨
+            'platform_fee'            => $this->getPlatformFeeTotal(),
+            'commission'              => $this->getCommissionTotal(),
+            'seller_discount'         => $this->getSellerDiscountTotal(),
+            'shipping_fee_platform'   => $this->getPlatformShippingFeeTotal(),
+            
+            'total_fees'              => $this->getTotalFeesSum(),
+            
+            default                   => '0.0000',
         };
+    }
+
+    // =========================================================================
+    // SECTION: 🎯 增補核心業務方法 (核心除錯與高複用性封裝)
+    // =========================================================================
+
+    /**
+     * 實時計算銷售單的銷貨總成本
+     * 🎯 解決有成本卻抓到 0 元的問題，穿透虛擬生成欄位與庫存表
+     */
+    public function calculateRealtimeCost(): string
+    {
+        // 1. 優先查看主表 sales 是否有歷史快照成本值
+        $mainCost = $this->cost_total_amount ?? $this->cost_amount ?? '0.0000';
+        if (bccomp((string)$mainCost, '0.0000', 4) > 0) {
+            return (string)$mainCost;
+        }
+
+        // 2. 主表若尚未回寫，穿透到 sale_items 明細表實時精算
+        $calculatedTotalCost = '0.0000';
+        $items = $this->items()->get(); 
+        
+        foreach ($items as $item) {
+            // A. 優先使用 sale_items 的 VIRTUAL GENERATED 欄位 total_cost
+            if (isset($item->total_cost) && bccomp((string)$item->total_cost, '0.0000', 4) > 0) {
+                $calculatedTotalCost = bcadd($calculatedTotalCost, (string)$item->total_cost, 4);
+                continue;
+            }
+
+            // B. 備援方案：手動使用單項成本 unit_cost * quantity
+            $unitCost = $item->unit_cost ?? '0.0000';
+            $qty      = $item->quantity ?? '0';
+
+            // 🚨【多層防禦管道】若明細單價 unit_cost 為 0，則向上/向下追溯
+            if (bccomp((string)$unitCost, '0.0000', 4) === 0 && isset($item->product_id)) {
+                $warehouseId = $item->warehouse_id ?? $this->warehouse_id ?? 1;
+                $shopId      = $this->shop_id ?? 1;
+
+                // 優先從庫存表撈取當前加權平均成本
+                $inventory = DB::table('inventories')
+                    ->where('product_id', $item->product_id)
+                    ->where('warehouse_id', $warehouseId)
+                    ->where('shop_id', $shopId)
+                    ->first();
+
+                if ($inventory && isset($inventory->weighted_average_cost) && bccomp((string)$inventory->weighted_average_cost, '0.0000', 4) > 0) {
+                    $unitCost = $inventory->weighted_average_cost;
+                } else {
+                    // 最終保險：對接真實的 products.cost 欄位 (最近一次進價)
+                    $unitCost = DB::table('products')->where('id', $item->product_id)->value('cost') ?? '0.0000';
+                }
+            }
+
+            $itemTotalCost = bcmul((string)$unitCost, (string)$qty, 4);
+            $calculatedTotalCost = bcadd($calculatedTotalCost, $itemTotalCost, 4);
+        }
+
+        return $calculatedTotalCost;
+    }
+
+    /**
+     * 獲取平台手續費總計
+     */
+    public function getPlatformFeeTotal(): string
+    {
+        return (string)($this->fees()->where('fee_type', 'platform_fee')->get()
+            ->sum(fn($fee) => (string)($fee->amount ?? '0.0000')) ?: '0.0000');
+    }
+
+    /**
+     * 獲取佣金總計
+     */
+    public function getCommissionTotal(): string
+    {
+        return (string)($this->fees()->where('fee_type', 'commission')->get()
+            ->sum(fn($fee) => (string)($fee->amount ?? '0.0000')) ?: '0.0000');
+    }
+
+    /**
+     * 獲取賣家活動折讓總計
+     */
+    public function getSellerDiscountTotal(): string
+    {
+        return (string)($this->fees()->where('fee_type', 'seller_discount')->get()
+            ->sum(fn($fee) => (string)($fee->amount ?? '0.0000')) ?: '0.0000');
+    }
+
+    /**
+     * 獲取平台代扣運費總計
+     */
+    public function getPlatformShippingFeeTotal(): string
+    {
+        return (string)($this->fees()->where('fee_type', 'shipping_fee_platform')->get()
+            ->sum(fn($fee) => (string)($fee->amount ?? '0.0000')) ?: '0.0000');
+    }
+
+    /**
+     * 獲取所有費用總計
+     */
+    private function getTotalFeesSum(): string
+    {
+        if (isset($this->fees_total_amount) && bccomp((string)$this->fees_total_amount, '0.0000', 4) > 0) {
+            return (string)$this->fees_total_amount;
+        }
+
+        return (string)($this->fees()->get()->sum(fn($fee) => (string)($fee->amount ?? '0.0000')) ?? '0.0000');
     }
 
     private function calculateTotalCost(): string
@@ -584,7 +712,7 @@ class Sale extends Model
     // SECTION: 動態科目解析（專屬於 Sale）
     // =========================================================================
 
-    public function resolveDynamicAccount(string $dynamicSpec, ?string $context = null): string
+    public function resolveDynamicAccount(string $dynamicSpec, ?array $context = null): string
     {
         $parts = explode(':', $dynamicSpec);
         $prefix = $parts[0] ?? '';

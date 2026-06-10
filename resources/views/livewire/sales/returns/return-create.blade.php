@@ -121,7 +121,9 @@
                     <div class="text-xs font-bold text-primary uppercase tracking-widest flex items-center gap-2">
                         <x-icon name="o-adjustments-vertical" class="w-4 h-4" />
                         退款調整項目
+						<p class="text-secondary">原則上費用由賣家支付，若是買家支付，則為負值。</p>
                     </div>
+					
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         @foreach($fees as $key => $fee)
                             @php $config = config('business.return_fee_types.' . $fee['fee_type']); @endphp
