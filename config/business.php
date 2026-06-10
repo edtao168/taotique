@@ -87,7 +87,26 @@ return [
     'accounting_rules' => [
         'purchase_inbound' => [
             'debit_code' => '1405', // 借方固定：1405 庫存商品
-        ]
+        ],
+		// 採購退貨 - 退款分錄
+		'purchase_return_refund' => [
+			'entries' => [
+				[
+					'entry_type' => 'debit',
+					'account_code' => 'DYNAMIC:purchase_return:refund',
+					'amount_source' => 'total_return_amount',
+					'multiplier' => '1.0000',
+					'description' => '採購退貨：應付帳款減少/退款支出',
+				],
+				[
+					'entry_type' => 'credit',
+					'account_code' => 'DYNAMIC:auto:inventory',
+					'amount_source' => 'return_cost_base',
+					'multiplier' => '1.0000',
+					'description' => '採購退貨：庫存商品減少',
+				],
+			],
+		],	
     ],
     'payment_methods' => [
         ['id' => 'cash', 'name' => '現金', 'icon' => 'o-banknotes'],
