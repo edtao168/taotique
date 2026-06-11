@@ -1,10 +1,33 @@
 <?php
 // config/business.php
-// 標註檔案路徑：config/business.php
 
 return [
 
-	// config/business.php
+	// =========================================================================
+    // 🎯 拆裝組合模組會計配置
+    // =========================================================================
+    
+    'conversion' => [
+		// 投入科目（領料出庫）- 依商品類型
+		'input_accounts' => [
+			'finished_good'   => '140509',   // 成品拆解時，貸方用成品科目（但實際是減少成品）
+			'semifinished'    => '140509',   // 半成品投入時，貸方用半成品
+			'default'         => '140509',   // 預設配件半成品
+		],
+		
+		// 產出科目（入庫）- 依商品類型
+		'output_accounts' => [
+			'pendant'   => '140501',   // 吊墜項鍊
+			'bracelet'  => '140502',   // 手鍊手鐲
+			'general'   => '140503',   // 百貨
+			'earring'   => '140505',   // 耳環
+			'ring'      => '140506',   // 戒指			
+			'semifinished' => '140509', // 拆解產出半成品
+			'default'   => '140502',
+		],
+		
+		// 注意：不配置 variance_accounts，差異直接計入成品成本
+	],
 
 	'amount_sources' => [
 		// ========== 通用 ==========
@@ -45,25 +68,28 @@ return [
     // =========================================================================
     // 會計全動態科目策略定義 (供後台 Mary UI 下拉選單使用)
     // =========================================================================
-'accounting_dynamic_options' => [
-    // ========== 共用動態科目 ==========
-    ['value' => 'DYNAMIC:auto:inventory',       'label' => '動態：庫存商品 (Inventory)'],
-    ['value' => 'DYNAMIC:auto:cost',            'label' => '動態：銷貨成本 (Cost of Goods Sold)'],
-    
-    // ========== 銷售模組 (Sale) ==========
-    ['value' => 'DYNAMIC:sale:revenue',         'label' => '動態：銷貨收入 (Sales Revenue)'],
-    ['value' => 'DYNAMIC:sale:payment',         'label' => '動態：應收帳款/代收款 (Receivables by Payment)'], 
-    ['value' => 'DYNAMIC:sale:channel_fee',     'label' => '動態：通路手續費 (Channel Fee)'],
-    ['value' => 'DYNAMIC:sale:discount',        'label' => '動態：銷貨折讓 (Sales Discount)'],
-    
-    // ========== 退貨模組 (SalesReturn) ==========
-    ['value' => 'DYNAMIC:sales_return:refund',       'label' => '動態：退貨退款科目 (Refund by Original Payment)'],
-    ['value' => 'DYNAMIC:sales_return:restocking_fee', 'label' => '動態：退貨處理費 (Restocking Fee)'],
-    ['value' => 'DYNAMIC:sales_return:shipping_fee',   'label' => '動態：退貨運費 (Return Shipping Fee, +/-)'],
-    
-    // ========== 採購模組 (Purchase) ==========
-    ['value' => 'DYNAMIC:purchase:expense',      'label' => '動態：採購附加費 (Purchase Expense)'],
-],
+	'accounting_dynamic_options' => [
+		// ========== 共用動態科目 ==========
+		['value' => 'DYNAMIC:auto:inventory',       'label' => '動態：庫存商品 (Inventory)'],
+		['value' => 'DYNAMIC:auto:cost',            'label' => '動態：銷貨成本 (Cost of Goods Sold)'],
+		
+		// ========== 銷售模組 (Sale) ==========
+		['value' => 'DYNAMIC:sale:revenue',         'label' => '動態：銷貨收入 (Sales Revenue)'],
+		['value' => 'DYNAMIC:sale:payment',         'label' => '動態：應收帳款/代收款 (Receivables by Payment)'], 
+		['value' => 'DYNAMIC:sale:channel_fee',     'label' => '動態：通路手續費 (Channel Fee)'],
+		['value' => 'DYNAMIC:sale:discount',        'label' => '動態：銷貨折讓 (Sales Discount)'],
+		
+		// ========== 退貨模組 (SalesReturn) ==========
+		['value' => 'DYNAMIC:sales_return:refund',       'label' => '動態：退貨退款科目 (Refund by Original Payment)'],
+		['value' => 'DYNAMIC:sales_return:restocking_fee', 'label' => '動態：退貨處理費 (Restocking Fee)'],
+		['value' => 'DYNAMIC:sales_return:shipping_fee',   'label' => '動態：退貨運費 (Return Shipping Fee, +/-)'],
+		
+		// ========== 採購模組 (Purchase) ==========
+		['value' => 'DYNAMIC:purchase:expense',      'label' => '動態：採購附加費 (Purchase Expense)'],
+		
+		// ========== 拆裝模組 (Conversion) ==========
+		['value' => 'DYNAMIC:conversion:output',     'label' => '動態：拆裝產出科目 (依成品類型)'],
+	],
 
 	// 🎯 採購專用付款方式（新增微信支付，將預設應付帳款語意調整為大陸廠商應付）
     'purchase_methods' => [
@@ -108,6 +134,7 @@ return [
 			],
 		],	
     ],
+	
     'payment_methods' => [
         ['id' => 'cash', 'name' => '現金', 'icon' => 'o-banknotes'],
         ['id' => 'shopee_pay', 'name' => '蝦皮錢包', 'icon' => 'o-shopping-bag'],
@@ -268,7 +295,26 @@ return [
                 'transfer'      => '113303',  // 應收帳款-FB轉帳
             ],
         ],
-        
+		
+			// 存貨（核心）
+            'inventory'             => '1405',   // 庫存商品
+            'materials'             => '1403',   // 原材料（直接購入的半成品）
+            'goods_in_transit'      => '1408',   // 在途物資
+            'inventory_valuation'   => '1409',   // 存貨跌價準備
+            
+            // 其他資產
+            'prepayments'           => '1123',   // 預付帳款
+            'fixed_assets'          => '1601',   // 固定資產
+            'accumulated_depreciation' => '1602', // 累計折舊
+                
+        // 負債類 (2xxx)
+        'liabilities' => [
+            'tax_output'         => '222103',  // 銷項稅額（營業稅）
+            'freight_income'     => '224101',  // 其他應付款-代收運費
+            'accounts_payable'   => '220201',  // 應付帳款
+            'accounts_payable_cn'=> '220202',  // 應付帳款-大陸廠商
+        ],
+
         // 收入類 (5xxx) - 依通路區分
         'revenue' => [
             'retail' => [
@@ -302,14 +348,12 @@ return [
             'purchase_fee'       => '560201',  // 採購費用
             'bank_charge'        => '560101',  // 銀行手續費
             'other_expense'      => '560108',  // 其他費用
+			'manufacturing_cost' => '560115',  // 加工費用/製造費用
         ],
-        
-        // 負債類 (2xxx)
-        'liabilities' => [
-            'tax_output'         => '222103',  // 銷項稅額（營業稅）
-            'freight_income'     => '224101',  // 其他應付款-代收運費
-            'accounts_payable'   => '220201',  // 應付帳款
-            'accounts_payable_cn'=> '220202',  // 應付帳款-大陸廠商
+		        
+        // 其他收益類 - 新增
+        'other_income' => [
+            'inventory_surplus'  => '590115',  // 盤盈收益
         ],
     ],
 

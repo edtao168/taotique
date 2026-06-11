@@ -66,6 +66,14 @@ enum AmountSource: string
     // ==============================================
     case ITEMS_COST = 'items.sum:cost*quantity';
     case ITEMS_PRODUCT_COST = 'items.sum:product.cost*quantity';
+	
+	// ==============================================
+    // 拆裝組合模組（Conversion）
+    // ==============================================
+    case INPUT_TOTAL_COST = 'input_total_cost';      // 領料投入總成本
+    case OUTPUT_TOTAL_COST = 'output_total_cost';    // 成品產出總成本
+    case COST_VARIANCE = 'cost_variance';            // 成本差異（投入-產出）
+    case COST_VARIANCE_ABS = 'cost_variance_abs';    // 成本差異絕對值
 
     /**
      * 提供給後台 AccountingRule 設定頁面的 Mary UI 下拉選單繁體標籤
@@ -111,6 +119,10 @@ enum AmountSource: string
             self::PURCHASE_BASE_TAX => '採購本幣({$currency})進項稅額(換算後)',
             self::PURCHASE_BASE_SHIPPING => '採購本幣({$currency})運費支出(換算後)',
             self::PURCHASE_BASE_OTHER_FEES => '採購本幣({$currency})附加費(換算後)',
+			self::INPUT_TOTAL_COST => '領料投入總成本',
+            self::OUTPUT_TOTAL_COST => '成品產出總成本',
+            self::COST_VARIANCE => '成本差異（投入-產出）',
+            self::COST_VARIANCE_ABS => '成本差異絕對值',
         };
     }
 
