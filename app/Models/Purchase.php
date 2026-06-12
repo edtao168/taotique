@@ -122,18 +122,37 @@ class Purchase extends Model
         });
     }
 
+	public static function generatePurchaseNumber(): string
+    {
+        return DB::transaction(function () {
+            $prefix = Setting::get('po_prefix', 'PO-');
+            $digits = (int) Setting::get('number_digits', 4);
+            $datePart = now()->format('Ymd');
+            $fullPrefix = $prefix . $datePart;
+
+            $lastOrder = self::where('purchase_number', 'like', "{$fullPrefix}%")
+                ->lockForUpdate()
+                ->orderBy('purchase_number', 'desc')
+                ->first();
+
+            $nextNumber = $lastOrder ? (int) substr($lastOrder->purchase_number, -$digits) + 1 : 1;
+            return $fullPrefix . str_pad($nextNumber, $digits, '0', STR_PAD_LEFT);
+        });
+    }
+
 	/**
 	 * 嚴謹的金額運算邏輯
 	 */
 	public function calculateAndSetTotals()
 	{
-		// 1. 計算原始幣別總額：(小計 + 運費) - 折扣
-		$total = bcadd($this->subtotal, $this->shipping_fee, 4);
+		$netItems = bcsub($this->subtotal, $this->discount, 4);
+		
+		// 總額 = 商品淨額 + 運費 + 稅 + 其他費用
+		$total = bcadd($netItems, $this->shipping_fee, 4);
 		$total = bcadd($total, $this->tax, 4);
-        $total = bcadd($total, $this->other_fees, 4);
-		$this->total_amount = bcsub($total, $this->discount, 4);
-
-		// 2. 換算本幣：total_amount * exchange_rate
+		$total = bcadd($total, $this->other_fees, 4);
+		
+		$this->total_amount = $total;
 		$this->total_twd = bcmul($this->total_amount, $this->exchange_rate, 4);
 	}
 
@@ -237,7 +256,7 @@ class Purchase extends Model
 				'journal_id'		=> $journal->id,
 				'payment_mode'		=> $paymentMode ?? 'default'
 			]);
-        });
+        });		
     }
 	
 	/**
@@ -310,7 +329,7 @@ class Purchase extends Model
         $rate = (string)($this->exchange_rate ?? '1.0000');
         
         $foreignAmount = match($amountSource) {
-            'purchase_base_items'    => $this->subtotal ?? '0.0000',
+            'purchase_base_items'    => $this->total_amount ?? '0.0000',
             'purchase_base_tax'      => $this->tax ?? '0.0000',
             'purchase_base_shipping' => $this->shipping_fee ?? '0.0000',
             'purchase_base_other_fees' => $this->other_fees ?? '0.0000',
@@ -447,10 +466,10 @@ class Purchase extends Model
 	{
 		// 可依費用類型細分到不同的庫存明細科目
 		return match($subType) {
-			'shipping', 'freight' => '140503',   // 運費 → 庫存商品-運費分攤
-			'tariff', 'duty'      => '140504',   // 關稅 → 庫存商品-關稅分攤
-			'handling'            => '140505',   // 手續費 → 庫存商品-手續費分攤
-			default               => '140599',   // 其他 → 庫存商品-其他
+			'shipping', 'freight' => '1405',   // 運費 → 庫存商品-運費分攤
+			'tariff', 'duty'      => '1405',   // 關稅 → 庫存商品-關稅分攤
+			'handling'            => '1405',   // 手續費 → 庫存商品-手續費分攤
+			default               => '1405',   // 其他 → 庫存商品-其他
 		};
 	}
 

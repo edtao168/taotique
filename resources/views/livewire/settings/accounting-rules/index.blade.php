@@ -1,6 +1,4 @@
 {{-- resources/views/livewire/settings/accounting-rules/index.blade.php --}}
-{{-- [代碼開頭標註位置：resources/views/livewire/settings/accounting-rules/index.blade.php] --}}
-{{-- [費曼註釋：優化全域對齊 value/label，徹底消滅 500 Undefined array key 報錯，完美適配雙端展示] --}}
 <div>
     <x-header title="自動過帳規則" subtitle="定義各事件對應的會計分錄" separator>
         <x-slot:actions>
@@ -16,17 +14,36 @@
                 @scope('cell_lines_summary', $item)
                     <div class="text-sm">
                         @foreach($item->lines as $line)
+                            @php
+                                // 使用快取的科目映射或動態解析
+                                if ($line->is_dynamic) {
+                                    $displayType = 'dynamic';
+                                    $displaySpec = substr($line->account_code, 8);
+                                } elseif ($line->account_id && $line->account) {
+                                    $displayType = 'account';
+                                    $displayCode = $line->account->code;
+                                    $displayName = $line->account->name;
+                                } elseif ($line->account_code && isset($codeToAccountMap[$line->account_code])) {
+                                    $displayType = 'account';
+                                    $displayCode = $codeToAccountMap[$line->account_code]->code;
+                                    $displayName = $codeToAccountMap[$line->account_code]->name;
+                                } else {
+                                    $displayType = 'missing';
+                                    $displayCode = $line->account_code ?? 'N/A';
+                                }
+                            @endphp
+                            
                             <div class="py-0.5">
                                 <span class="font-mono text-xs font-semibold {{ $line->entry_type === 'debit' ? 'text-primary' : 'text-error' }}">
                                     {{ $line->entry_type === 'debit' ? '借' : '貸' }}
                                 </span>
                                 <span class="ml-1">
-                                    @if($line->account_id === null && str_starts_with($line->account_code ?? '', 'DYNAMIC:'))
-                                        <span class="text-purple-600 font-medium">[全動態: {{ substr($line->account_code, 8) }}]</span>
-                                    @elseif($line->account)
-                                        <span class="font-mono text-gray-600">{{ $line->account->code }}</span> - {{ $line->account->name }}
+                                    @if($displayType === 'dynamic')
+                                        <span class="text-purple-600 font-medium">[全動態: {{ $displaySpec }}]</span>
+                                    @elseif($displayType === 'account')
+                                        <span class="font-mono text-gray-600">{{ $displayCode }}</span> - {{ $displayName }}
                                     @else
-                                        <span class="text-error">⚠️ 帳戶不存在 ({{ $line->account_code }})</span>
+                                        <span class="text-error">⚠️ 帳戶不存在 ({{ $displayCode }})</span>
                                     @endif
                                 </span>
                                 @if($line->amount_source)
@@ -55,35 +72,42 @@
         {{-- 手機端卡片 --}}
         <div class="md:hidden">
             @foreach($rows as $item)
-                <div class="p-4 border-b border-base-200 last:border-none active:bg-base-200 cursor-pointer" wire:click="edit({{ $item->id }})">
-                    <div class="flex justify-between items-start">
-                        <div class="flex-1">
-                            <div class="font-mono font-bold text-primary">{{ $item->event_type }}</div>
-                            <div class="text-sm mt-1 space-y-0.5">
-                                @foreach($item->lines as $line)
-                                    <div>
-                                        <span class="badge {{ $line->entry_type === 'debit' ? 'badge-primary' : 'badge-error' }} text-xs">
-                                            {{ $line->entry_type === 'debit' ? '借' : '貸' }}
-                                        </span>
-                                        @if($line->account_id === null && str_starts_with($line->account_code ?? '', 'DYNAMIC:'))
-                                            <span class="text-purple-600">[動態: {{ substr($line->account_code, 8) }}]</span>
-                                        @elseif($line->account)
-                                            {{ $line->account->code }} - {{ $line->account->name }}
-                                        @else
-                                            <span class="text-gray-400">⚠️ 帳戶不存在</span>
-                                        @endif
-                                        @if($line->amount_source)
-                                            <span class="text-xs text-gray-400 ml-1">({{ $line->amount_source }})</span>
-                                        @endif
-                                        @if($line->ratio != 1)
-                                            <span class="text-xs text-gray-400">×{{ $line->ratio }}</span>
-                                        @endif
-                                    </div>
-                                @endforeach
+                <div class="card bg-base-100 border border-base-300 mb-3">
+                    <div class="card-body p-3">
+                        <div class="font-mono font-bold text-sm">{{ $item->event_type }}</div>
+                        <div class="divider my-1"></div>
+                        @foreach($item->lines as $line)
+                            @php
+                                if ($line->is_dynamic) {
+                                    $displayText = '[動態: ' . substr($line->account_code, 8) . ']';
+                                    $displayClass = 'text-purple-600';
+                                } elseif ($line->account_id && $line->account) {
+                                    $displayText = $line->account->code . ' - ' . $line->account->name;
+                                    $displayClass = 'text-gray-600';
+                                } elseif ($line->account_code && isset($codeToAccountMap[$line->account_code])) {
+                                    $displayText = $codeToAccountMap[$line->account_code]->code . ' - ' . $codeToAccountMap[$line->account_code]->name;
+                                    $displayClass = 'text-gray-600';
+                                } else {
+                                    $displayText = '⚠️ 帳戶不存在 (' . ($line->account_code ?? 'N/A') . ')';
+                                    $displayClass = 'text-gray-400';
+                                }
+                            @endphp
+                            <div class="py-1">
+                                <span class="badge {{ $line->entry_type === 'debit' ? 'badge-primary' : 'badge-error' }} text-xs">
+                                    {{ $line->entry_type === 'debit' ? '借' : '貸' }}
+                                </span>
+                                <span class="{{ $displayClass }} text-sm ml-1">{{ $displayText }}</span>
+                                @if($line->amount_source)
+                                    <span class="text-xs text-gray-400 ml-1">({{ $line->amount_source }})</span>
+                                @endif
+                                @if($line->ratio != 1)
+                                    <span class="text-xs text-gray-400">×{{ $line->ratio }}</span>
+                                @endif
                             </div>
-                        </div>
-                        <div class="flex gap-1">
-                            <x-button icon="o-pencil" class="btn-sm btn-ghost text-primary" />
+                        @endforeach
+                        <div class="flex justify-end mt-2">
+                            <x-checkbox wire:click.stop="toggleActive({{ $item->id }})" :checked="$item->is_active" label="啟用" class="checkbox-primary" tight />
+                            <x-button icon="o-pencil" wire:click.stop="edit({{ $item->id }})" class="btn-xs btn-ghost ml-2" />
                         </div>
                     </div>
                 </div>
@@ -95,7 +119,7 @@
     </x-card>
 
     {{-- 新增/編輯 Modal --}}
-	<x-modal wire:model="myModal" separator size="4xl" persistent>
+    <x-modal wire:model="myModal" separator size="4xl" persistent>
         <x-slot:title>
             {{ $editingItem ? '編輯規則' : '新增規則' }}
         </x-slot:title>
@@ -114,7 +138,7 @@
                 <div class="col-span-5">輸入科目id、名稱、或動態路由</div>
                 <div class="col-span-2">借貸方向</div>
                 <div class="col-span-2">金額來源</div>
-				<div class="col-span-2">比例</div>
+                <div class="col-span-2">比例</div>
                 <div class="col-span-1 text-right">刪除</div>
             </div>
             
@@ -132,11 +156,10 @@
                                 min-chars="0"
                                 single
                                 size="sm"
-								class="text-xs"
-							/>
+                                class="text-xs"
+                            />
                         </div>
 
-                        {{-- 借貸選擇器 --}}
                         <div class="col-span-2">
                             <x-select 
                                 wire:model.live="lines.{{ $index }}.entry_type" 
@@ -148,7 +171,6 @@
                             />
                         </div>
 
-                        {{-- 金額來源與比率合併優化欄位（節省空間） --}}
                         <div class="col-span-2">
                             <x-select 
                                 wire:model="lines.{{ $index }}.amount_source" 
@@ -160,10 +182,11 @@
                                 class="text-xs"
                             />                            
                         </div>
-						<div class="col-span-2">
+                        
+                        <div class="col-span-2">
                             <x-input wire:model="lines.{{ $index }}.ratio" type="number" step="0.1" size="sm" class="text-xs" title="比率" />
                         </div>
-                        {{-- 刪除按鈕 --}}
+                        
                         <div class="col-span-1 text-right">
                             <x-button icon="o-trash" wire:click="removeLine({{ $index }})" class="btn-ghost btn-sm text-error" />
                         </div>

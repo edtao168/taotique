@@ -25,8 +25,8 @@ class Index extends Component
     // 明細行
     public $lines = [];
 
-    // 給前端 x-choices 初始化載入的聯邦清單快照
     public array $comboOptions = [];
+    public array $amountSources = [];
 
     protected $rules = [
         'event_type' => 'required|string|max:100',
@@ -42,6 +42,24 @@ class Index extends Component
     {
         // 初始化載入不帶關鍵字的聯邦清單，供預設下拉顯示
         $this->comboOptions = $this->searchAccounts();
+        
+        // 🎯 預先載入金額來源選項（只載入一次）
+        $this->loadAmountSources();
+    }
+
+    /**
+     * 從設定檔載入金額來源選項
+     */
+    protected function loadAmountSources(): void
+    {
+        $amountSourcesConfig = config('business.amount_sources', []);
+        $this->amountSources = [];
+        foreach ($amountSourcesConfig as $value => $label) {
+            $this->amountSources[] = [
+                'value' => $value,
+                'label' => $label,
+            ];
+        }
     }
 
     public function create()
@@ -62,7 +80,6 @@ class Index extends Component
         $this->is_active = $item->is_active;
         
         $this->lines = $item->lines->map(fn($line) => [
-            // 反向還原：如果有 account_id 優先用實體 ID，否則用 DYNAMIC 字串
             'combined_value' => $line->account_id ? (string)$line->account_id : ($line->account_code ?? 'DYNAMIC:sale:payment'),
             'entry_type' => $line->entry_type,
             'amount_source' => $line->amount_source,
@@ -87,6 +104,35 @@ class Index extends Component
         unset($this->lines[$index]);
         $this->lines = array_values($this->lines);
     }
+	
+    public function delete(AccountingRule $item)
+    {
+        $item->delete();
+        $this->success('規則已刪除');
+    }
+
+    public function toggleActive(AccountingRule $item)
+    {
+        $item->update(['is_active' => !$item->is_active]);
+        $this->success($item->is_active ? '已啟用' : '已停用');
+    }
+    
+    /**
+     * 🎯 滿足 HasAccountAndDynamicSearch Trait 的抽象方法約束
+     */
+    public function resolveDynamicAccount(string $dynamicSpec, ?array $context = null): string
+    {
+        return '';
+    }
+
+    /**
+     * 🎯 滿足 HasAccountAndDynamicSearch Trait 的抽象方法約束
+     */
+    public function getAmountFromSource(string $source, mixed $context = null): string
+    {
+        return '0.0000';
+    }
+
 
     public function save()
     {
@@ -118,48 +164,72 @@ class Index extends Component
 
             $rule->lines()->delete();
             
-            foreach ($this->lines as $index => $line) {
-                $val = $line['combined_value'];
-                
-                $accountId = null;
-                $accountCode = $val;
-
-                // 🎯 如果傳回來的是純數字，代表使用者選的是實體會計科目 ID
-                if (is_numeric($val)) {
-                    $accountId = (int)$val;
-                    $account = Account::find($accountId);
-                    $accountCode = $account ? $account->code : 'UNKNOWN';
-                }
-                // 如果是 DYNAMIC: 開頭，則為動態路由，accountId 保持為 null
-
-                AccountingRuleLine::create([
-                    'accounting_rule_id' => $rule->id,
-                    'account_id'         => $accountId,
-                    'account_code'       => $accountCode,
-                    'entry_type'         => $line['entry_type'],
-                    'amount_source'      => $line['amount_source'],
-                    'ratio'              => $line['ratio'],
-                    'sort_order'         => $index + 1,
-                    'is_active'          => true,
-                ]);
-            }
+			foreach ($this->lines as $index => $line) {
+				$combinedValue = $line['combined_value'];
+				$entryType = $line['entry_type'];
+				$amountSource = $line['amount_source'];
+				$ratio = $line['ratio'];
+				
+				$accountId = null;
+				$accountCode = null;
+				
+				// 判斷類型
+				if (str_starts_with($combinedValue, 'DYNAMIC:')) {
+					// 動態科目：只存 account_code
+					$accountCode = $combinedValue;
+					$accountId = null;
+				} elseif (is_numeric($combinedValue)) {
+					// 可能是 ID 或 科目代碼
+					
+					// 先嘗試當作 ID 查詢
+					$account = Account::find((int)$combinedValue);
+					
+					if ($account) {
+						// 找到 → 是 ID
+						$accountId = $account->id;
+						$accountCode = $account->code;
+					} else {
+						// 找不到 → 可能是科目代碼（如 222104）
+						$account = Account::where('code', (string)$combinedValue)->first();
+						
+						if ($account) {
+							// 找到科目代碼
+							$accountId = $account->id;
+							$accountCode = $account->code;
+						} else {
+							// 真的找不到
+							throw new \Exception("無法辨識的科目：{$combinedValue}");
+						}
+					}
+				} else {
+					// 其他情況（純字串科目代碼）
+					$account = Account::where('code', $combinedValue)->first();
+					
+					if ($account) {
+						$accountId = $account->id;
+						$accountCode = $account->code;
+					} else {
+						$accountCode = $combinedValue;
+						$accountId = null;
+					}
+				}
+				
+				AccountingRuleLine::create([
+					'accounting_rule_id' => $rule->id,
+					'account_id'         => $accountId,
+					'account_code'       => $accountCode,
+					'entry_type'         => $entryType,
+					'amount_source'      => $amountSource,
+					'ratio'              => $ratio,
+					'sort_order'         => $index + 1,
+					'is_active'          => true,
+				]);
+			}
         });
 
         $this->success($this->editingItem ? '規則已更新' : '新規則已建立');
         $this->myModal = false;
         $this->reset(['event_type', 'is_active', 'lines', 'editingItem']);
-    }
-
-    public function delete(AccountingRule $item)
-    {
-        $item->delete();
-        $this->success('規則已刪除');
-    }
-
-    public function toggleActive(AccountingRule $item)
-    {
-        $item->update(['is_active' => !$item->is_active]);
-        $this->success($item->is_active ? '已啟用' : '已停用');
     }
     
     public function render()
@@ -171,42 +241,30 @@ class Index extends Component
             ['key' => 'actions', 'label' => '', 'sortable' => false],
         ];
 
-        $rows = AccountingRule::with('lines.account')
+        $rows = AccountingRule::with(['lines.account'])
             ->when($this->search, fn($q) => $q->where('event_type', 'like', "%{$this->search}%"))
             ->orderBy('event_type')
             ->get();
+            
+        // 預先快取所有 account_code 對應的科目
+        $allCodes = $rows->flatMap(fn($rule) => $rule->lines)
+            ->filter(fn($line) => $line->account_code && !$line->is_dynamic && !$line->account_id)
+            ->pluck('account_code')
+            ->unique();
+            
+        $codeToAccountMap = Account::whereIn('code', $allCodes)
+            ->get()
+            ->keyBy('code');
 
-        $amountSources = [];
-		foreach (config('business.amount_sources', []) as $value => $label) {
-        $amountSources[] = ['value' => $value, 'label' => $label];
-    }
- 
         return view('livewire.settings.accounting-rules.index', [
             'rows' => $rows,
             'headers' => $headers,
-            'amountSources' => $amountSources,
+            'amountSources' => $this->amountSources,  // 直接使用屬性
             'entryTypes' => [
                 ['value' => 'debit', 'label' => '借方'],
                 ['value' => 'credit', 'label' => '貸方'],
-            ]
+            ],
+            'codeToAccountMap' => $codeToAccountMap,
         ]);
-    }
-	
-	/**
-     * 🎯 滿足 HasAccountAndDynamicSearch Trait 的抽象方法約束
-     * 此處為 Livewire 設定後台，無需真正的單據動態科目解析，故回傳空字串。
-     */
-    public function resolveDynamicAccount(string $dynamicSpec, ?array $context = null): string
-    {
-        return '';
-    }
-
-    /**
-     * 🎯 滿足 HasAccountAndDynamicSearch Trait 的抽象方法約束
-     * 此處為 Livewire 設定後台，無需處理單據金額源，故回傳零字串。
-     */
-    public function getAmountFromSource(string $source, mixed $context = null): string
-    {
-        return '0.0000';
     }
 }
