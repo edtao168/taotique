@@ -56,7 +56,11 @@ class Index extends Component
 
     public function save()
     {
-        $rules = $this->rules;
+        if (empty($this->type_value)) {
+			$this->type_value = 'asset';
+		}
+	
+		$rules = $this->rules;
         if ($this->editingItem) {
             $rules['code'] = 'required|string|max:20|unique:accounts,code,' . $this->editingItem->id;
         }
