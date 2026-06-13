@@ -61,7 +61,7 @@
 					</x-menu-sub>
 
 					{{-- 2. 銷貨管理系統 --}}
-					<x-menu-sub title="銷貨管理系統" icon="o-currency-dollar">
+					<x-menu-sub title="銷貨管理系統" icon="o-shopping-cart">
 						<x-menu-item title="新增銷貨單" icon="o-plus-circle" :link="route('sales.create')" />
 						<x-menu-item title="銷售數據概況" icon="o-chart-bar" :link="route('sales.index')" />
 						<x-menu-item title="銷貨退回紀錄" icon="o-arrow-path" :link="route('sales.returns.index')" />
@@ -120,6 +120,7 @@
 					</x-menu-sub>
 
 					<x-menu-separator />
+					<x-menu-item title="關於本系統" icon="o-information-circle" :link="route('about')" />
 					
 					<x-menu-item title="登出系統" icon="o-power" no-wire-navigate onclick="event.preventDefault(); document.getElementById('logout-form').submit();" />
 				</x-menu>

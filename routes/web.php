@@ -5,7 +5,7 @@ use Illuminate\Support\Facades\Storage;
 
 // Dashboard
 use App\Livewire\Dashboard\Overview;
-
+use App\Livewire\Dashboard\AboutIndex;
 
 // 採購進貨 (Purchases)
 use App\Livewire\Suppliers\Index as SupplierIndex;
@@ -58,6 +58,7 @@ Route::middleware(['auth'])->group(function () {
     // --- Dashboard ---
     Route::get('/', Overview::class)->name('home');
     Route::get('/dashboard', Overview::class)->name('dashboard');
+	Route::get('/about', AboutIndex::class)->name('about');
 
     // --- 採購進貨系統 (Purchases) ---
     Route::prefix('purchases')->name('purchases.')->group(function () {
