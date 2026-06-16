@@ -8,11 +8,14 @@ return [
     // =========================================================================
     
     'conversion' => [
+		// 在製品科目
+		'wip_account' => '140509',  // 配件半成品/在製品
+	
 		// 投入科目（領料出庫）- 依商品類型
 		'input_accounts' => [
-			'finished_good'   => '140509',   // 成品拆解時，貸方用成品科目（但實際是減少成品）
-			'semifinished'    => '140509',   // 半成品投入時，貸方用半成品
-			'default'         => '140509',   // 預設配件半成品
+			'disassembly' => '140509',   // 拆解：成品投入
+			'assembly'    => '140509',   // 組裝：半成品投入
+			'default'     => '140509',
 		],
 		
 		// 產出科目（入庫）- 依商品類型
@@ -25,10 +28,8 @@ return [
 			'semifinished' => '140509', // 拆解產出半成品
 			'default'   => '140502',
 		],
-		
-		// 注意：不配置 variance_accounts，差異直接計入成品成本
 	],
-
+/* 改用Enum 驅動。
 	'amount_sources' => [
 		// ========== 通用 ==========
 		'subtotal' => '商品小計 (subtotal)',
@@ -64,7 +65,7 @@ return [
 		'purchase_base_shipping' => '採購本幣運費 (purchase_base_shipping)',
 		'purchase_base_other_fees' => '採購本幣其他費用 (purchase_base_other_fees)',
 	],
-
+*/
     // =========================================================================
     // 會計全動態科目策略定義 (供後台 Mary UI 下拉選單使用)
     // =========================================================================
@@ -297,10 +298,15 @@ return [
         ],
 		
 			// 存貨（核心）
-            'inventory'             => '1405',   // 庫存商品
-            'materials'             => '1403',   // 原材料（直接購入的半成品）
-            'goods_in_transit'      => '1408',   // 在途物資
-            'inventory_valuation'   => '1409',   // 存貨跌價準備
+            'inventory_accounts' => [
+				'finished_goods_pendant' => '140501',   // 庫存商品-吊墜項鍊
+				'finished_goods_bracelet'=> '140502',   // 庫存商品-手鍊手鐲  
+				'finished_goods_general' => '140503',   // 庫存商品-百貨
+				'finished_goods_earring' => '140505',   // 庫存商品-耳環
+				'finished_goods_ring'    => '140506',   // 庫存商品-戒指
+				'semifinished_goods'     => '140509',   // ✅ 新增：配件半成品/在製品
+				'raw_materials'          => '140301',   // 原材料
+			],
             
             // 其他資產
             'prepayments'           => '1123',   // 預付帳款
@@ -349,6 +355,7 @@ return [
             'bank_charge'        => '560101',  // 銀行手續費
             'other_expense'      => '560108',  // 其他費用
 			'manufacturing_cost' => '560115',  // 加工費用/製造費用
+			'inventory_loss'     => '560116',  // 存貨盤損（盤損益）
         ],
 		        
         // 其他收益類 - 新增

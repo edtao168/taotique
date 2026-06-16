@@ -1,5 +1,6 @@
 <?php
 // 檔案路徑：app/Enums/AmountSource.php
+// Enum（列舉）金額來源
 
 namespace App\Enums;
 
@@ -13,10 +14,10 @@ enum AmountSource: string
     case FINAL_NET_AMOUNT = 'final_net_amount';
     case SUBTOTAL_AFTER_DISCOUNT = 'subtotal_after_discount';
     case TOTAL_FEES = 'total_fees';
-    case COST_AMOUNT = 'cost_amount'; // 銷貨總成本累加基準
+    case COST_AMOUNT = 'cost_amount';
 
     // ==============================================
-    // 費用類型（電商摩擦費、物流費、退貨處理費）
+    // 費用類型
     // ==============================================
     case SHIPPING_FEE_CUSTOMER = 'shipping_fee_customer';
     case SELLER_DISCOUNT = 'seller_discount';
@@ -38,28 +39,28 @@ enum AmountSource: string
     // ==============================================
     // 採購專用金額來源（本幣換算後）
     // ==============================================
-    case PURCHASE_BASE_TOTAL = 'purchase_base_total';        // 本幣應付總額
-    case PURCHASE_BASE_ITEMS = 'purchase_base_items';        // 本幣商品總值
-    case PURCHASE_BASE_TAX = 'purchase_base_tax';            // 本幣進項稅額
-    case PURCHASE_BASE_SHIPPING = 'purchase_base_shipping';  // 本幣運費
-    case PURCHASE_BASE_OTHER_FEES = 'purchase_base_other_fees'; // 本幣其他費用
+    case PURCHASE_BASE_TOTAL = 'purchase_base_total';
+    case PURCHASE_BASE_ITEMS = 'purchase_base_items';
+    case PURCHASE_BASE_TAX = 'purchase_base_tax';
+    case PURCHASE_BASE_SHIPPING = 'purchase_base_shipping';
+    case PURCHASE_BASE_OTHER_FEES = 'purchase_base_other_fees';
 
     // ==============================================
     // 採購外幣原始金額（未換算）
     // ==============================================
-    case PURCHASE_FOREIGN_SUBTOTAL = 'subtotal';      // 外幣商品總額
-    case PURCHASE_FOREIGN_SHIPPING = 'shipping_fee';  // 外幣運費
-    case PURCHASE_FOREIGN_TAX = 'tax';                // 外幣進項稅
-    case PURCHASE_FOREIGN_OTHER_FEES = 'other_fees';  // 外幣其他費
-    case PURCHASE_FOREIGN_DISCOUNT = 'discount';      // 外幣折讓
-    case PURCHASE_FOREIGN_TOTAL = 'total_amount';     // 外幣應付總額
+    case PURCHASE_FOREIGN_SUBTOTAL = 'purchase_foreign_subtotal';
+    case PURCHASE_FOREIGN_SHIPPING = 'purchase_foreign_shipping';
+    case PURCHASE_FOREIGN_TAX = 'purchase_foreign_tax';
+    case PURCHASE_FOREIGN_OTHER_FEES = 'purchase_foreign_other_fees';
+    case PURCHASE_FOREIGN_DISCOUNT = 'purchase_foreign_discount';
+    case PURCHASE_FOREIGN_TOTAL = 'purchase_foreign_total';
 
     // ==============================================
     // 銷退/採退相關
     // ==============================================
-    case RETURN_TOTAL = 'return_total';  // 退貨退款總額（原幣）
-    case RETURN_COST = 'return_cost';    // 退貨成本（原幣）
-    case RETURN_COST_BASE = 'return_cost_base';   // 退貨成本（本幣，已換算）
+    case RETURN_TOTAL = 'return_total';
+    case RETURN_COST = 'return_cost';
+    case RETURN_COST_BASE = 'return_cost_base';
 
     // ==============================================
     // 明細加總舊配置（留存相容）
@@ -70,10 +71,10 @@ enum AmountSource: string
 	// ==============================================
     // 拆裝組合模組（Conversion）
     // ==============================================
-    case INPUT_TOTAL_COST = 'input_total_cost';      // 領料投入總成本
-    case OUTPUT_TOTAL_COST = 'output_total_cost';    // 成品產出總成本
-    case COST_VARIANCE = 'cost_variance';            // 成本差異（投入-產出）
-    case COST_VARIANCE_ABS = 'cost_variance_abs';    // 成本差異絕對值
+    case INPUT_TOTAL_COST = 'input_total_cost';
+    case OUTPUT_TOTAL_COST = 'output_total_cost';
+    case COST_VARIANCE = 'cost_variance';
+    case COST_VARIANCE_ABS = 'cost_variance_abs';
 
     /**
      * 提供給後台 AccountingRule 設定頁面的 Mary UI 下拉選單繁體標籤
@@ -102,25 +103,27 @@ enum AmountSource: string
             self::FREIGHT_AMOUNT => '常規運費欄位 (freight_amount)',
             self::AMOUNT => '通用單一金額 (amount)',
 
-            self::PURCHASE_TOTAL => '採購單總金額 (total_amount)',
-            self::PURCHASE_ITEMS_AMOUNT => '採購商品總價 (items_amount)',
-            self::PURCHASE_TAX => '採購進項稅額 (purchase_tax_amount)',
-            self::EXPENSE_AMOUNT => '採購附加費用金額 (expense_amount)',
+            self::PURCHASE_BASE_TOTAL => '採購本幣總金額 (purchase_base_total)',
+            self::PURCHASE_BASE_ITEMS => '採購本幣商品淨額 (purchase_base_items)',
+            self::PURCHASE_BASE_TAX => '採購本幣進項稅額 (purchase_base_tax)',
+            self::PURCHASE_BASE_SHIPPING => '採購本幣運費支出 (purchase_base_shipping)',
+            self::PURCHASE_BASE_OTHER_FEES => '採購本幣附加費 (purchase_base_other_fees)',
+
+            self::PURCHASE_FOREIGN_SUBTOTAL => '採購外幣純商品總額 (purchase_foreign_subtotal)',
+            self::PURCHASE_FOREIGN_SHIPPING => '採購外幣運費 (purchase_foreign_shipping)',
+            self::PURCHASE_FOREIGN_TAX => '採購外幣進項稅 (purchase_foreign_tax)',
+            self::PURCHASE_FOREIGN_OTHER_FEES => '採購外幣其他費用 (purchase_foreign_other_fees)',
+            self::PURCHASE_FOREIGN_DISCOUNT => '採購外幣折讓 (purchase_foreign_discount)',
+            self::PURCHASE_FOREIGN_TOTAL => '採購外幣應付總額 (purchase_foreign_total)',
 
             self::RETURN_TOTAL => '退款/退貨總金額 (return_total)',
-            self::RETURN_COST => '退貨回庫成本總計 (return_cost)',
-			self::RETURN_COST_BASE => '退貨成本-本幣 (return_cost_base, 已換算)',
+            self::RETURN_COST => '退貨回庫成本總計-原幣 (return_cost)',
+			self::RETURN_COST_BASE => '退貨成本-本幣 (return_cost_base)',
             self::ITEMS_COST => '商品成本歷史快照累加 (舊式)',
             self::ITEMS_PRODUCT_COST => '關聯商品即時成本累加 (舊式)',
-			self::PURCHASE_SUBTOTAL => '採購外幣純商品總額',
-            self::PURCHASE_TOTAL_AMOUNT => '採購外幣應付總額',
-            self::PURCHASE_BASE_TOTAL => '採購本幣({$currency})總金額',
-            self::PURCHASE_BASE_ITEMS => '採購本幣({$currency})商品淨額(換算後)',
-            self::PURCHASE_BASE_TAX => '採購本幣({$currency})進項稅額(換算後)',
-            self::PURCHASE_BASE_SHIPPING => '採購本幣({$currency})運費支出(換算後)',
-            self::PURCHASE_BASE_OTHER_FEES => '採購本幣({$currency})附加費(換算後)',
-			self::INPUT_TOTAL_COST => '領料投入總成本',
-            self::OUTPUT_TOTAL_COST => '成品產出總成本',
+			
+			self::INPUT_TOTAL_COST => '領料投入總成本 (input_total_cost)',
+            self::OUTPUT_TOTAL_COST => '成品產出總成本 (output_total_cost)',
             self::COST_VARIANCE => '成本差異（投入-產出）',
             self::COST_VARIANCE_ABS => '成本差異絕對值',
         };

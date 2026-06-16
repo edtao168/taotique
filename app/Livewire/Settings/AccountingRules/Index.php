@@ -3,6 +3,7 @@
 
 namespace App\Livewire\Settings\AccountingRules;
 
+use App\Enums\AmountSource;
 use App\Models\AccountingRule;
 use App\Models\AccountingRuleLine;
 use App\Models\Account;
@@ -44,22 +45,7 @@ class Index extends Component
         $this->comboOptions = $this->searchAccounts();
         
         // 🎯 預先載入金額來源選項（只載入一次）
-        $this->loadAmountSources();
-    }
-
-    /**
-     * 從設定檔載入金額來源選項
-     */
-    protected function loadAmountSources(): void
-    {
-        $amountSourcesConfig = config('business.amount_sources', []);
-        $this->amountSources = [];
-        foreach ($amountSourcesConfig as $value => $label) {
-            $this->amountSources[] = [
-                'value' => $value,
-                'label' => $label,
-            ];
-        }
+        $this->amountSources = AmountSource::options();
     }
 
     public function create()
