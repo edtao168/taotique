@@ -42,29 +42,46 @@ class AccountingService
     /**
      * 建立分錄陣列（內部使用，包含借貸標記）
      */
-    private function buildEntries($lines, Model $source, ?string $context): array
-    {
-        $entries = [];
+	private function buildEntries($lines, Model $source, ?string $context): array
+	{
+		$entries = [];
 
-        foreach ($lines as $line) {
-            if (!$line->is_active) continue;
+		foreach ($lines as $line) {
+			if (!$line->is_active) continue;
 
-            $amount = $source->getAmountFromSource($line->amount_source, $context);
-            $adjustedAmount = bcmul($amount, (string)$line->ratio, self::DECIMAL_PRECISION);
+			// 🎯 先取得金額
+			$amount = $source->getAmountFromSource($line->amount_source, $context);
+			
+			// 🎯 確保金額是有效的數字字串
+			if ($amount === null || $amount === '') {
+				$amount = '0.0000';
+			}
+			
+			// 🎯 確保是字串格式
+			$amount = (string) $amount;
 
-            if (bccomp($adjustedAmount, '0.0000', self::DECIMAL_PRECISION) === 0) continue;
+			info('Amount source debug', [
+				'amount_source' => $line->amount_source,
+				'amount_value' => $amount,
+				'line_id' => $line->id,
+				'sale_id' => $source->id ?? null,
+			]);
+			
+			$adjustedAmount = bcmul($amount, (string)$line->ratio, self::DECIMAL_PRECISION);
 
-            $accountId = $this->resolveAccountId($line, $source, $context);
+			if (bccomp($adjustedAmount, '0.0000', self::DECIMAL_PRECISION) === 0) continue;
 
-            $entries[] = [
-                'account_id' => $accountId,
-                'is_debit'   => $line->entry_type === 'debit',
-                'amount'     => $adjustedAmount,
-            ];
-        }
+			$accountId = $this->resolveAccountId($line, $source, $context);
 
-        return $entries;
-    }
+			$entries[] = [
+				'account_id' => $accountId,
+				'is_debit'   => $line->entry_type === 'debit',
+				'amount'     => $adjustedAmount,
+			];
+		}
+
+		return $entries;
+	}
 
     /**
      * 批次建立傳票明細（符合你的資料表結構）

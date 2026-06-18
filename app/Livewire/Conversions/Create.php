@@ -4,11 +4,12 @@
 namespace App\Livewire\Conversions;
 
 use App\Models\Conversion;
+use App\Models\Inventory;
 use App\Models\Product;
 use App\Models\Warehouse;
 use App\Models\Setting;
 use App\Models\Shop;
-use App\Traits\HasProductSearch;
+//use App\Traits\HasProductSearch;
 use App\Traits\HasShop;
 use Livewire\Component;
 use Mary\Traits\Toast;
@@ -16,7 +17,7 @@ use Illuminate\Support\Facades\DB;
 
 class Create extends Component
 {
-    use Toast, HasShop, HasProductSearch;
+    use Toast, HasShop;
 
     public ?Conversion $conversion = null;
     public bool $isEdit = false;
@@ -34,7 +35,8 @@ class Create extends Component
     ];
     
     public array $items = [];
-    public array $productOptions = [];
+    public array $inputProductOptions = [];
+	public array $outputProductOptions = [];
     
     // 成本差異預覽相關屬性
     public bool $showVariancePreview = false;
@@ -58,7 +60,7 @@ class Create extends Component
                 'warehouse_id' => (int) $conversion->warehouse_id,
                 'process_date' => $conversion->process_date->format('Y-m-d\TH:i'),
                 'remark' => $conversion->remark ?? '',
-                'variance_treatment' => 'expense',
+                'variance_treatment' => 'capitalize',
             ];
             
             $this->items = $conversion->items->map(function ($item) {
@@ -70,11 +72,10 @@ class Create extends Component
                     'quantity' => (string) $item->quantity,
                     'cost_snapshot' => (string) $item->cost_snapshot,
                     'name' => $item->product?->full_display_name ?? '',
-                    'sku' => $item->product?->sku ?? '',
                 ];
             })->toArray();
             
-            $this->calculateVariancePreview();
+            $this->calculateAll();
             
         } else {
             // ✅ 新增模式（對齊 Sale：手動產生單號）
@@ -85,15 +86,13 @@ class Create extends Component
                 'warehouse_id' => (int) (Warehouse::first()?->id ?? 1),
                 'process_date' => now()->format('Y-m-d'),
                 'remark' => '',
-                'variance_treatment' => 'expense',
+                'variance_treatment' => 'capitalize',
             ];
             
             $this->items = [];
             $this->addItem(1);
             $this->addItem(2);
         }
-        
-        $this->updateProductOptions();
     }
 
     /**
@@ -161,52 +160,46 @@ class Create extends Component
             }
         }
         
-        $this->calculateVariancePreview();
+        $this->calculateAll();
     }
 
     /**
      * 當商品選擇變更時，自動帶入成本（對齊 Sale 的 updatedItems）
      */
-    public function updatedItems($value, $key): void
-    {
-        if (str_ends_with($key, '.product_id')) {
-            $parts = explode('.', $key);
-            $index = (int) $parts[0];
-            
-            if ($value) {
-                $product = Product::find($value);
-                if ($product && isset($this->items[$index])) {
-                    $this->items[$index]['name'] = $product->full_display_name;
-                    $this->items[$index]['sku'] = $product->sku;
-                    $this->items[$index]['cost_snapshot'] = (string) ($product->getCurrentCost() ?? '0.0000');
-                    $this->updateProductOptions();
-                }
-            }
-        }
-        
-        $this->calculateVariancePreview();
-    }
-
-    /**
-     * 更新產品選項（對齊 Sale）
-     */
-    protected function updateProductOptions(): void
-    {
-        $productIds = collect($this->items)->pluck('product_id')->filter()->values()->toArray();
-        
-        if (empty($productIds)) {
-            $this->productOptions = [];
-            return;
-        }
-        
-        $this->productOptions = Product::whereIn('id', $productIds)
-            ->get()
-            ->map(fn($p) => [
-                'id' => $p->id,
-                'name' => $p->full_display_name,
-            ])
-            ->toArray();
-    }
+	public function updatedItems($value, $key): void
+	{
+		$parts = explode('.', $key);
+		$index = $parts[0];
+		$field = $parts[1] ?? null;
+		
+		if ($field === 'product_id') {
+			$product = Product::find($this->items[$index]['product_id']);
+			if ($product) {
+				// 只更新名稱
+				$this->items[$index]['name'] = $product->full_display_name;
+				
+				// 只有投入項目才自動帶入成本
+				if ($this->items[$index]['type'] == 1) {
+					$inventory = Inventory::where('product_id', $product->id)
+						->where('warehouse_id', $this->items[$index]['warehouse_id'])
+						->first();
+					$cost = $inventory->cost ?? $product->cost ?? '0.0000';
+					
+					// 只有當成本還是 0 時才自動帶入
+					if (bccomp($this->items[$index]['cost_snapshot'] ?? '0', '0', 4) == 0) {
+						$this->items[$index]['cost_snapshot'] = (string) $cost;
+					}
+				}
+				// ✅ 產出項目：完全不動 cost_snapshot，保留使用者輸入
+				
+				$this->calculateAll();
+			}
+		}
+		
+		if (in_array($field, ['quantity', 'cost_snapshot'])) {
+			$this->calculateAll();
+		}
+	}
 
     /**
      * 新增明細項目（對齊 Sale 的 addRow）
@@ -220,13 +213,55 @@ class Create extends Component
             'quantity' => '1.0000',
             'cost_snapshot' => '0.0000',
             'name' => '',
-            'sku' => '',
         ];
         
-        $this->search('');
-        $this->calculateVariancePreview();
-        $this->updateProductOptions();
+        if ($type === 1) {
+			$this->searchInputProducts();
+		} else {
+			$this->searchOutputProducts();
+		}
     }
+	
+	/**
+	 * 原料搜尋（獨立）
+	 */
+	public function searchInputProducts(string $value = ''): array
+	{
+		$this->inputProductOptions = $this->searchProductQuery($value);
+		return $this->inputProductOptions;
+	}
+
+	/**
+	 * 成品搜尋（獨立）
+	 */
+	public function searchOutputProducts(string $value = ''): array
+	{
+		$this->outputProductOptions = $this->searchProductQuery($value);
+		return $this->outputProductOptions;
+	}
+
+	/**
+	 * 共用查詢邏輯
+	 */
+	private function searchProductQuery(string $value = ''): array
+	{
+		$query = Product::where('is_active', true);
+
+		if (strlen($value) >= 2) {
+			$query->where(function($q) use ($value) {
+				$q->where('sku', 'like', "%{$value}%")
+				  ->orWhere('name', 'like', "%{$value}%");
+			});
+		}
+
+		return $query->limit(20)
+			->get()
+			->map(fn($p) => [
+				'id' => $p->id,
+				'name' => $p->full_display_name,
+			])
+			->toArray();
+	}
     
     /**
      * 移除明細項目（對齊 Sale 的 removeRow）
@@ -235,14 +270,13 @@ class Create extends Component
     {
         unset($this->items[$index]);
         $this->items = array_values($this->items);
-        $this->calculateVariancePreview();
-        $this->updateProductOptions();
+        $this->calculateAll();
     }
 
     /**
      * 計算成本差異預覽（對齊 Sale 的 calculateAll）
      */
-    protected function calculateVariancePreview(): void
+    protected function calculateAll(): void
     {
         $inputTotal = '0.0000';
         $outputTotal = '0.0000';
@@ -269,7 +303,7 @@ class Create extends Component
      */
     public function previewVariance(): void
     {
-        $this->calculateVariancePreview();
+        $this->calculateAll();
         $this->showVariancePreview = true;
     }
 
@@ -290,52 +324,51 @@ class Create extends Component
     }
 
     /**
-     * 核心儲存邏輯（完全對齊 Sale 的 save 方法）
+     * 核心儲存邏輯
      */
     public function save(): void
     {
-        $this->validate();
-        
-        if (!$this->validateItemsTypes()) {
-            return;
-        }
+		$this->validate();
+		
+		if (!$this->validateItemsTypes()) {
+			return;
+		}
 
-        try {
-            DB::transaction(function () {
-                if ($this->isEdit) {
-                    $this->warning('拆裝單過帳後不可修改，請使用調整單處理');
-                    return;
-                }
-                
-                // ✅ 新增模式：傳入已產生的單號（對齊 Sale）
-                $conversion = Conversion::create([
-                    'shop_id' => $this->form['shop_id'],
-                    'warehouse_id' => $this->form['warehouse_id'],
-                    'conversion_no' => $this->conversion_no,  // ✅ 傳入預先產生的單號
-                    'process_date' => $this->form['process_date'],
-                    'user_id' => auth()->id(),
-                    'remark' => $this->form['remark'],
-                ]);
-                
-                foreach ($this->items as $item) {
-                    $conversion->items()->create([
-                        'shop_id' => $this->form['shop_id'],
-                        'type' => $item['type'],
-                        'product_id' => $item['product_id'],
-                        'warehouse_id' => $item['warehouse_id'],
-                        'quantity' => $item['quantity'],
-                        'cost_snapshot' => $item['cost_snapshot'],
-                    ]);
-                }
-                
-                $conversion->post($this->form['variance_treatment']);
-                
-                $this->success('拆裝作業已完成並過帳', redirectTo: route('inventories.conversions.index'));
-            });
+		try {
+			DB::transaction(function () {
+				if ($this->isEdit) {
+					$this->warning('拆裝單過帳後不可修改，請使用調整單處理');
+					return;
+				}
+				
+				// 新增模式
+				$conversion = Conversion::create([
+					'shop_id' => $this->form['shop_id'],
+					'warehouse_id' => $this->form['warehouse_id'],
+					'conversion_no' => $this->conversion_no,
+					'process_date' => $this->form['process_date'],
+					'user_id' => auth()->id(),
+					'remark' => $this->form['remark'],
+				]);
+				
+				foreach ($this->items as $item) {
+					$conversion->items()->create([
+						'type' => $item['type'],
+						'product_id' => $item['product_id'],
+						'warehouse_id' => $item['warehouse_id'],
+						'quantity' => $item['quantity'],
+						'cost_snapshot' => $item['cost_snapshot'],
+					]);
+				}
 
-        } catch (\Exception $e) {
-            $this->error('儲存失敗：' . $e->getMessage());
-        }
+				//$conversion->post();
+				
+				$this->success('拆裝作業已完成', redirectTo: route('inventories.conversions.index'));
+			});
+
+		} catch (\Exception $e) {
+			$this->error('儲存失敗：' . $e->getMessage());
+		}
     }
 
     public function render()
@@ -347,8 +380,8 @@ class Create extends Component
             ]),
             'warehouses' => Warehouse::where('is_active', true)->get(),
             'varianceOptions' => [
-                ['id' => 'expense', 'name' => '耗損進費用（製造費用）'],
                 ['id' => 'capitalize', 'name' => '耗損資本化（併入在製品成本）'],
+				['id' => 'expense', 'name' => '耗損進費用（製造費用）'],                
                 ['id' => 'inventory', 'name' => '耗損作為庫存調整'],
             ],
         ]);

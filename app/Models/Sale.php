@@ -98,37 +98,35 @@ class Sale extends Model
     // =========================================================================
     // SECTION: 全通路通用動態過帳金額清洗 Accessors (BCMath 嚴謹運算)
     // =========================================================================
+	public function getCustomerTotalAttribute(): string
+	{
+		$net = $this->subtotal_after_discount ?? '0.0000';
+		$tax = (string) ($this->tax_amount ?? '0.0000');
+		$freight = (string) ($this->freight_amount ?? '0.0000');
 
-    public function getSubtotalAfterDiscountAttribute(): string
-    {
-        $subtotal = (string)($this->attributes['subtotal'] ?? '0.0000');
-        $sellerDiscount = (string)($this->attributes['seller_discount'] ?? '0.0000');
-        return bcsub($subtotal, $sellerDiscount, 4);
-    }
+		$total = bcadd($net, $tax, 4);
+		return bcadd($total, $freight, 4);
+	}
 
-    public function getCustomerTotalAttribute(): string
-    {
-        $net = $this->subtotal_after_discount;
-        $tax = (string)($this->attributes['tax_amount'] ?? '0.0000');
-        $freight = (string)($this->attributes['freight_amount'] ?? '0.0000');
+	public function getSubtotalAfterDiscountAttribute(): string
+	{
+		$subtotal = (string) ($this->subtotal ?? '0.0000');
+		$discount = $this->getFeeTotal('seller_discount');
+		return bcsub($subtotal, $discount, 4);
+	}
 
-        $total = bcadd($net, $tax, 4);
-        return bcadd($total, $freight, 4);
-    }
-
-    public function getFinalNetAmountAttribute(): string
-    {
-        $platformFee     = (string)($this->platform_fee ?? '0.0000');
-        $commission      = (string)($this->commission ?? '0.0000');
-        $sellerDiscount  = (string)($this->seller_discount ?? '0.0000');
-        $shippingFeePlat = (string)($this->shipping_fee_platform ?? '0.0000');
-
-        $totalFees = bcadd($platformFee, $commission, 4);
-        $totalFees = bcadd($totalFees, $sellerDiscount, 4);
-        $totalFees = bcadd($totalFees, $shippingFeePlat, 4);
-
-        return bcsub($this->customer_total, $totalFees, 4);
-    }
+	public function calculateTotalFees(): string
+	{
+		$fees = ['platform_fee', 'commission', 'seller_discount', 'shipping_fee_platform', 'order_adjustment'];
+		$total = '0.0000';
+		
+		foreach ($fees as $feeType) {
+			$amount = $this->getFeeTotal($feeType);
+			$total = bcadd($total, $amount, 4);
+		}
+		
+		return $total;
+	}
 
     // =========================================================================
     // SECTION: 會計自動規則對齊介面
@@ -178,7 +176,7 @@ class Sale extends Model
             $this->deductInventory($this->getCurrentItemsQuantity(), $allowNegative);
 
             // 2. 重新載入最新關聯數據
-            $this->fresh(['items.product', 'fees']); 
+            $this->fresh(['items.product', 'fees', 'channel']); 
 
             // 3. 驅動傳票自動結轉
             // 🎯 每個 event_type 產生獨立的 Journal（由 AccountingService 支持）
@@ -547,28 +545,59 @@ class Sale extends Model
      * 獲取指定金額來源的數值
      * 🎯 依據 sale_items 真實 Schema 進行對接，根除 0 元結轉異常
      */
-public function getAmountFromSource(string $source, mixed $context = null): string
-    {
-        return match ($source) {
-            'customer_total'          => (string)($this->customer_total_amount ?? $this->customer_total ?? $this->total_amount ?? '0.0000'),
-            'subtotal_after_discount' => (string)($this->subtotal ?? '0.0000'),
-            'tax_amount'              => (string)($this->tax_amount ?? '0.0000'),
-            'freight_amount'          => (string)($this->freight_amount ?? '0.0000'),
-            
-            // 🎯 銷貨成本：呼叫本次增補的實時核心成本計算方法
-            'cost_amount'             => $this->calculateRealtimeCost(), 
+	public function getAmountFromSource(string $source, mixed $context = null): string
+	{
+		// 🎯 先確保必要的關聯已載入
+		if (!$this->relationLoaded('items')) {
+			$this->load('items');
+		}
+		
+		return match ($source) {
+			// ===== 銷售收入相關 =====
+			'customer_total' => (string) ($this->customer_total ?? '0.0000'),
+			'subtotal_after_discount' => (string) ($this->subtotal_after_discount ?? $this->subtotal ?? '0.0000'),
+			'tax_amount' => (string) ($this->tax_amount ?? '0.0000'),
+			'freight_amount' => (string) ($this->freight_amount ?? '0.0000'),
+			
+			// ===== 銷售費用相關 =====
+			'platform_fee' => $this->getFeeTotal('platform_fee'),
+			'commission' => $this->getFeeTotal('commission'),
+			'seller_discount' => $this->getFeeTotal('seller_discount'),
+			'shipping_fee_platform' => $this->getFeeTotal('shipping_fee_platform'),
+			'order_adjustment' => $this->getFeeTotal('order_adjustment'),
+			'total_fees' => $this->calculateTotalFees(),
+			
+			// ===== 銷售成本相關 =====
+			'cost_amount' => $this->calculateRealtimeCost(),
+			
+			// ===== 退貨相關 =====
+			'return_total' => (string) ($this->return_total ?? '0.0000'),
+			'return_cost' => (string) ($this->return_cost ?? '0.0000'),
+			'return_cost_base' => (string) ($this->return_cost_base ?? '0.0000'),
+			
+			// ===== 採購相關（如果 Sale 也有用到） =====
+			'purchase_base_items' => (string) ($this->purchase_base_items ?? '0.0000'),
+			'purchase_base_tax' => (string) ($this->purchase_base_tax ?? '0.0000'),
+			'purchase_base_shipping' => (string) ($this->purchase_base_shipping ?? '0.0000'),
+			'purchase_base_other_fees' => (string) ($this->purchase_base_other_fees ?? '0.0000'),
+			'purchase_base_total' => (string) ($this->purchase_base_total ?? '0.0000'),
+			
+			default => '0.0000',
+		};
+	}
 
-            // 🎯 通路摩擦費用：呼叫本次增補的獨立封裝方法，保持 match 區塊極致乾淨
-            'platform_fee'            => $this->getPlatformFeeTotal(),
-            'commission'              => $this->getCommissionTotal(),
-            'seller_discount'         => $this->getSellerDiscountTotal(),
-            'shipping_fee_platform'   => $this->getPlatformShippingFeeTotal(),
-            
-            'total_fees'              => $this->getTotalFeesSum(),
-            
-            default                   => '0.0000',
-        };
-    }
+	/**
+	 * 輔助方法：取得特定費用類型的總額
+	 */
+	private function getFeeTotal(string $feeType): string
+	{
+		if ($this->relationLoaded('fees')) {
+			$total = $this->fees->where('fee_type', $feeType)->sum('amount');
+		} else {
+			$total = $this->fees()->where('fee_type', $feeType)->sum('amount');
+		}
+		return (string) ($total ?: '0.0000');
+	}
 
     // =========================================================================
     // SECTION: 🎯 增補核心業務方法 (核心除錯與高複用性封裝)
@@ -696,18 +725,6 @@ public function getAmountFromSource(string $source, mixed $context = null): stri
         return $totalCost;
     }
 
-    private function calculateTotalFees(): string
-    {
-        $platformFee    = (string)($this->platform_fee ?? '0.0000');
-        $commission     = (string)($this->commission ?? '0.0000');
-        $sellerDiscount = (string)($this->seller_discount ?? '0.0000');
-        $shippingFee    = (string)($this->shipping_fee_platform ?? '0.0000');
-
-        $total = bcadd($platformFee, $commission, 4);
-        $total = bcadd($total, $sellerDiscount, 4);
-        return bcadd($total, $shippingFee, 4);
-    }
-
     // =========================================================================
     // SECTION: 動態科目解析（專屬於 Sale）
     // =========================================================================
@@ -757,14 +774,26 @@ public function getAmountFromSource(string $source, mixed $context = null): stri
         $channelCode = $this->channel?->code ?? 'retail';
         $mapping = config('business.channel_mapping', []);
 
-        return $mapping[$channelCode] ?? 'retail';
+        $result = $mapping[$channelCode] ?? 'retail';
+    
+		info('getChannelCode result', [
+			'sale_id' => $this->id,
+			'channel_code' => $channelCode,
+			'mapped' => $result,
+		]);
+		
+		return $result;
     }
 
     private function resolvePaymentAccount(): string
     {
         $channel = $this->getChannelCode();
         $payment = $this->payment_method ?? 'default';
-
+info('Resolving payment account', [
+        'sale_id' => $this->id,
+        'channel' => $channel,
+        'payment' => $payment,
+    ]);
         $paymentAccount = config("business.payment_accounts.{$payment}");
         if ($paymentAccount) {
             return $paymentAccount;
@@ -786,13 +815,12 @@ public function getAmountFromSource(string $source, mixed $context = null): stri
     {
         $channel = $this->getChannelCode();
 
-        $revenueConfig = config("business.accounting_accounts.revenue.{$channel}");
-
-        if ($revenueConfig && isset($revenueConfig['code'])) {
-            return $revenueConfig['code'];
-        }
-
-        return config('business.accounting_accounts.revenue.default', '500101');
+        return match($channel) {
+			'shopee'   => '500102',   // 蝦皮電商收入
+			'facebook' => '500103',   // 社群電商收入
+			'retail'   => '500101',   // 門市零售收入
+			default    => '500101',
+		};
     }
 
     private function resolveCostAccount(): string

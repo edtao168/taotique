@@ -100,36 +100,49 @@
                 </x-slot:menu>
 
                 @foreach($items as $index => $item)
-                    @if($item['type'] == 1)
-                        <div class="flex flex-col gap-3 mb-6 border-b pb-4 last:border-0 relative">
-                            <div class="absolute right-0 top-0">
-                                <x-button icon="o-trash" class="btn-ghost btn-sm text-error" wire:click="removeItem({{ $index }})" />
-                            </div>
+					@if($item['type'] == 1)
+						<div class="flex flex-col gap-3 mb-6 border-b pb-4 last:border-0 relative">
+							<div class="absolute right-0 top-0">
+								<x-button icon="o-trash" class="btn-ghost btn-sm text-error" wire:click="removeItem({{ $index }})" />
+							</div>
 
-                            <div class="w-full">
-                                <x-choices 
-                                    label="選擇原料" 
-                                    wire:model="items.{{ $index }}.product_id" 
-                                    :options="$productOptions" 
-                                    search-function="search"
-                                    option-label="name"
-                                    option-value="id"
-                                    searchable single debounce="300ms" />
-                            </div>
+							<div class="w-full">
+								@if(isset($item['product_id']) && $item['product_id'] > 0)
+									{{-- 已選擇商品：顯示標籤 + 編輯按鈕 --}}
+									<div class="flex items-center justify-between p-3 border rounded-lg bg-base-100 shadow-sm">
+										<div>
+											<div class="font-bold text-sm">{{ $item['name'] }}</div>
+											<div class="text-xs opacity-50 font-mono">{{ $item['sku'] ?? '' }}</div>
+										</div>
+										<x-button icon="o-pencil" class="btn-ghost btn-xs text-primary" 
+												  wire:click="$set('items.{{ $index }}.product_id', null)" />
+									</div>
+								@else
+									{{-- 未選擇商品：顯示搜尋下拉 --}}
+									<x-choices 
+										label="選擇原料" 
+										wire:model="items.{{ $index }}.product_id" 
+										:options="$inputProductOptions" 
+										search-function="searchInputProducts"
+										option-label="name"
+										option-value="id"
+										searchable single debounce="300ms" />
+								@endif
+							</div>
 
-                            <div class="grid grid-cols-2 gap-3">
-                                <x-input label="數量" wire:model="items.{{ $index }}.quantity" type="number" step="0.0001" />
-                                <x-input 
-                                    label="單位成本" 
-                                    wire:model="items.{{ $index }}.cost_snapshot" 
-                                    type="number" 
-                                    step="0.0001" 
-                                    prefix="$" 
-                                />
-                            </div>
-                        </div>
-                    @endif
-                @endforeach
+							<div class="grid grid-cols-2 gap-3">
+								<x-input label="數量" wire:model="items.{{ $index }}.quantity" type="number" step="0.0001" />
+								<x-input 
+									label="單位成本" 
+									wire:model="items.{{ $index }}.cost_snapshot" 
+									prefix="NT$"
+									type="number"
+									step="0.0001"
+								/>
+							</div>
+						</div>
+					@endif
+				@endforeach
             </x-card>
 
             {{-- 右側：成品產出 (Type 2) --}}
@@ -154,13 +167,13 @@
 
                             <div class="w-full">
                                 <x-choices 
-                                    label="選擇成品" 
-                                    wire:model="items.{{ $index }}.product_id" 
-                                    :options="$productOptions" 
-                                    search-function="search"
-                                    option-label="name"
-                                    option-value="id"
-                                    searchable single debounce="300ms" />
+									label="選擇成品" 
+									wire:model="items.{{ $index }}.product_id" 
+									:options="$outputProductOptions" 
+									search-function="searchOutputProducts"
+									option-label="name"
+									option-value="id"
+									searchable single debounce="300ms" />
                             </div>
 
                             <div class="grid grid-cols-2 gap-3">
@@ -168,9 +181,9 @@
                                 <x-input 
                                     label="單位成本" 
                                     wire:model="items.{{ $index }}.cost_snapshot" 
-                                    type="number" 
-                                    step="0.0001" 
-                                    prefix="$" 
+                                    prefix="NT$"
+									type="number" 
+                                    step="0.0001"
                                 />
                             </div>
                         </div>
