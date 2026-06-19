@@ -53,4 +53,25 @@ trait HasWorkflow
     {
         return $this->status?->isFinalized() ?? false;
     }
+	
+	/**
+     * 改變狀態
+     */
+    public function setStatus(string $newStatus, ?string $event = null): void
+    {
+        $oldStatus = $this->status;
+        
+        $this->status = $newStatus;
+        $this->save();
+
+        // 如果需要記錄歷史，可以在這裡加
+        // 如果不需要，這行刪掉也沒關係
+        Log::info('狀態已變更', [
+            'model' => static::class,
+            'id' => $this->id,
+            'from' => $oldStatus,
+            'to' => $newStatus,
+            'event' => $event,
+        ]);
+    }
 }

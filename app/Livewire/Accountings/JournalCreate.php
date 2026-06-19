@@ -7,6 +7,7 @@ use App\Models\AccountingRule;
 use App\Models\Journal;
 use App\Models\JournalItem;
 use App\Traits\HasAccountSearch;
+use App\Enums\WorkflowStatus;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Livewire\Component;
@@ -22,41 +23,56 @@ class JournalCreate extends Component
     // 傳票主檔欄位
     public string $entry_date = '';
     public string $description = '';
-    public string $event_type = '';
+    //public string $event_type = '';
     
     // 🆕 多科目分錄陣列（核心改動）
     public array $entries = [];
     public array $availableAccounts = [];
     
     // 業務類型選項
-    public array $eventTypeOptions = [];
+    //public array $eventTypeOptions = [];
 
     // ==============================================
     // 生命週期
     // ==============================================
     public function mount(Journal $journal = null): void
     {
-        $this->entry_date = now()->format('Y-m-d');
-        $this->loadEventTypes();
-        $this->loadAvailableAccounts();
-        $this->search('');
-		
-        // 預設兩行（借方 + 貸方）
-        $this->entries = [
-            ['account_code' => '', 'account_name' => '', 'entry_type' => 'debit', 'amount' => '0', 'account_id' => null],
-            ['account_code' => '', 'account_name' => '', 'entry_type' => 'credit', 'amount' => '0', 'account_id' => null],
-        ];
-
-        if ($journal && $journal->exists) {
-            if ($journal->status !== 'draft') {
-                $this->error('已過帳分錄不可修改，請使用更正功能');
-                $this->redirect(route('accountings.journals.correct', $journal));
+		if ($journal && $journal->exists) {
+            // 🛡️ 狀態安全防線：利用 Enum 自帶的 isEditable() 或直接比對 Enum 物件
+            if ($journal->isEditable()) {
+                session()->flash('error', '❌ 該傳票已過帳或結案，不可進行修改！');
+                $this->redirect(route('accountings.journals.index'));
                 return;
             }
-            $this->journalId = $journal->id;
+
             $this->isEdit = true;
-            $this->loadJournalData($journal);
-        }		
+            $this->journalId = $journal->id;
+            $this->entry_date = $journal->entry_date->format('Y-m-d');
+            $this->description = $journal->description;
+
+            $items = $journal->items()->with('account')->get();
+            $this->entries = [];
+            foreach ($items as $item) {
+                $this->entries[] = [
+                    'account_id'   => $item->account_id,
+                    'account_code' => $item->account->code ?? '',
+                    'account_name' => $item->account->name ?? '',
+                    'entry_type'   => bccomp($item->debit, '0', 4) > 0 ? 'debit' : 'credit',
+                    'amount'       => bccomp($item->debit, '0', 4) > 0 ? $item->debit : $item->credit,
+                ];
+            }
+        } else {
+            $this->isEdit = false;
+            $this->entry_date = now()->format('Y-m-d');
+            
+            $this->entries = [
+                ['account_id' => null, 'account_code' => '', 'account_name' => '', 'entry_type' => 'debit', 'amount' => '0'],
+                ['account_id' => null, 'account_code' => '', 'account_name' => '', 'entry_type' => 'credit', 'amount' => '0'],
+            ];
+        }
+
+        $this->loadAvailableAccounts();
+        $this->search('');
     }
 
     /**
@@ -241,48 +257,50 @@ class JournalCreate extends Component
         }
         
         // 4. 儲存
-        try {
-            DB::transaction(function () {
+try {
+            DB::transaction(function () use ($validatedData) {
                 if ($this->isEdit) {
                     $journal = Journal::lockForUpdate()->findOrFail($this->journalId);
-                    if ($journal->status !== 'draft') {
-                        throw new \RuntimeException('僅草稿可編輯');
+                    
+                    // 🛡️ 併發安全檢查：確保即時撈出的狀態仍是 DRAFT Enum
+                    if ($journal->status !== WorkflowStatus::DRAFT) {
+                        throw new \RuntimeException('此傳票已非草稿狀態，無法更新。');
                     }
                     
                     $journal->update([
-                        'entry_date' => $this->entry_date,
+                        'entry_date'  => $this->entry_date,
                         'description' => $this->description,
-                        'updated_by' => auth()->user()?->name ?? 'System',
                     ]);
                     $journal->items()->delete();
                 } else {
                     $journal = Journal::create([
-                        'shop_id' => 1,
-                        'entry_date' => $this->entry_date,
-                        'description' => $this->description,
-                        'reference_type' => 'manual',
-                        'status' => 'draft',
-                        'created_by' => auth()->user()?->name ?? 'System',
+                        'shop_id'       => 1,
+                        'currency'      => 'TWD',
+                        'exchange_rate' => '1.0000',
+                        'entry_date'    => $this->entry_date,
+                        'description'   => $this->description,
+                        'status'        => WorkflowStatus::DRAFT, // 🆕 新增時直接給予 Enum 物件
                     ]);
                 }
-                
-                // 寫入分錄項目（只寫金額 > 0 的）
+
                 foreach ($this->entries as $entry) {
-                    if (bccomp($entry['amount'], '0', 4) <= 0) continue;
-                    
-                    $journal->items()->create([
+                    $amt = (string)($entry['amount'] ?? 0);
+                    if (bccomp($amt, '0', 4) <= 0) continue;
+
+                    JournalItem::create([
+                        'shop_id'    => 1,
+                        'journal_id' => $journal->id,
                         'account_id' => $entry['account_id'],
-                        'debit' => $entry['entry_type'] === 'debit' ? $entry['amount'] : '0',
-                        'credit' => $entry['entry_type'] === 'credit' ? $entry['amount'] : '0',
-                        'currency' => 'TWD',
+                        'debit'      => $entry['entry_type'] === 'debit' ? $amt : '0.0000',
+                        'credit'     => $entry['entry_type'] === 'credit' ? $amt : '0.0000',
+                        'currency'   => 'TWD',
                         'exchange_rate' => '1.0000',
                     ]);
                 }
             }, 3);
-            
+
             $this->success('✅ 儲存成功');
             $this->redirect(route('accountings.journals.index'));
-            
         } catch (\Throwable $e) {
             Log::error('Journal save error', ['msg' => $e->getMessage()]);
             $this->error('儲存失敗：' . $e->getMessage());

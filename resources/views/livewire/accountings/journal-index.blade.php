@@ -1,3 +1,4 @@
+{{-- 檔案路徑與檔名：resources/views/livewire/accountings/journal-index.blade.php --}}
 <div>    
     <x-header title="日記帳查詢" subtitle="所有業務自動產生的分錄流水" separator progress-indicator>
         <x-slot:actions>
@@ -6,226 +7,195 @@
         </x-slot:actions>
     </x-header>
 
-    {{-- 桌面版列表 --}}
+    {{-- 🖥️ 桌面版 PC 端表格 --}}
     <div class="hidden lg:block">
         <x-card>
             {{-- 表頭 --}}
             <div class="grid grid-cols-12 gap-4 px-6 py-3 text-xs text-gray-500 border-b border-base-300">
-				 <div class="col-span-1 text-center">ID</div>
-				<div class="col-span-1 text-center">日期 / 狀態</div>
+                <div class="col-span-1 text-center">ID</div>
+                <div class="col-span-1 text-center">日期 / 狀態</div>
                 <div class="col-span-6">摘要 / 分錄明細</div>
-				<div class="col-span-2 text-right">借方</div>
+                <div class="col-span-2 text-right">借方</div>
                 <div class="col-span-2 text-right">貸方</div>
             </div>
             
             {{-- 資料行 --}}
             @foreach($journals as $journal)
-                @php
-                    $js = $journal->status;
-                    $jStatusLabel = match($js) {
-                        'draft' => '草稿', 'posted' => '已過帳',
-                        'cancelled' => '已作廢', 'closed' => '已結帳',
-                        default => $js,
-                    };
-                    $jStatusClass = match($js) {
-                        'draft' => 'badge-ghost', 'posted' => 'badge-success',
-                        'cancelled' => 'badge-error', 'closed' => 'badge-info',
-                        default => 'badge-ghost',
-                    };
-                @endphp
-                <div 
-                    class="grid grid-cols-12 gap-4 px-6 py-4 border-b border-base-200 last:border-0 hover:bg-base-200 transition-colors cursor-pointer"
-                    wire:click="openDrawer({{ $journal->id }})"
-                >                    
-					{{-- 憑證編號 --}}
-					<div class="col-span-1 text-center">
-						<div class="font-mono text-sm font-bold text-gray-600">#{{ $journal->id }}</div>
-					</div>
-					{{-- 日期 + 狀態 --}}
-                    <div class="col-span-1 text-center">
-                        <div class="font-mono text-sm">{{ $journal->entry_date->format('Y-m-d') }}</div>
-                        <x-badge :value="$jStatusLabel" class="{{ $jStatusClass }} mt-1" />
-						{{-- 分店名稱顯示 --}}
-						@if($journal->shop)
-							<div class="text-xs text-gray-400 mt-1 truncate" title="{{ $journal->shop->name ?? $journal->shop->shop_name }}">
-								{{ Str::limit($journal->shop->name ?? $journal->shop->shop_name, 10) }}
-							</div>
-						@endif
-						{{-- 更正標記 --}}
-						@if($journal->is_corrected && $journal->reference_type !== 'correct')
-							<div class="mt-1">
-								<x-badge value="已更正" class="badge-warning badge-soft" />
-							</div>
-							<div class="text-xs text-gray-500 mt-0.5">
-								<x-icon name="o-lock-closed" class="w-3 h-3 inline" />
-								#{{ $journal->hasCorrection->id ?? '?' }}
-							</div>
-						@endif
-						
-						@if($journal->reference_type === 'correct')
-							<div class="mt-1">
-								<x-badge value="更正分錄" class="badge-error badge-soft" />
-							</div>
-						@endif
-                    </div>                    
-					
-                    {{-- 摘要 + 分錄明細（含借貸方合計） --}}
-                    <div class="col-span-10">
-                        <div class="font-bold text-sm mb-3 truncate" title="{{ $journal->description }}">
-                            {{ $journal->description }}
-                        </div>                        
-                        
-                        {{-- 分錄明細資料 --}}
-                        <div class="space-y-1 pl-4">
-                            @foreach($journal->items as $item)
-                                <div class="grid grid-cols-10 gap-2 items-center text-xs">
-                                    <div class="col-span-6 text-gray-600">
-                                        <span class="font-mono bg-base-300 px-1 rounded mr-2">{{ $item->account->code }}</span>
-                                        <span class="text-gray-500">{{ $item->account->name }}</span>
-                                    </div>
-                                    <div class="col-span-2 text-right font-mono {{ $item->debit > 0 ? 'text-success font-bold' : 'text-gray-300' }}">
-                                        {{ $item->debit > 0 ? number_format($item->debit, 2) : '-' }}
-                                    </div>
-                                    <div class="col-span-2 text-right font-mono {{ $item->credit > 0 ? 'text-error font-bold' : 'text-gray-300' }}">
-                                        {{ $item->credit > 0 ? number_format($item->credit, 2) : '-' }}
-                                    </div>
-                                </div>
-                            @endforeach
-                        </div>                        
+                <div class="grid grid-cols-12 gap-4 px-6 py-4 border-b border-base-200 hover:bg-base-100/50 items-center cursor-pointer"
+                     wire:click="selectJournal({{ $journal->id }})">
+                    
+                    <div class="col-span-1 text-center font-mono text-gray-400">
+                        #{{ $journal->id }}
+                    </div>
+                    
+                    <div class="col-span-1 text-center flex flex-col items-center gap-1">
+                        <span class="text-xs text-gray-500 font-mono">{{ $journal->entry_date->format('Y-m-d') }}</span>
+                        {{-- 🆕 運用 Trait 動態屬性，自動渲染對應顏色與標籤 --}}
+                        <x-badge :value="$journal->status_label" class="{{ $journal->status_color }} badge-xs" />
+                    </div>
+                    
+                    <div class="col-span-6">
+                        <div class="font-medium text-sm mb-1 text-gray-700">{{ $journal->description ?: '(無摘要)' }}</div>
+                        <div class="text-xs text-gray-400 font-mono">
+                            @if($journal->reference_type)
+                                <span class="badge badge-outline badge-sm">{{ $journal->reference_type }}</span>
+                            @endif
+                        </div>
+                    </div>
+                    
+                    <div class="col-span-2 text-right font-mono text-sm text-success">
+                        {{ bccomp($journal->items->sum('debit'), '0', 2) > 0 ? number_format($journal->items->sum('debit'), 2) : '-' }}
+                    </div>
+                    
+                    <div class="col-span-2 text-right font-mono text-sm text-error">
+                        {{ bccomp($journal->items->sum('credit'), '0', 2) > 0 ? number_format($journal->items->sum('credit'), 2) : '-' }}
                     </div>
                 </div>
             @endforeach
         </x-card>
     </div>
 
-    {{-- 手機版卡片 --}}
-    <div class="lg:hidden space-y-3">
+    {{-- 📱 手機端行動卡片 --}}
+    <div class="block lg:hidden space-y-3">
         @foreach($journals as $journal)
-            @php
-                $ms = $journal->status;
-                $mStatusLabel = match($ms) {
-                    'draft' => '草稿', 'posted' => '過帳',
-                    'cancelled' => '作廢', 'closed' => '結帳',
-                    default => $ms,
-                };
-                $mStatusClass = match($ms) {
-                    'draft' => 'badge-ghost', 'posted' => 'badge-success',
-                    'cancelled' => 'badge-error', 'closed' => 'badge-info',
-                    default => 'badge-ghost',
-                };
-            @endphp
-            <x-card 
-                class="shadow-sm border border-base-300 !p-0 overflow-hidden cursor-pointer active:bg-base-200"
-                wire:click="openDrawer({{ $journal->id }})"
-            >
-                <div class="bg-base-200 px-4 py-2 flex justify-between items-center border-b border-base-300">
+            <x-card class="shadow-sm border border-base-200" wire:click="selectJournal({{ $journal->id }})">
+                <div class="flex justify-between items-start mb-2">
                     <div class="flex items-center gap-2">
-                        <span class="text-xs font-mono font-bold">{{ $journal->entry_date->format('Y-m-d') }}</span>
-                        <x-badge :value="$mStatusLabel" class="{{ $mStatusClass }}" />
-						{{-- ✅ 新增：更正標記 --}}
-						@if($journal->is_corrected && $journal->reference_type !== 'correct')
-							<x-badge value="已更正" class="badge-warning badge-soft" />
-						@endif
-						
-						@if($journal->reference_type === 'correct')
-							<x-badge value="更正" class="badge-error badge-soft" />
-						@endif
+                        <span class="font-mono text-xs text-gray-400">#{{ $journal->id }}</span>
+                        <span class="text-xs text-gray-500 font-mono">{{ $journal->entry_date->format('Y-m-d') }}</span>
                     </div>
-                    <x-icon name="o-chevron-right" class="w-4 h-4 text-gray-400" />
+                    {{-- 🆕 手機端同步改用 Trait 屬性 --}}
+                    <x-badge :value="$journal->status_label" class="{{ $journal->status_color }} badge-sm" />
                 </div>
-                <div class="p-4">
-                    <div class="font-bold text-sm mb-2 truncate">{{ $journal->description }}</div>
-                    
-                    {{-- 手機版：科目+金額逐行顯示 --}}
-                    <div class="space-y-1 mb-2">
-                        @foreach($journal->items as $item)
-                            <div class="flex justify-between items-center text-xs">
-                                <span class="text-gray-600">{{ $item->account->name }}</span>
-                                <span class="font-mono {{ $item->debit > 0 ? 'text-success' : 'text-error' }}">
-                                    {{ $item->debit > 0 ? 'Dr ' . number_format($item->debit, 2) : 'Cr ' . number_format($item->credit, 2) }}
-                                </span>
-                            </div>
-                        @endforeach
-                    </div>
-
-                    <div class="flex justify-between items-center text-xs text-gray-500">
-                        @if($journal->source_number)
-                            <span class="text-info">📎 {{ $journal->source_number }}</span>
-                        @else
-                            <span></span>
-                        @endif
-                        <span class="font-mono">{{ $journal->items->count() }} 筆</span>
-                    </div>
+                <div class="text-sm font-medium text-gray-800 mb-2">{{ $journal->description ?: '(無摘要)' }}</div>
+                <div class="flex justify-between text-xs font-mono pt-2 border-t border-dashed border-base-200">
+                    <span class="text-success">借: {{ number_format($journal->items->sum('debit'), 2) }}</span>
+                    <span class="text-error">貸: {{ number_format($journal->items->sum('credit'), 2) }}</span>
                 </div>
             </x-card>
         @endforeach
-    </div>	
-	
-    {{-- Drawer --}}
-    <x-drawer wire:model="showDrawer" title="憑證詳情" right separator class="w-11/12 lg:w-1/3">
-		@if($selectedJournal)
-			{{-- 1. 引入共用的詳情組件 --}}
-			@include('livewire.accountings.includes._journal-detail', ['journal' => $selectedJournal])
+    </div>
 
-			{{-- 2. 僅保留此頁面特有的操作按鈕 --}}
-			<div class="border-t pt-4 mt-6 flex flex-col gap-2">
-				@if($selectedJournal->status === 'draft')
-					<div class="flex gap-2">
-						<x-button label="編輯" icon="o-pencil" :link="route('accountings.journals.edit', $selectedJournal)" class="btn-primary flex-1" />
-						<x-button label="刪除" icon="o-trash" wire:click="delete({{ $selectedJournal->id }})" wire:confirm="確認刪除？" class="btn-error btn-outline flex-1" spinner />
-						<x-button 
-							label="過帳" 
-							icon="o-check-circle" 
-							wire:click="submitForApproval({{ $selectedJournal->id }})" 
-							class="btn-success text-white font-bold flex-1" 
-							spinner 
-						/>
-					</div>
-				
-				{{-- ✅ 修改：已過帳 + 未被更正 → 顯示更正按鈕 --}}
-				@elseif($selectedJournal->status === 'posted' && !$selectedJournal->is_corrected && $selectedJournal->reference_type !== 'correct')
-					<x-button 
-						label="📝 產生更正分錄" 
-						icon="o-arrow-path-rounded-square" 
-						:link="route('accountings.journals.correct', $selectedJournal)" 
-						class="btn-warning w-full" 
-					/>
-				
-				{{-- ✅ 新增：已過帳 + 已被更正 → 顯示鎖定提示 --}}
-				@elseif($selectedJournal->status === 'posted' && $selectedJournal->is_corrected)
-					<div class="p-3 bg-warning/10 rounded-lg text-center">
-						<x-icon name="o-lock-closed" class="w-5 h-5 text-warning mx-auto mb-1" />
-						<div class="text-sm text-warning font-bold">此分錄已鎖定</div>
-						<div class="text-xs text-gray-500 mt-1">
-							已由 #{{ $selectedJournal->hasCorrection->id ?? '?' }} 更正，不可再次更正
-						</div>
-					</div>
-				@elseif($selectedJournal->reference_type == 'correct')
-					<div class="p-3 bg-warning/10 rounded-lg text-center">
-						<x-icon name="o-lock-closed" class="w-5 h-5 text-warning mx-auto mb-1" />
-						<div class="text-sm text-warning font-bold">此分錄已鎖定</div>
-						<div class="text-xs text-gray-500 mt-1">
-							此即更正分錄，不可再次更正
-						</div>
-					</div>
-				@elseif($selectedJournal->status == 'closed')
-					<div class="p-3 bg-warning/10 rounded-lg text-center">
-						<x-icon name="o-lock-closed" class="w-5 h-5 text-warning mx-auto mb-1" />
-						<div class="text-sm text-warning font-bold">此分錄已鎖定</div>
-						<div class="text-xs text-gray-500 mt-1">
-							此分錄已結案
-						</div>
-					</div>
-				@endif
-			</div>
-        @else
-            <div class="p-8 text-center text-gray-500">
-                載入中...
-            </div>
-        @endif
-    </x-drawer>
-
-    <div class="mt-6">
+    {{-- 分頁導航 --}}
+    <div class="mt-4">
         {{ $journals->links() }}
     </div>
+
+    {{-- 📑 右側詳細檢視抽屜 (Drawer) --}}
+    <x-drawer wire:model="showDrawer" title="傳票詳細分錄" right class="w-full max-w-xl">
+        @if($selectedJournal)
+            <div class="space-y-6">
+                {{-- 核心摘要資訊 --}}
+                <div class="bg-base-200 p-4 rounded-lg space-y-2">
+                    <div class="flex justify-between text-sm">
+                        <span class="text-gray-500">傳票編號</span>
+                        <span class="font-mono font-bold">#{{ $selectedJournal->id }}</span>
+                    </div>
+                    <div class="flex justify-between text-sm">
+                        <span class="text-gray-500">記帳日期</span>
+                        <span class="font-mono">{{ $selectedJournal->entry_date->format('Y-m-d') }}</span>
+                    </div>
+                    <div class="flex justify-between text-sm items-center">
+                        <span class="text-gray-500">目前狀態</span>
+                        {{-- 🆕 抽屜內部亦使用 Trait 屬性 --}}
+                        <x-badge :value="$selectedJournal->status_label" class="{{ $selectedJournal->status_color }} badge-sm" />
+                    </div>
+                    <div class="text-sm pt-2 border-t border-base-300">
+                        <span class="text-gray-500 block mb-1">分錄摘要說明</span>
+                        <div class="text-gray-800 font-medium">{{ $selectedJournal->description ?: '(無摘要)' }}</div>
+                    </div>
+                </div>
+
+                {{-- 會計科目借貸明細列表 --}}
+                <div>
+                    <h4 class="text-xs font-bold text-gray-400 mb-2 uppercase tracking-wider">分錄帳目明細</h4>
+                    <div class="border border-base-300 rounded-lg overflow-hidden bg-base-100">
+                        <table class="table table-sm w-full font-mono text-xs">
+                            <thead>
+                                <tr class="bg-base-200">
+                                    <th>科目代碼 / 名稱</th>
+                                    <th class="text-right">借方 (Debit)</th>
+                                    <th class="text-right">貸方 (Credit)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach($selectedJournal->items as $item)
+                                    <tr class="hover">
+                                        <td>
+                                            <div class="font-bold text-gray-700">{{ $item->account->code ?? '' }}</div>
+                                            <div class="text-gray-400 text-[11px]">{{ $item->account->name ?? '' }}</div>
+                                        </td>
+                                        <td class="text-right text-success font-bold">
+                                            {{ bccomp($item->debit, '0', 4) > 0 ? number_format($item->debit, 2) : '-' }}
+                                        </td>
+                                        <td class="text-right text-error font-bold">
+                                            {{ bccomp($item->credit, '0', 4) > 0 ? number_format($item->credit, 2) : '-' }}
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                {{-- 🛠️ 動作按鈕防禦區塊 (配合 Enum 與 Trait 方法控制) --}}
+                <div class="space-y-2 mt-4">
+                    {{-- 🆕 1. 草稿狀態：顯示繼續編輯 --}}
+                    @if($selectedJournal->isEditable())
+                        <x-button 
+                            label="✏️ 繼續編輯草稿" 
+                            link="{{ route('accountings.journals.edit', $selectedJournal) }}" 
+                            class="btn-primary w-full" 
+                        />
+                    @endif
+
+                    {{-- 🆕 2. 已過帳 (APPROVED) 且尚未被更正過：顯示建立更正分錄 --}}
+                    @if($selectedJournal->status === \App\Enums\WorkflowStatus::APPROVED && !$selectedJournal->is_corrected)
+                        <x-button 
+                            label="🔧 建立更正分錄" 
+                            link="{{ route('accountings.journals.correct', $selectedJournal) }}" 
+                            class="btn-warning w-full" 
+                        />
+                    @endif
+                
+                    {{-- 🆕 3. 已過帳 (APPROVED) 但已被更正過：顯示鎖定提示與來源 --}}
+                    @if($selectedJournal->status === \App\Enums\WorkflowStatus::APPROVED && $selectedJournal->is_corrected)
+                        <div class="p-3 bg-warning/10 rounded-lg text-center border border-warning/20">
+                            <x-icon name="o-lock-closed" class="w-5 h-5 text-warning mx-auto mb-1" />
+                            <div class="text-sm text-warning font-bold">此分錄已沖銷鎖定</div>
+                            <div class="text-xs text-gray-500 mt-1">
+                                已由更正傳票 #{{ $selectedJournal->hasCorrection->id ?? '?' }} 紅字沖銷，不可重複操作。
+                            </div>
+                        </div>
+                    @endif
+
+                    {{-- 🆕 4. 傳票本身就是更正單 (紅字沖銷單)：鎖定提示 --}}
+                    @if($selectedJournal->reference_type == 'correct')
+                        <div class="p-3 bg-info/10 rounded-lg text-center border border-info/20">
+                            <x-icon name="o-lock-closed" class="w-5 h-5 text-info mx-auto mb-1" />
+                            <div class="text-sm text-info font-bold">此為更正分錄</div>
+                            <div class="text-xs text-gray-500 mt-1">
+                                本單據為更正沖銷分錄，不可再次執行紅字更正。
+                            </div>
+                        </div>
+                    @endif
+
+                    {{-- 🆕 5. 已結帳 (COMPLETED)：全面鎖定歷史會計資料 --}}
+                    @if($selectedJournal->status === \App\Enums\WorkflowStatus::COMPLETED)
+                        <div class="p-3 bg-error/10 rounded-lg text-center border border-error/20">
+                            <x-icon name="o-lock-closed" class="w-5 h-5 text-error mx-auto mb-1" />
+                            <div class="text-sm text-error font-bold">該期間已關帳結案</div>
+                            <div class="text-xs text-gray-500 mt-1">
+                                本會計期間已執行關帳，所有歷史流水均已結算鎖定，嚴禁任何修改或更正。
+                            </div>
+                        </div>
+                    @endif
+                </div>
+            </div>
+        @endif
+        
+        <x-slot:actions>
+            <x-button label="關閉" @click="$wire.showDrawer = false" />
+        </x-slot:actions>
+    </x-drawer>
 </div>

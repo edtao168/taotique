@@ -62,7 +62,7 @@ enum WorkflowStatus: string
      */
     public function canApprove(): bool
     {
-        return $this === self::PENDING;
+        return in_array($this, [self::DRAFT, self::PENDING]);
     }
 
     /**

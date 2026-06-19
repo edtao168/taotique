@@ -3,6 +3,8 @@
 
 namespace App\Models;
 
+use App\Enums\WorkflowStatus;
+use App\Traits\HasWorkflow;
 use App\Models\Setting;
 use App\Models\AccountingRule;
 use App\Models\Inventory;
@@ -18,11 +20,12 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 
 class Sale extends Model
 {
-    use HasAccounting, HasAccountAndDynamicSearch;
+    use HasAccounting, 
+        HasAccountAndDynamicSearch, 
+        HasWorkflow;
 
     protected $guarded = [];
 
@@ -35,12 +38,13 @@ class Sale extends Model
         'subtotal'         => 'decimal:4',
         'tax_amount'       => 'decimal:4',
         'freight_amount'   => 'decimal:4',
+        'status'           => WorkflowStatus::class,
     ];
 
     private static ?array $feeTypesCache = null;
     private const DECIMAL_PRECISION = 4;
 	
-	    /**
+    /**
      * 實作動態科目映射（銷售專用）
      */
     protected function getDynamicAccountMapping(): array
@@ -57,7 +61,6 @@ class Sale extends Model
     
     protected function getPaymentAccount(): string
     {
-        // 根據付款方式回傳科目
         return match($this->payment_method) {
             'cash' => '1001',
             'bank_transfer' => '1002',
@@ -67,7 +70,6 @@ class Sale extends Model
     
     protected function getRevenueAccount(): string
     {
-        // 根據通路回傳科目
         return match($this->channel) {
             'retail' => '5001',
             'online' => '5002',
@@ -148,18 +150,116 @@ class Sale extends Model
     }
 
     // =========================================================================
+    // SECTION: 🆕 工作流相關（加入 HasWorkflow 後需要實作的方法）
+    // =========================================================================
+
+    /**
+     * 取得對應的 Enum class
+     */
+    protected static function getStatusEnumClass(): string
+    {
+        return WorkflowStatus::class;
+    }
+
+    /**
+     * 定義狀態轉換規則
+     */
+    protected function getTransitionRules(): array
+    {
+        return [
+            // 草稿流程
+            ['from' => 'draft', 'to' => 'pending', 'event' => 'submit', 'label' => '提交審核'],
+            ['from' => 'draft', 'to' => 'cancelled', 'event' => 'cancel', 'label' => '取消'],
+            
+            // 審核流程
+            ['from' => 'pending', 'to' => 'approved', 'event' => 'approve', 'label' => '審核通過'],
+            ['from' => 'pending', 'to' => 'rejected', 'event' => 'reject', 'label' => '駁回'],
+            ['from' => 'pending', 'to' => 'cancelled', 'event' => 'cancel', 'label' => '取消'],
+            
+            // 出貨流程
+            ['from' => 'approved', 'to' => 'completed', 'event' => 'ship', 'label' => '出貨完成'],
+            ['from' => 'approved', 'to' => 'cancelled', 'event' => 'cancel', 'label' => '取消'],
+        ];
+    }
+
+    // =========================================================================
+    // SECTION: 🆕 業務方法（狀態轉換）
+    // =========================================================================
+
+    /**
+     * 提交審核（draft → pending）
+     */
+    public function submit(User $actor): void
+    {
+        if ($this->status !== WorkflowStatus::DRAFT) {
+            throw new \RuntimeException('只有草稿可以提交審核');
+        }
+        $this->transitionTo('pending', 'submit', $actor);
+    }
+
+    /**
+     * 審核通過（pending → approved）
+     */
+    public function approve(User $actor): void
+    {
+        if ($this->status !== WorkflowStatus::PENDING) {
+            throw new \RuntimeException('只有待審核可以審核');
+        }
+        $this->transitionTo('approved', 'approve', $actor);
+    }
+
+    /**
+     * 駁回（pending → rejected）
+     */
+    public function reject(User $actor, string $reason): void
+    {
+        if ($this->status !== WorkflowStatus::PENDING) {
+            throw new \RuntimeException('只有待審核可以駁回');
+        }
+        $this->transitionTo('rejected', 'reject', $actor, ['reason' => $reason]);
+    }
+
+    /**
+     * 取消訂單
+     */
+    public function cancel(User $actor, ?string $reason = null): void
+    {
+        $allowed = [WorkflowStatus::DRAFT, WorkflowStatus::PENDING, WorkflowStatus::APPROVED];
+        if (!in_array($this->status, $allowed)) {
+            throw new \RuntimeException('此狀態無法取消');
+        }
+        
+        if ($this->stocked_out_at) {
+            throw new \RuntimeException('已出貨的訂單無法取消，請走退貨流程');
+        }
+        
+        $this->transitionTo('cancelled', 'cancel', $actor, ['reason' => $reason]);
+    }
+
+    /**
+     * 出貨完成（approved → completed）
+     * 
+     * 注意：會執行原有的 processStockOut() 邏輯，但狀態轉換由 transitionTo 統一管理
+     */
+    public function ship(User $actor): void
+    {
+        if ($this->status !== WorkflowStatus::APPROVED) {
+            throw new \RuntimeException('只有已審核的訂單可以出貨');
+        }
+        
+        // 執行原有的出庫邏輯（不更新 status，由 transitionTo 處理）
+        $this->processStockOutInternal(Setting::get('allow_negative_stock', false));
+        
+        // 狀態轉換由 transitionTo 統一管理
+        $this->transitionTo('completed', 'ship', $actor);
+    }
+
+    // =========================================================================
     // SECTION: 庫存管理核心控制
     // =========================================================================
 
     /**
-     * 執行銷售單實體出庫，同步鎖定並發動三份大傳票自動過帳與強校驗
-     * 
-     * 🎯 核心邏輯：
-     * 1. 檢查是否已出庫（stocked_out_at）
-     * 2. 檢查是否有退貨紀錄
-     * 3. 扣減庫存
-     * 4. 驅動三份傳票自動過帳（每份獨立 Journal）
-     * 5. 更新出庫狀態
+     * 執行銷售單實體出庫（對外公開方法，保持向後相容）
      */
     public function processStockOut(bool $allowNegative = false): void
     {
@@ -171,6 +271,25 @@ class Sale extends Model
             throw new \Exception("銷售單 {$this->invoice_number} 已有退貨紀錄，無法出庫。");
         }
 
+        // 如果狀態不是 approved，自動轉為 approved 再出貨
+        if ($this->status !== WorkflowStatus::APPROVED && $this->status !== WorkflowStatus::COMPLETED) {
+            // 如果是 draft 或 pending，先轉為 approved
+            if (in_array($this->status, [WorkflowStatus::DRAFT, WorkflowStatus::PENDING])) {
+                $this->transitionTo('approved', 'auto_approve', auth()->user());
+            } else {
+                throw new \Exception("銷售單 {$this->invoice_number} 狀態為 {$this->status?->label()}，無法出庫。");
+            }
+        }
+
+        $this->processStockOutInternal($allowNegative);
+        $this->transitionTo('completed', 'stock_out', auth()->user());
+    }
+
+    /**
+     * 內部出庫方法（不處理狀態，只處理庫存和傳票）
+     */
+    private function processStockOutInternal(bool $allowNegative): void
+    {
         DB::transaction(function () use ($allowNegative) {
             // 1. 執行嚴謹的庫存扣減
             $this->deductInventory($this->getCurrentItemsQuantity(), $allowNegative);
@@ -179,7 +298,6 @@ class Sale extends Model
             $this->fresh(['items.product', 'fees', 'channel']); 
 
             // 3. 驅動傳票自動結轉
-            // 🎯 每個 event_type 產生獨立的 Journal（由 AccountingService 支持）
             $this->postJournal('sale_revenue');
             $this->postJournal('sale_cost');
 
@@ -188,19 +306,15 @@ class Sale extends Model
                 $this->postJournal('sale_fee');
             }
 
-            // 4. 更新出庫狀態
+            // 4. 更新出庫時間（不更新 status）
             $this->update([
                 'stocked_out_at' => now(),
-                'status'         => 'completed'
             ]);
         }, 3);
     }
 
     /**
-     * 🎯 新增：撤銷出庫（反向操作）
-     * 
-     * 業務場景：出庫後發現錯誤，需要回滾庫存並撤銷傳票。
-     * 限制：已有退貨紀錄的單據不允許撤銷（避免複雜的連鎖回滾）。
+     * 撤銷出庫（反向操作）
      */
     public function reverseStockOut(): void
     {
@@ -224,7 +338,7 @@ class Sale extends Model
                 $accountingService->reverseJournal('sale_fee', $this);
             }
 
-            // 2. 回滾庫存（將出庫數量加回）
+            // 2. 回滾庫存
             foreach ($this->items as $item) {
                 $this->restoreSingleProduct(
                     $item->product_id,
@@ -233,11 +347,13 @@ class Sale extends Model
                 );
             }
 
-            // 3. 清除出庫狀態
+            // 3. 清除出庫狀態，回到 pending
             $this->update([
                 'stocked_out_at' => null,
-                'status'         => 'pending'
             ]);
+            
+            // 使用 transitionTo 統一管理狀態
+            $this->transitionTo('pending', 'reverse_stock_out', auth()->user());
         }, 3);
     }
 
@@ -377,7 +493,8 @@ class Sale extends Model
 
     public function canBeModified(): bool
     {
-        return !$this->hasReturnRecords() && $this->status !== 'completed';
+        // ✅ 改用 WorkflowStatus 判斷
+        return !$this->hasReturnRecords() && $this->status !== WorkflowStatus::COMPLETED;
     }
 
     public function getAttribute($key)
@@ -410,6 +527,8 @@ class Sale extends Model
         static::creating(function ($sale) {
             if (empty($sale->invoice_number)) $sale->invoice_number = self::generateInvoiceNumber();
             if (empty($sale->shop_id)) $sale->shop_id = auth()->user()->shop_id ?? 1;
+            // ✅ 新建立時預設為 draft
+            if (empty($sale->status)) $sale->status = WorkflowStatus::DRAFT->value;
         });
     }
 
@@ -440,6 +559,12 @@ class Sale extends Model
         return DB::transaction(function () use ($data, $items) {
             $feeConfigs = config('business.fee_types', []);
             $saleFields = array_diff_key($data, $feeConfigs);
+            
+            // ✅ 確保 status 有預設值
+            if (empty($saleFields['status'])) {
+                $saleFields['status'] = WorkflowStatus::DRAFT->value;
+            }
+            
             $sale = self::create($saleFields);
 
             foreach ($items as $item) {
@@ -448,7 +573,7 @@ class Sale extends Model
                 $unitCost = $product?->cost ?? '0.0000'; 
 
                 if (bccomp((string)$unitCost, '0', self::DECIMAL_PRECISION) === 0) {
-                    Log::warning("建立銷售項目時商品 [{$product?->name}] 成本快照為 0");
+                    logger()->warning("建立銷售項目時商品 [{$product?->name}] 成本快照為 0");
                 }
 
                 $sale->items()->create([
@@ -541,101 +666,73 @@ class Sale extends Model
     // SECTION: 會計金額解析（專屬於 Sale）
     // =========================================================================
 
-    /**
-     * 獲取指定金額來源的數值
-     * 🎯 依據 sale_items 真實 Schema 進行對接，根除 0 元結轉異常
-     */
-	public function getAmountFromSource(string $source, mixed $context = null): string
-	{
-		// 🎯 先確保必要的關聯已載入
-		if (!$this->relationLoaded('items')) {
-			$this->load('items');
-		}
-		
-		return match ($source) {
-			// ===== 銷售收入相關 =====
-			'customer_total' => (string) ($this->customer_total ?? '0.0000'),
-			'subtotal_after_discount' => (string) ($this->subtotal_after_discount ?? $this->subtotal ?? '0.0000'),
-			'tax_amount' => (string) ($this->tax_amount ?? '0.0000'),
-			'freight_amount' => (string) ($this->freight_amount ?? '0.0000'),
-			
-			// ===== 銷售費用相關 =====
-			'platform_fee' => $this->getFeeTotal('platform_fee'),
-			'commission' => $this->getFeeTotal('commission'),
-			'seller_discount' => $this->getFeeTotal('seller_discount'),
-			'shipping_fee_platform' => $this->getFeeTotal('shipping_fee_platform'),
-			'order_adjustment' => $this->getFeeTotal('order_adjustment'),
-			'total_fees' => $this->calculateTotalFees(),
-			
-			// ===== 銷售成本相關 =====
-			'cost_amount' => $this->calculateRealtimeCost(),
-			
-			// ===== 退貨相關 =====
-			'return_total' => (string) ($this->return_total ?? '0.0000'),
-			'return_cost' => (string) ($this->return_cost ?? '0.0000'),
-			'return_cost_base' => (string) ($this->return_cost_base ?? '0.0000'),
-			
-			// ===== 採購相關（如果 Sale 也有用到） =====
-			'purchase_base_items' => (string) ($this->purchase_base_items ?? '0.0000'),
-			'purchase_base_tax' => (string) ($this->purchase_base_tax ?? '0.0000'),
-			'purchase_base_shipping' => (string) ($this->purchase_base_shipping ?? '0.0000'),
-			'purchase_base_other_fees' => (string) ($this->purchase_base_other_fees ?? '0.0000'),
-			'purchase_base_total' => (string) ($this->purchase_base_total ?? '0.0000'),
-			
-			default => '0.0000',
-		};
-	}
+    public function getAmountFromSource(string $source, mixed $context = null): string
+    {
+        if (!$this->relationLoaded('items')) {
+            $this->load('items');
+        }
+        
+        return match ($source) {
+            'customer_total' => (string) ($this->customer_total ?? '0.0000'),
+            'subtotal_after_discount' => (string) ($this->subtotal_after_discount ?? $this->subtotal ?? '0.0000'),
+            'tax_amount' => (string) ($this->tax_amount ?? '0.0000'),
+            'freight_amount' => (string) ($this->freight_amount ?? '0.0000'),
+            'platform_fee' => $this->getFeeTotal('platform_fee'),
+            'commission' => $this->getFeeTotal('commission'),
+            'seller_discount' => $this->getFeeTotal('seller_discount'),
+            'shipping_fee_platform' => $this->getFeeTotal('shipping_fee_platform'),
+            'order_adjustment' => $this->getFeeTotal('order_adjustment'),
+            'total_fees' => $this->calculateTotalFees(),
+            'cost_amount' => $this->calculateRealtimeCost(),
+            'return_total' => (string) ($this->return_total ?? '0.0000'),
+            'return_cost' => (string) ($this->return_cost ?? '0.0000'),
+            'return_cost_base' => (string) ($this->return_cost_base ?? '0.0000'),
+            'purchase_base_items' => (string) ($this->purchase_base_items ?? '0.0000'),
+            'purchase_base_tax' => (string) ($this->purchase_base_tax ?? '0.0000'),
+            'purchase_base_shipping' => (string) ($this->purchase_base_shipping ?? '0.0000'),
+            'purchase_base_other_fees' => (string) ($this->purchase_base_other_fees ?? '0.0000'),
+            'purchase_base_total' => (string) ($this->purchase_base_total ?? '0.0000'),
+            default => '0.0000',
+        };
+    }
 
-	/**
-	 * 輔助方法：取得特定費用類型的總額
-	 */
-	private function getFeeTotal(string $feeType): string
-	{
-		if ($this->relationLoaded('fees')) {
-			$total = $this->fees->where('fee_type', $feeType)->sum('amount');
-		} else {
-			$total = $this->fees()->where('fee_type', $feeType)->sum('amount');
-		}
-		return (string) ($total ?: '0.0000');
-	}
+    private function getFeeTotal(string $feeType): string
+    {
+        if ($this->relationLoaded('fees')) {
+            $total = $this->fees->where('fee_type', $feeType)->sum('amount');
+        } else {
+            $total = $this->fees()->where('fee_type', $feeType)->sum('amount');
+        }
+        return (string) ($total ?: '0.0000');
+    }
 
     // =========================================================================
-    // SECTION: 🎯 增補核心業務方法 (核心除錯與高複用性封裝)
+    // SECTION: 核心業務方法
     // =========================================================================
 
-    /**
-     * 實時計算銷售單的銷貨總成本
-     * 🎯 解決有成本卻抓到 0 元的問題，穿透虛擬生成欄位與庫存表
-     */
     public function calculateRealtimeCost(): string
     {
-        // 1. 優先查看主表 sales 是否有歷史快照成本值
         $mainCost = $this->cost_total_amount ?? $this->cost_amount ?? '0.0000';
         if (bccomp((string)$mainCost, '0.0000', 4) > 0) {
             return (string)$mainCost;
         }
 
-        // 2. 主表若尚未回寫，穿透到 sale_items 明細表實時精算
         $calculatedTotalCost = '0.0000';
         $items = $this->items()->get(); 
         
         foreach ($items as $item) {
-            // A. 優先使用 sale_items 的 VIRTUAL GENERATED 欄位 total_cost
             if (isset($item->total_cost) && bccomp((string)$item->total_cost, '0.0000', 4) > 0) {
                 $calculatedTotalCost = bcadd($calculatedTotalCost, (string)$item->total_cost, 4);
                 continue;
             }
 
-            // B. 備援方案：手動使用單項成本 unit_cost * quantity
             $unitCost = $item->unit_cost ?? '0.0000';
             $qty      = $item->quantity ?? '0';
 
-            // 🚨【多層防禦管道】若明細單價 unit_cost 為 0，則向上/向下追溯
             if (bccomp((string)$unitCost, '0.0000', 4) === 0 && isset($item->product_id)) {
                 $warehouseId = $item->warehouse_id ?? $this->warehouse_id ?? 1;
                 $shopId      = $this->shop_id ?? 1;
 
-                // 優先從庫存表撈取當前加權平均成本
                 $inventory = DB::table('inventories')
                     ->where('product_id', $item->product_id)
                     ->where('warehouse_id', $warehouseId)
@@ -645,7 +742,6 @@ class Sale extends Model
                 if ($inventory && isset($inventory->weighted_average_cost) && bccomp((string)$inventory->weighted_average_cost, '0.0000', 4) > 0) {
                     $unitCost = $inventory->weighted_average_cost;
                 } else {
-                    // 最終保險：對接真實的 products.cost 欄位 (最近一次進價)
                     $unitCost = DB::table('products')->where('id', $item->product_id)->value('cost') ?? '0.0000';
                 }
             }
@@ -657,45 +753,30 @@ class Sale extends Model
         return $calculatedTotalCost;
     }
 
-    /**
-     * 獲取平台手續費總計
-     */
     public function getPlatformFeeTotal(): string
     {
         return (string)($this->fees()->where('fee_type', 'platform_fee')->get()
             ->sum(fn($fee) => (string)($fee->amount ?? '0.0000')) ?: '0.0000');
     }
 
-    /**
-     * 獲取佣金總計
-     */
     public function getCommissionTotal(): string
     {
         return (string)($this->fees()->where('fee_type', 'commission')->get()
             ->sum(fn($fee) => (string)($fee->amount ?? '0.0000')) ?: '0.0000');
     }
 
-    /**
-     * 獲取賣家活動折讓總計
-     */
     public function getSellerDiscountTotal(): string
     {
         return (string)($this->fees()->where('fee_type', 'seller_discount')->get()
             ->sum(fn($fee) => (string)($fee->amount ?? '0.0000')) ?: '0.0000');
     }
 
-    /**
-     * 獲取平台代扣運費總計
-     */
     public function getPlatformShippingFeeTotal(): string
     {
         return (string)($this->fees()->where('fee_type', 'shipping_fee_platform')->get()
             ->sum(fn($fee) => (string)($fee->amount ?? '0.0000')) ?: '0.0000');
     }
 
-    /**
-     * 獲取所有費用總計
-     */
     private function getTotalFeesSum(): string
     {
         if (isset($this->fees_total_amount) && bccomp((string)$this->fees_total_amount, '0.0000', 4) > 0) {
@@ -776,24 +857,26 @@ class Sale extends Model
 
         $result = $mapping[$channelCode] ?? 'retail';
     
-		info('getChannelCode result', [
-			'sale_id' => $this->id,
-			'channel_code' => $channelCode,
-			'mapped' => $result,
-		]);
-		
-		return $result;
+        info('getChannelCode result', [
+            'sale_id' => $this->id,
+            'channel_code' => $channelCode,
+            'mapped' => $result,
+        ]);
+        
+        return $result;
     }
 
     private function resolvePaymentAccount(): string
     {
         $channel = $this->getChannelCode();
         $payment = $this->payment_method ?? 'default';
-info('Resolving payment account', [
-        'sale_id' => $this->id,
-        'channel' => $channel,
-        'payment' => $payment,
-    ]);
+        
+        info('Resolving payment account', [
+            'sale_id' => $this->id,
+            'channel' => $channel,
+            'payment' => $payment,
+        ]);
+        
         $paymentAccount = config("business.payment_accounts.{$payment}");
         if ($paymentAccount) {
             return $paymentAccount;
@@ -816,11 +899,11 @@ info('Resolving payment account', [
         $channel = $this->getChannelCode();
 
         return match($channel) {
-			'shopee'   => '500102',   // 蝦皮電商收入
-			'facebook' => '500103',   // 社群電商收入
-			'retail'   => '500101',   // 門市零售收入
-			default    => '500101',
-		};
+            'shopee'   => '500102',
+            'facebook' => '500103',
+            'retail'   => '500101',
+            default    => '500101',
+        };
     }
 
     private function resolveCostAccount(): string
@@ -865,12 +948,6 @@ info('Resolving payment account', [
     public function returns(): HasMany { return $this->hasMany(SalesReturn::class, 'sale_id'); }
     public function channel(): BelongsTo { return $this->belongsTo(Channel::class, 'channel_id'); }
 
-    /**
-     * 🎯 新增：查詢與此銷售單關聯的所有傳票（多態關聯的擴展）
-     * 
-     * 由於現在每個 event_type 有獨立的 Journal，reference_type 格式為 "sale:sale_revenue"
-     * 傳統的 morphOne 無法直接匹配，需要自定義查詢。
-     */
     public function journals(): HasMany
     {
         return $this->hasMany(Journal::class, 'reference_id')
