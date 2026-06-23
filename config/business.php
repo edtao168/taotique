@@ -4,7 +4,7 @@
 return [
 
     // =========================================================================
-    // 🎯 拆裝組合模組會計配置
+    // 拆裝組合模組會計配置
     // =========================================================================
     
     'conversion' => [
@@ -32,12 +32,14 @@ return [
         // ========== 共用動態科目 ==========
         ['value' => 'DYNAMIC:auto:inventory',       'label' => '動態：庫存商品 (Inventory)'],
         ['value' => 'DYNAMIC:auto:cost',            'label' => '動態：銷貨成本 (Cost of Goods Sold)'],
+		
         
         // ========== 銷售模組 (Sale) ==========
         ['value' => 'DYNAMIC:sale:revenue',         'label' => '動態：銷貨收入 (Sales Revenue)'],
         ['value' => 'DYNAMIC:sale:payment',         'label' => '動態：應收帳款/代收款 (Receivables by Payment)'], 
         ['value' => 'DYNAMIC:sale:channel_fee',     'label' => '動態：通路手續費 (Channel Fee)'],
         ['value' => 'DYNAMIC:sale:discount',        'label' => '動態：銷貨折讓 (Sales Discount)'],
+		['value' => 'DYNAMIC:sale:settle',			'label' => '動態：應收/通路結算科目 (依通路與付款方式自動分流)'],	
         
         // ========== 退貨模組 (SalesReturn) ==========
         ['value' => 'DYNAMIC:sales_return:refund',       'label' => '動態：退貨退款科目 (Refund by Original Payment)'],
@@ -51,7 +53,7 @@ return [
         ['value' => 'DYNAMIC:conversion:output',     'label' => '動態：拆裝產出科目 (依成品類型)'],
     ],
 
-    // 🎯 採購專用付款方式
+    // 採購專用付款方式
     'purchase_methods' => [
         'wechat_pay'  => ['name' => '微信支付', 'icon' => 'o-chat-bubble-left-right', 'default_account' => '101207'],
         'cash_twd'    => ['name' => '現金-新台幣', 'icon' => 'o-banknotes', 'default_account' => '100101'],
@@ -59,7 +61,7 @@ return [
         'china_ap'    => ['name' => '應付-大陸廠商 (賒帳/月結)', 'icon' => 'o-clock', 'default_account' => '220201'],
     ],
 
-    // 🎯 銷售專用收款方式
+    // 銷售專用收款方式
     'sale_methods' => [
         'cash'        => ['name' => '現金', 'icon' => 'o-banknotes'],
         'shopee_pay'  => ['name' => '蝦皮錢包', 'icon' => 'o-shopping-bag'],
@@ -69,31 +71,6 @@ return [
         'line_pay'    => ['name' => 'Line Pay', 'icon' => 'o-wallet'],
     ],
 
-    // 🎯 會計自動結轉核心規則矩陣
-    'accounting_rules' => [
-        'purchase_inbound' => [
-            'debit_code' => '1405',
-        ],
-        'purchase_return_refund' => [
-            'entries' => [
-                [
-                    'entry_type' => 'debit',
-                    'account_code' => 'DYNAMIC:purchase_return:refund',
-                    'amount_source' => 'total_return_amount',
-                    'multiplier' => '1.0000',
-                    'description' => '採購退貨：應付帳款減少/退款支出',
-                ],
-                [
-                    'entry_type' => 'credit',
-                    'account_code' => 'DYNAMIC:auto:inventory',
-                    'amount_source' => 'return_cost_base',
-                    'multiplier' => '1.0000',
-                    'description' => '採購退貨：庫存商品減少',
-                ],
-            ],
-        ],	
-    ],
-    
     'payment_methods' => [
         ['id' => 'cash', 'name' => '現金', 'icon' => 'o-banknotes'],
         ['id' => 'shopee_pay', 'name' => '蝦皮錢包', 'icon' => 'o-shopping-bag'],
@@ -116,12 +93,22 @@ return [
         
         'platform_coupon' => [
             'name'          => '平台優惠券',
-            'target'        => 'customer',
+            'target'        => 'revenue_adjustment',
             'operator'      => 'sub',
             'icon'          => 'o-ticket',
-            'account_code'  => '560110',      // 銷售-雜項費用
-            'side'          => 'debit',
+            'account_code'  => 'DYNAMIC:sale:revenue',
+            'side'          => 'none',
         ],
+		
+		'tax_amount' => [
+            'name'          => '銷項稅額',
+            'target'        => 'customer',
+            'operator'      => 'add',
+            'icon'          => 'o-building-library',
+            'account_code'  => '222103',      // 銷項稅額
+            'side'          => 'credit',
+        ],
+		
 
         // ========== 同時影響買賣雙方 ==========
         'seller_discount' => [
@@ -168,16 +155,17 @@ return [
             'icon'          => 'o-adjustments-horizontal',
             'account_code'  => '560108',      // 帳款調整
             'side'          => 'debit',
-        ],
+        ],        
         
-        'tax' => [
-            'name'          => '銷項稅額',
-            'target'        => 'seller',
-            'operator'      => 'sub',
-            'icon'          => 'o-building-library',
-            'account_code'  => '222103',      // 銷項稅額
-            'side'          => 'credit',
-        ],		
+		'freight_amount' => [
+			'name'          => '一般運費支出',
+			'target'        => 'seller',
+			'operator'      => 'sub',
+			'icon'          => 'o-truck',
+			'account_code'  => '560104',      // 一般物流費；運輸費
+			'side'          => 'debit',
+		],
+		
     ],
     
     // 退貨費用類型
@@ -211,7 +199,7 @@ return [
     ],
     
     // =========================================================================
-    // 🎯 會計科目對應（小企業會計準則 - 台灣版）
+    // 🎯 會計科目對應（小企業會計準則）
     // =========================================================================
     'accounting_accounts' => [
         // 資產類 (1xxx)
@@ -222,32 +210,32 @@ return [
             'petty_cash'        => '100102',  // 零用金
         ],
         
-        // 🎯 應收款項 - 依通路區分
+        // 應收款項 - 依通路區分
         'receivables' => [
-            'default'           => '112201',   // 應收帳款-一般客戶（預設）
+            'default'           => '112201',   // 應收帳款-一般客戶
             
             // 實體門市（收款方式多元）
             'retail' => [
                 'cash'          => '100101',   // 門市現金
-                'credit_card'   => '100201',   // 國泰世華（信用卡刷卡入帳）
+                'credit_card'   => '100201',   // 國泰世華
                 'line_pay'      => '101203',   // LINE Pay → 銀行
                 'taiwan_pay'    => '100201',   // 台灣Pay → 銀行
                 'transfer'      => '100201',   // 銀行轉帳
                 'default'       => '112201',   // 應收帳款-一般客戶
             ],
             
-            // 🎯 蝦皮電商（賣家只看到蝦皮錢包入帳，不區分買家付款方式）
+            // 蝦皮電商（賣家只看到蝦皮錢包入帳，不區分買家付款方式）
             'shopee' => [
                 'default'       => '101202',   // 蝦皮錢包
                 'shopee_pay'    => '101202',   // 蝦皮錢包
             ],
             
-            // 🎯 Facebook / 社群（買家直接付款給賣家，入銀行）
+            // Facebook / 社群（買家直接付款給賣家，入銀行）
             'facebook' => [
                 'default'       => '100201',   // 國泰世華-新台幣
                 'line_pay'      => '101203',   // LINE Pay → 銀行
                 'taiwan_pay'    => '100201',   // 台灣Pay → 銀行
-                'transfer'      => '100201',   // 銀行轉帳
+                'transfer'      => '100201',   // 國泰世華
             ],
         ],
         

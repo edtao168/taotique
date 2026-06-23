@@ -44,8 +44,8 @@
 			</div>
 		</x-slot:title>
 		<x-slot:actions>
-			<x-button label="返回列表" icon="o-arrow-left" link="/sales" class="btn-ghost" />
-			<x-button label="確認過帳" icon="o-check" class="btn-primary shadow-md hover:shadow-lg transition-all px-8" wire:click="save" spinner />
+			<x-button label="返回" icon="o-arrow-left" link="/sales" class="btn-ghost" />
+			<x-button label="確認" icon="o-check" class="btn-primary shadow-md hover:shadow-lg transition-all px-8" wire:click="save" spinner />
 		</x-slot:actions>
 	</x-header>
 
@@ -69,19 +69,6 @@
 						type="datetime-local"
 					/>
 					
-					@php
-						$isAuto = (bool) App\Models\Setting::get('so_auto_stock_out', true);
-					@endphp
-					
-					<div class="p-3 bg-base-200/50 rounded-lg border border-dashed border-base-300 flex items-center gap-3">
-						<x-icon :name="$isAuto ? 'o-check-circle' : 'o-pause-circle'" 
-								:class="$isAuto ? 'text-success' : 'text-warning'" />
-						<div class="text-xs">
-							<span class="font-bold">目前庫存處理模式：</span>
-							{{ $isAuto ? '過帳即扣庫存' : '過帳僅存檔待後續進行出庫' }}
-						</div>
-					</div>
-				
 					<x-choices 
 						label="分店" 
 						wire:model="form.shop_id" 
@@ -195,13 +182,19 @@
 						<div class="space-y-3">
 							<div class="badge badge-info badge-outline font-bold px-4 py-3">買家</div>
 							
-							@foreach(collect(config('business.fee_types'))->where('target', 'customer') as $field => $config)
+							@php
+								$displayTargets = ['customer', 'both', 'revenue_adjustment'];
+								$customerFeeTypes = collect(config('business.fee_types'))
+									->filter(fn($config, $key) => in_array($config['target'] ?? '', $displayTargets));
+							@endphp
+
+							@foreach($customerFeeTypes as $field => $config)
 								<x-input 
 									wire:model.blur="form.{{ $field }}"
 									label="{{ $config['name'] }}" 
-									prefix="{{ $config['operator'] === 'add' ? '+' : '-' }}"
+									prefix="{{ ($config['operator'] ?? 'add') === 'add' ? '+' : '-' }}"
 									icon="{{ $config['icon'] ?? '' }}"
-									class="input-sm text-right font-mono {{ $config['operator'] === 'sub' ? 'text-error' : '' }}"
+									class="input-sm text-right font-mono {{ ($config['operator'] ?? 'add') === 'sub' ? 'text-error' : '' }}"
 									inputmode="decimal"
 									step="0.01"
 								/>
@@ -242,7 +235,7 @@
                         </div>
                     </div>
 
-                    <x-button label="確認收銀 / 過帳" icon="o-check" class="btn-primary w-full btn-lg" wire:click="save" spinner />
+                    <x-button label="確認" icon="o-check" class="btn-primary w-full btn-lg" wire:click="save" spinner />
                 </div>
             </x-card>
         </div>

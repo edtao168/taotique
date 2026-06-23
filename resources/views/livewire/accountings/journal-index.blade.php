@@ -30,25 +30,45 @@
                     
                     <div class="col-span-1 text-center flex flex-col items-center gap-1">
                         <span class="text-xs text-gray-500 font-mono">{{ $journal->entry_date->format('Y-m-d') }}</span>
-                        {{-- 🆕 運用 Trait 動態屬性，自動渲染對應顏色與標籤 --}}
                         <x-badge :value="$journal->status_label" class="{{ $journal->status_color }} badge-xs" />
                     </div>
                     
-                    <div class="col-span-6">
-                        <div class="font-medium text-sm mb-1 text-gray-700">{{ $journal->description ?: '(無摘要)' }}</div>
-                        <div class="text-xs text-gray-400 font-mono">
-                            @if($journal->reference_type)
-                                <span class="badge badge-outline badge-sm">{{ $journal->reference_type }}</span>
-                            @endif
+                    {{-- ✅ 摘要 + 分錄明細（合併在一欄） --}}
+                    <div class="col-span-10 grid grid-cols-10 gap-4">
+                        {{-- 摘要說明占滿一整列（10欄） --}}
+                        <div class="col-span-10 font-medium text-sm text-gray-700 pb-1">{{ $journal->description ?: '(無摘要)' }}</div>
+                        
+                        {{-- ✅ 借貸明細列表 --}}
+                        <div class="col-span-10 text-xs font-mono space-y-1.5">
+                            @foreach($journal->items as $item)
+                                @php
+                                    $account = $item->account ?? null;
+                                    $accountDisplay = ($account->code ?? '#' . $item->account_id) . ' ' . ($account->name ?? '');
+                                @endphp
+                                {{-- 再次劃分 10 欄：6 (科目) : 2 (借) : 2 (貸)，完美對齊表頭的 6 : 2 : 2 --}}
+                                <div class="grid grid-cols-10 gap-4 items-center">
+                                    {{-- 科目名稱（左 6 欄） --}}
+                                    <div class="col-span-6 text-gray-600 truncate">
+                                        @if((float)$item->debit > 0)
+                                            <span class="text-success font-bold bg-success/10 px-1 rounded mr-1">借</span>
+                                        @elseif((float)$item->credit > 0)
+                                            <span class="text-error font-bold bg-error/10 px-1 rounded mr-1">貸</span>
+                                        @endif
+                                        {{ $accountDisplay }}
+                                    </div>
+                                    
+                                    {{-- 借方金額（中 2 欄，對齊表頭 col-span-2） --}}
+                                    <div class="col-span-2 text-right text-success font-bold pr-2">
+                                        {{ (float)$item->debit > 0 ? number_format($item->debit, 2) : '' }}
+                                    </div>
+                                    
+                                    {{-- 貸方金額（右 2 欄，對齊表頭 col-span-2） --}}
+                                    <div class="col-span-2 text-right text-error font-bold pr-2">
+                                        {{ (float)$item->credit > 0 ? number_format($item->credit, 2) : '' }}
+                                    </div>
+                                </div>
+                            @endforeach
                         </div>
-                    </div>
-                    
-                    <div class="col-span-2 text-right font-mono text-sm text-success">
-                        {{ bccomp($journal->items->sum('debit'), '0', 2) > 0 ? number_format($journal->items->sum('debit'), 2) : '-' }}
-                    </div>
-                    
-                    <div class="col-span-2 text-right font-mono text-sm text-error">
-                        {{ bccomp($journal->items->sum('credit'), '0', 2) > 0 ? number_format($journal->items->sum('credit'), 2) : '-' }}
                     </div>
                 </div>
             @endforeach
@@ -64,13 +84,39 @@
                         <span class="font-mono text-xs text-gray-400">#{{ $journal->id }}</span>
                         <span class="text-xs text-gray-500 font-mono">{{ $journal->entry_date->format('Y-m-d') }}</span>
                     </div>
-                    {{-- 🆕 手機端同步改用 Trait 屬性 --}}
                     <x-badge :value="$journal->status_label" class="{{ $journal->status_color }} badge-sm" />
                 </div>
-                <div class="text-sm font-medium text-gray-800 mb-2">{{ $journal->description ?: '(無摘要)' }}</div>
-                <div class="flex justify-between text-xs font-mono pt-2 border-t border-dashed border-base-200">
-                    <span class="text-success">借: {{ number_format($journal->items->sum('debit'), 2) }}</span>
-                    <span class="text-error">貸: {{ number_format($journal->items->sum('credit'), 2) }}</span>
+                <div class="text-sm font-medium text-gray-800 mb-1">{{ $journal->description ?: '(無摘要)' }}</div>
+                
+                {{-- ✅ 手機端也分成三欄對齊 --}}
+                <div class="text-xs font-mono space-y-0.5">
+                    @foreach($journal->items as $item)
+                        @php
+                            $account = $item->account ?? null;
+                            $accountDisplay = ($account->code ?? '#' . $item->account_id) . ' ' . ($account->name ?? '');
+                        @endphp
+                        <div class="grid grid-cols-12 gap-1">
+                            <div class="col-span-6 text-gray-600 truncate">
+                                @if((float)$item->debit > 0)
+                                    <span class="text-success font-bold">借</span>
+                                @elseif((float)$item->credit > 0)
+                                    <span class="text-error font-bold">貸</span>
+                                @endif
+                                {{ $accountDisplay }}
+                            </div>
+                            <div class="col-span-3 text-right text-success font-bold">
+                                {{ (float)$item->debit > 0 ? number_format($item->debit, 2) : '' }}
+                            </div>
+                            <div class="col-span-3 text-right text-error font-bold">
+                                {{ (float)$item->credit > 0 ? number_format($item->credit, 2) : '' }}
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+                
+                <div class="flex justify-between text-xs font-mono pt-2 mt-1 border-t border-dashed border-base-200">
+                    <span class="text-success font-bold">借合計: {{ number_format($journal->items->sum('debit'), 2) }}</span>
+                    <span class="text-error font-bold">貸合計: {{ number_format($journal->items->sum('credit'), 2) }}</span>
                 </div>
             </x-card>
         @endforeach
@@ -82,7 +128,7 @@
     </div>
 
     {{-- 📑 右側詳細檢視抽屜 (Drawer) --}}
-    <x-drawer wire:model="showDrawer" title="傳票詳細分錄" right class="w-full max-w-xl">
+    <x-drawer wire:model="showDrawer" title="傳票詳細分錄" right class="lg:w-11/12 lg:max-w-xl">
         @if($selectedJournal)
             <div class="space-y-6">
                 {{-- 核心摘要資訊 --}}
@@ -97,7 +143,6 @@
                     </div>
                     <div class="flex justify-between text-sm items-center">
                         <span class="text-gray-500">目前狀態</span>
-                        {{-- 🆕 抽屜內部亦使用 Trait 屬性 --}}
                         <x-badge :value="$selectedJournal->status_label" class="{{ $selectedJournal->status_color }} badge-sm" />
                     </div>
                     <div class="text-sm pt-2 border-t border-base-300">
@@ -120,27 +165,36 @@
                             </thead>
                             <tbody>
                                 @foreach($selectedJournal->items as $item)
+                                    @php
+                                        $account = $item->account ?? null;
+                                    @endphp
                                     <tr class="hover">
                                         <td>
-                                            <div class="font-bold text-gray-700">{{ $item->account->code ?? '' }}</div>
-                                            <div class="text-gray-400 text-[11px]">{{ $item->account->name ?? '' }}</div>
+                                            <div class="font-bold text-gray-700">{{ $account->code ?? '#' . $item->account_id }}</div>
+                                            <div class="text-gray-400 text-[11px]">{{ $account->name ?? '未設定科目' }}</div>
                                         </td>
                                         <td class="text-right text-success font-bold">
-                                            {{ bccomp($item->debit, '0', 4) > 0 ? number_format($item->debit, 2) : '-' }}
+                                            {{ (float)$item->debit > 0 ? number_format($item->debit, 2) : '-' }}
                                         </td>
                                         <td class="text-right text-error font-bold">
-                                            {{ bccomp($item->credit, '0', 4) > 0 ? number_format($item->credit, 2) : '-' }}
+                                            {{ (float)$item->credit > 0 ? number_format($item->credit, 2) : '-' }}
                                         </td>
                                     </tr>
                                 @endforeach
                             </tbody>
+                            <tfoot>
+                                <tr class="bg-base-200 font-bold">
+                                    <td class="text-right">合計</td>
+                                    <td class="text-right text-success">{{ number_format($selectedJournal->items->sum('debit'), 2) }}</td>
+                                    <td class="text-right text-error">{{ number_format($selectedJournal->items->sum('credit'), 2) }}</td>
+                                </tr>
+                            </tfoot>
                         </table>
                     </div>
                 </div>
 
-                {{-- 🛠️ 動作按鈕防禦區塊 (配合 Enum 與 Trait 方法控制) --}}
+                {{-- 🛠️ 動作按鈕防禦區塊 --}}
                 <div class="space-y-2 mt-4">
-                    {{-- 🆕 1. 草稿狀態：顯示繼續編輯 --}}
                     @if($selectedJournal->isEditable())
                         <x-button 
                             label="✏️ 繼續編輯草稿" 
@@ -149,17 +203,26 @@
                         />
                     @endif
 
-                    {{-- 🆕 2. 已過帳 (APPROVED) 且尚未被更正過：顯示建立更正分錄 --}}
-                    @if($selectedJournal->status === \App\Enums\WorkflowStatus::APPROVED && !$selectedJournal->is_corrected)
+                    @if($selectedJournal->status === \App\Enums\JournalStatus::POSTED && !$selectedJournal->is_corrected)
+						@php
+        $correctUrl = route('accountings.journals.correct', ['journal' => $selectedJournal->id]);
+    @endphp
+    
+    {{-- 🔍 除錯：顯示實際產生的 URL --}}
+    <div class="p-2 mb-2 bg-base-300 rounded-lg text-xs">
+        <div><strong>除錯資訊：</strong></div>
+        <div>Journal ID: {{ $selectedJournal->id }}</div>
+        <div>URL: {{ $correctUrl }}</div>
+        <div>Status: {{ $selectedJournal->status }}</div>
+    </div>
                         <x-button 
-                            label="🔧 建立更正分錄" 
-                            link="{{ route('accountings.journals.correct', $selectedJournal) }}" 
+                            label="🔧 建立更正分錄"
+							:link="route('accountings.journals.correct', ['journal' => $selectedJournal->id])" 
                             class="btn-warning w-full" 
                         />
                     @endif
                 
-                    {{-- 🆕 3. 已過帳 (APPROVED) 但已被更正過：顯示鎖定提示與來源 --}}
-                    @if($selectedJournal->status === \App\Enums\WorkflowStatus::APPROVED && $selectedJournal->is_corrected)
+                    @if($selectedJournal->status === \App\Enums\JournalStatus::POSTED && $selectedJournal->is_corrected)
                         <div class="p-3 bg-warning/10 rounded-lg text-center border border-warning/20">
                             <x-icon name="o-lock-closed" class="w-5 h-5 text-warning mx-auto mb-1" />
                             <div class="text-sm text-warning font-bold">此分錄已沖銷鎖定</div>
@@ -169,7 +232,6 @@
                         </div>
                     @endif
 
-                    {{-- 🆕 4. 傳票本身就是更正單 (紅字沖銷單)：鎖定提示 --}}
                     @if($selectedJournal->reference_type == 'correct')
                         <div class="p-3 bg-info/10 rounded-lg text-center border border-info/20">
                             <x-icon name="o-lock-closed" class="w-5 h-5 text-info mx-auto mb-1" />
@@ -180,8 +242,7 @@
                         </div>
                     @endif
 
-                    {{-- 🆕 5. 已結帳 (COMPLETED)：全面鎖定歷史會計資料 --}}
-                    @if($selectedJournal->status === \App\Enums\WorkflowStatus::COMPLETED)
+                    @if($selectedJournal->status === \App\Enums\JournalStatus::CLOSED)
                         <div class="p-3 bg-error/10 rounded-lg text-center border border-error/20">
                             <x-icon name="o-lock-closed" class="w-5 h-5 text-error mx-auto mb-1" />
                             <div class="text-sm text-error font-bold">該期間已關帳結案</div>

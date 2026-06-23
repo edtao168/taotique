@@ -1,5 +1,15 @@
 {{-- 檔案路徑：resources/views/livewire/sales/index.blade.php --}}
-<div>
+@php
+    use App\Enums\WorkflowStatus;
+@endphp
+<div x-data="{ 
+        atBottom: false,
+        checkScroll() {
+            this.atBottom = (window.innerHeight + window.scrollY) >= (document.body.offsetHeight - 100);
+        }
+     }" 
+     x-init="checkScroll()"
+     @scroll.window="checkScroll()">
     <x-header title="銷售數據概況" separator progress-indicator>
         <x-slot:middle class="!justify-end">
             <x-input placeholder="搜尋單號或客戶..." wire:model.live.debounce="search" icon="o-magnifying-glass" clearable />
@@ -26,58 +36,92 @@
     <x-card title="最近銷售紀錄" shadow separator>
         
         {{-- PC 端表格 --}}
-        <div class="hidden lg:block">
-            <x-table :headers="$headers" :rows="$sales" @row-click="$wire.showDetail($event.detail.id)" class="cursor-pointer" with-pagination>
-                @scope('cell_invoice_number', $sale)
+		<div class="hidden lg:block">
+			<x-table :headers="$headers" :rows="$sales" @row-click="$wire.showDetail($event.detail.id)" class="cursor-pointer" with-pagination>
+				{{-- 單號 --}}
+				@scope('cell_invoice_number', $sale)
 					<x-badge :value="$sale->invoice_number" 
-							 :class="$sale->stocked_out_at ? 'badge-success text-white' : 'badge-warning'"
-							 title="{{ $sale->stocked_out_at ? '已過帳（已扣庫存）' : '未過帳（待扣庫存）' }}" />	
+							 :class="$sale->status->color() . ' font-mono'"
+							 title="{{ $sale->status->label() }}" />
 				@endscope
+				
+				{{-- 新增：狀態欄位 --}}
+				@scope('cell_status', $sale)
+					<x-badge :value="$sale->status->label()" 
+							 :class="$sale->status->color() . ' badge-sm'" />
+				@endscope
+				
+				{{-- 通路 --}}
 				@scope('cell_channel_id', $sale)
 					<x-badge :value="$sale->channel->name ?? '未分類'" class="badge-primary badge-outline" />
-				@endscope				
-                @scope('cell_customer_total', $sale)
-                    <span class="font-bold text-info">NT$ {{ number_format($sale->customer_total, 0) }}</span>
-                @endscope
+				@endscope
+				
+				{{-- 金額欄位 --}}
+				@scope('cell_customer_total', $sale)
+					<span class="font-bold text-info">NT$ {{ number_format($sale->customer_total, 0) }}</span>
+				@endscope
+				
 				@scope('cell_final_net_amount', $sale)
-                    <span class="font-bold text-success">NT$ {{ number_format($sale->final_net_amount, 0) }}</span>
-                @endscope
-            </x-table>
-        </div>
+					<span class="font-bold text-success">NT$ {{ number_format($sale->final_net_amount, 0) }}</span>
+				@endscope
+			</x-table>
+		</div>
 
         {{-- 手機端卡片 --}}
-        <div class="block lg:hidden space-y-3">
-            @foreach($sales as $sale)
-                <div class="border rounded-xl p-4 bg-base-50 active:bg-base-200 transition-colors" @click="$wire.showDetail({{ $sale->id }})">
-                    <div class="flex justify-between items-start mb-2">
+		<div class="block lg:hidden space-y-3">
+			@foreach($sales as $sale)
+				<div class="border rounded-xl p-4 bg-base-50 active:bg-base-200 transition-colors" @click="$wire.showDetail({{ $sale->id }})">
+					<div class="flex justify-between items-start mb-2">
 						<div class="flex flex-col gap-1">
-							<x-badge :value="$sale->invoice_number" class="badge-neutral badge-sm font-mono" />
-							{{-- 新增：顯示出庫倉庫 --}}
-							<span class="text-[10px] opacity-60"><x-icon name="o-home-modern" class="w-3 h-3" /> {{ $sale->warehouse?->name ?? '未指定倉庫' }}</span>
+							<div class="flex items-center gap-2">
+								<x-badge :value="$sale->invoice_number" class="badge-neutral badge-sm font-mono" />
+								{{-- 新增：狀態標籤 --}}
+								<x-badge :value="$sale->status->label()" 
+										 :class="$sale->status->color() . ' badge-xs'" />
+							</div>
+							<span class="text-[10px] opacity-60">
+								<x-icon name="o-home-modern" class="w-3 h-3" /> 
+								{{ $sale->warehouse?->name ?? '未指定倉庫' }}
+							</span>
 						</div>
 						<span class="text-[10px] text-gray-500">{{ $sale->sold_at->format('m/d') }}</span>
 					</div>
-                    <div class="flex justify-between items-center">
-                        <div>
-                            <p class="font-bold text-base">{{ $sale->customer?->name ?? '一般客戶' }}</p>
-                            <p class="text-xs text-gray-400">
+					<div class="flex justify-between items-center">
+						<div>
+							<p class="font-bold text-base">{{ $sale->customer?->name ?? '一般客戶' }}</p>
+							<p class="text-xs text-gray-400">
 								{{ $sale->payment_method_name ?? $sale->payment_method }}
 							</p>
-                        </div>
-                        <div class="text-right">
+						</div>
+						<div class="text-right">
 							<p class="text-blue-700 font-black text-lg">NT$ {{ number_format($sale->customer_total, 0) }}</p>
-							{{-- 這裡會自動反映計算後的利潤 --}}
 							<p class="text-[10px] text-emerald-600 font-bold">最終訂單進帳 : {{ number_format($sale->final_net_amount, 0) }}</p>
 						</div>
-                    </div>
-                </div>
-            @endforeach
-            <div class="mt-4">
-                {{ $sales->links(data: ['scrollTo' => false]) }}
-            </div>
-        </div>
+					</div>
+				</div>
+			@endforeach
+			<div class="mt-4">
+				{{ $sales->links(data: ['scrollTo' => false]) }}
+			</div>
+		</div>
     </x-card>
 
+	{{-- 滾動提示 --}}
+	<div x-show="!atBottom" 
+		 x-transition:enter="transition ease-out duration-300"
+		 x-transition:enter-start="opacity-0 transform translate-y-4"
+		 x-transition:leave="transition ease-in duration-300"
+		 x-transition:leave-end="opacity-0 transform translate-y-4"
+		 class="hidden lg:flex fixed bottom-6 right-6 z-50 pointer-events-none">
+		
+		<div class="flex flex-col items-center">
+			<span class="text-xs font-bold text-orange-600 bg-orange-50 px-2 py-1 rounded-full shadow-sm mb-1">下面還有</span>
+			<div class="bg-orange-500 text-white p-3 rounded-full shadow-lg animate-bounce">
+				<x-icon name="o-chevron-double-down" class="w-6 h-6" />
+			</div>
+		</div>
+	</div>
+	
 	{{-- 詳情抽屜 --}}
 	<x-drawer wire:model="drawer" title="銷貨單據詳情" right separator with-close-button class="w-11/12 lg:w-1/3" >
 	
@@ -95,27 +139,47 @@
 				// 呼叫我們在 Model 定義的邏輯
 				$isLocked = $selectedSale->hasReturnRecords();
 			@endphp
-			<div class="space-y-6 pb-20">		
-				{{-- 基礎單據資訊 --}}
-				<div class="bg-base-100 border rounded-xl p-4 shadow-sm">					
-					<div class="grid grid-cols-2 gap-y-4 text-sm">
-						<div>
-							<p class="text-[10px] text-gray-400">銷售單號</p>
-							<p class="font-mono font-medium text-gray-700">{{ $selectedSale->invoice_number }}</p>
+			<div class="space-y-6 pb-20">
+				{{-- 基礎單據資訊（包含狀態合併在表頭） --}}
+				<div class="bg-base-100 border rounded-xl p-4 shadow-sm">
+					{{-- 表頭：單號 + 狀態 + 時間戳 --}}
+					<div class="flex flex-wrap items-center justify-between gap-2 mb-3 pb-3 border-b border-base-200">
+						<div class="flex items-center gap-3">
+							<h3 class="font-mono font-bold text-lg text-gray-800">
+								{{ $selectedSale->invoice_number }}
+							</h3>
+							<x-badge :value="$selectedSale->status->label()" 
+									 :class="$selectedSale->status->color() . ' text-base'" />
+							@if($selectedSale->hasReturnRecords())
+								<x-badge value="已退貨" class="badge-error text-white" />
+							@endif
 						</div>
+						<div class="text-[10px] text-gray-400 text-right">
+							<div>更新於：{{ $selectedSale->updated_at->format('Y-m-d H:i') }}</div>
+							@if($selectedSale->stocked_out_at)
+								<div>過帳於：{{ $selectedSale->stocked_out_at->format('Y-m-d H:i') }}</div>
+							@endif
+						</div>
+					</div>
+					
+					{{-- 單據資訊網格 --}}
+					<div class="grid grid-cols-2 gap-y-4 text-sm">
 						<div>
 							<p class="text-[10px] text-gray-400">客戶名稱</p>
 							<p class="font-medium text-blue-700">{{ $selectedSale->customer?->name ?? '一般客戶' }}</p>
-						</div>
+						</div>						
 						<div>
 							<p class="text-[10px] text-gray-400">銷售通路</p>						
 							<x-badge :value="$selectedSale->shop?->name ?? strtoupper($selectedSale->channel)" class="badge-outline badge-sm" />
 						</div>
 						<div>
 							<p class="text-[10px] text-gray-400">出庫倉庫</p>
-							{{-- 修正：顯示該單據對應的倉庫名稱 --}}
 							<x-badge :value="$selectedSale->warehouse?->name ?? '未指定'" class="badge-ghost badge-sm font-bold" />
-						</div>					
+						</div>
+						<div>
+							<p class="text-[10px] text-gray-400">銷售日期</p>
+							<p class="font-medium">{{ $selectedSale->sold_at->format('Y-m-d') }}</p>
+						</div>
 					</div>
 				</div>
 			
@@ -147,13 +211,25 @@
 					
 						<div class="badge badge-info badge-outline badge-sm font-bold text-[10px]">買家細目</div>
 						<div class="space-y-2">
-							@foreach(collect(config('business.fee_types'))->where('target', 'customer') as $key => $fee)
-								<div>
-									<p class="text-[10px] text-gray-400">{{ $fee['name'] }}</p>
-									<p class="text-sm font-mono font-bold {{ $fee['operator'] === 'sub' ? 'text-success' : 'text-gray-700' }}">
-										{{ $fee['operator'] === 'sub' ? '-' : '+' }} NT$ {{ number_format($selectedSale->$key ?? 0, 0) }}
-									</p>
-								</div>
+							@php
+								$displayTargets = ['customer', 'both', 'revenue_adjustment'];
+								$customerFeeTypes = collect(config('business.fee_types'))
+									->filter(fn($config, $key) => in_array($config['target'] ?? '', $displayTargets));
+							@endphp
+
+							@foreach($customerFeeTypes as $key => $fee)
+								@php
+									$amount = $selectedSale->$key ?? 0;
+								@endphp
+								@if($amount != 0)
+									<div>
+										<p class="text-[10px] text-gray-400">{{ $fee['name'] }}</p>
+										<p class="text-sm font-mono font-bold {{ ($fee['operator'] ?? 'add') === 'sub' ? 'text-success' : 'text-gray-700' }}">
+											{{ ($fee['operator'] ?? 'add') === 'sub' ? '-' : '+' }} 
+											NT$ {{ number_format(abs($amount), 0) }}
+										</p>
+									</div>
+								@endif
 							@endforeach
 						</div>
 					</div>
@@ -221,32 +297,67 @@
 			</div>
 
 			{{-- 底部固定動作欄 --}}
-			<x-slot:actions>			
+			<x-slot:actions>
 				<div class="flex gap-3 w-full border-t pt-4 bg-base-100">
 					<x-button label="返回" icon="o-arrow-uturn-left" :link="route('sales.index')" class="btn-success flex-1 text-white" />
-					@if(!$isLocked)							
-						
-						@if($selectedSale->stocked_out_at)
-							<x-button 
-								label="退貨" 
-								icon="o-arrow-path" 
-								:link="route('sales.returns.create', ['sale' => $selectedSale->id])"
-								class="btn-outline-dark flex-1"								
-							/>					
-						@else
+					
+					@if(!$isLocked)
+						@if($selectedSale->status->isEditable())
+							{{-- 草稿或待審核狀態：可編輯 --}}
 							<x-button label="修改" icon="o-pencil" :link="route('sales.edit', $selectedSale->id)" class="btn-primary flex-1 text-white" />
+						@endif
+						
+						@if(!$selectedSale->stocked_out_at && $selectedSale->status->canApprove())
+							{{-- 未過帳且可審核：顯示出庫按鈕 --}}
 							<x-button 
-								label="出庫" 
+								label="過帳" 
 								icon="o-archive-box-arrow-down" 
 								class="btn-warning flex-1"
 								wire:click="submitStockOut({{ $selectedSale->id }})"
 								wire:confirm="確定要執行出庫扣減庫存嗎？這將會同步產生會計日記帳與主營成本結轉！"
 								spinner 
 							/>
-							<x-button label="刪除" icon="o-trash" wire:click="delete({{ $selectedSale->id }})" wire:confirm="確定要刪除此單據並回補庫存嗎？" class="btn-error btn-outline flex-1" />									
-						@endif							
+						@endif
+						
+						@if($canSettle)
+							<x-button 
+								label="結算" 
+								icon="o-banknotes" 
+								class="btn-success flex-1 text-white"
+								wire:click="settleSale({{ $selectedSale->id }})"
+								wire:confirm="確定要將此訂單標記為已結算嗎？"
+								spinner 
+							/>
+						@endif
+						
+						@if($selectedSale->stocked_out_at && $selectedSale->status === WorkflowStatus::APPROVED)
+							{{-- 退貨按鈕 (保持不變) --}}
+							<x-button 
+								label="退貨" 
+								icon="o-arrow-path" 
+								:link="route('sales.returns.create', ['sale' => $selectedSale->id])"
+								class="btn-outline-dark flex-1"
+							/>
+						@endif
+
+						
+						@if($selectedSale->status->isDeletable())
+							{{-- 可刪除狀態：顯示刪除按鈕 --}}
+							<x-button 
+								label="刪除" 
+								icon="o-trash" 
+								wire:click="delete({{ $selectedSale->id }})" 
+								wire:confirm="確定要刪除此單據並回補庫存嗎？" 
+								class="btn-error btn-outline flex-1" 
+							/>
+						@endif
+					@else
+						<div class="text-center py-2 bg-warning/10 border border-warning/30 text-warning rounded-lg text-xs flex-1">
+							<x-icon name="o-check-circle"/> 
+							{{ $selectedSale->status->label() }}{{ $selectedSale->hasReturnRecords() ? '且已退貨' : '' }}，不可異動！
+						</div>
 					@endif
-				</div>				
+				</div>
 			</x-slot:actions>
 		@endif
 	</x-drawer>

@@ -11,6 +11,14 @@
         {{-- PC 端表格 --}}
         <div class="hidden md:block">
             <x-table :headers="$headers" :rows="$rows" @row-click="$wire.edit($event.detail.id)" sticky class="cursor-pointer">
+                {{-- 針對 event_type 欄位做自訂，以便在前方加上 ID --}}
+                @scope('cell_event_type', $item)
+                    <div class="font-mono text-sm">
+                        <span class="text-gray-400 mr-1">#{{ $item->id }}</span>
+                        <span class="font-bold">{{ $item->event_type }}</span>
+                    </div>
+                @endscope
+
                 @scope('cell_lines_summary', $item)
                     <div class="text-sm">
                         @foreach($item->lines as $line)
@@ -74,7 +82,12 @@
             @foreach($rows as $item)
                 <div class="card bg-base-100 border border-base-300 mb-3">
                     <div class="card-body p-3">
-                        <div class="font-mono font-bold text-sm">{{ $item->event_type }}</div>
+                        <div class="font-mono text-sm flex items-center justify-between">
+                            <div>
+                                <span class="text-gray-400 mr-1">#{{ $item->id }}</span>
+                                <span class="font-bold">{{ $item->event_type }}</span>
+                            </div>
+                        </div>
                         <div class="divider my-1"></div>
                         @foreach($item->lines as $line)
                             @php
@@ -121,7 +134,7 @@
     {{-- 新增/編輯 Modal --}}
     <x-modal wire:model="myModal" separator size="4xl" persistent>
         <x-slot:title>
-            {{ $editingItem ? '編輯規則' : '新增規則' }}
+            {{ $editingItem ? '編輯規則 (#' . $editingItem . ')' : '新增規則' }}
         </x-slot:title>
 
         <div class="space-y-4">

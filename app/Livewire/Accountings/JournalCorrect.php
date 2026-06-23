@@ -3,6 +3,7 @@
 
 namespace App\Livewire\Accountings;
 
+use App\Enums\JournalStatus;
 use App\Models\Account;
 use App\Models\Journal;
 use App\Models\JournalItem;
@@ -43,24 +44,24 @@ class JournalCorrect extends Component
         $this->originalJournalId = $journal->id;
         
         // 防呆檢查
-        if ($journal->status !== 'posted') {
-            $this->error('僅已過帳分錄可更正');
-            $this->redirect(route('accountings.journals.index'));
-            return;
-        }
+        if ($journal->status !== JournalStatus::POSTED) {
+			$this->error('僅已過帳分錄可更正');
+			$this->redirect(route('accountings.journals.index'));
+			return;
+		}
 
-        if ($journal->reference_type === 'correct') {
-            $this->error('不可對更正分錄再次更正');
-            $this->redirect(route('accountings.journals.index'));
-            return;
-        }
+		if ($journal->reference_type === 'correct') {
+			$this->error('不可對更正分錄再次更正');
+			$this->redirect(route('accountings.journals.index'));
+			return;
+		}
 
-        $exists = Journal::where('corrects_journal_id', $this->originalJournalId)->exists();
-        if ($exists) {
-            $this->error('此分錄已經存在更正記錄');
-            $this->redirect(route('accountings.journals.index'));
-            return;
-        }        
+		$exists = Journal::where('corrects_journal_id', $this->originalJournalId)->exists();
+		if ($exists) {
+			$this->error('此分錄已經存在更正記錄');
+			$this->redirect(route('accountings.journals.index'));
+			return;
+		}
 
         // 🔧 修正：必須先載入原始資料，才能正確完成初始化
         $this->loadOriginalData();

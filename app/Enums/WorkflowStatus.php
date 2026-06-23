@@ -9,7 +9,8 @@ enum WorkflowStatus: string
     case APPROVED = 'approved';
     case COMPLETED = 'completed';
     case CANCELLED = 'cancelled';
-    case REJECTED = 'rejected';  // 可預留駁回狀態
+    case REJECTED = 'rejected';
+    case SETTLED = 'settled';
 
     /**
      * 顯示名稱
@@ -23,6 +24,7 @@ enum WorkflowStatus: string
             self::COMPLETED => '已結案',
             self::CANCELLED => '已取消',
             self::REJECTED => '已駁回',
+            self::SETTLED => '已結算',
         };
     }
 
@@ -38,6 +40,7 @@ enum WorkflowStatus: string
             self::COMPLETED => 'badge-success',
             self::CANCELLED => 'badge-error',
             self::REJECTED => 'badge-error',
+            self::SETTLED => 'badge-success',
         };
     }
 
@@ -72,13 +75,26 @@ enum WorkflowStatus: string
     {
         return $this === self::PENDING;
     }
+    
+    /**
+     * 是否可核銷（結算）
+     */
+    public function canSettle(): bool
+    {
+        return $this === self::APPROVED;
+    }
 
     /**
      * 是否為最終狀態（不可再異動）
      */
     public function isFinalized(): bool
     {
-        return in_array($this, [self::COMPLETED, self::CANCELLED, self::REJECTED]);
+        return in_array($this, [
+            self::COMPLETED,
+            self::CANCELLED,
+            self::REJECTED,
+            self::SETTLED,  // ✅ 已結算視為最終狀態
+        ]);
     }
 
     /**
@@ -86,7 +102,12 @@ enum WorkflowStatus: string
      */
     public function isInProgress(): bool
     {
-        return in_array($this, [self::DRAFT, self::PENDING, self::APPROVED]);
+        return in_array($this, [
+            self::DRAFT,
+            self::PENDING,
+            self::APPROVED,
+            self::PENDING_SETTLEMENT,  // ✅ 待結算算進行中
+        ]);
     }
 
     /**
@@ -97,7 +118,10 @@ enum WorkflowStatus: string
         return match($this) {
             self::DRAFT => ['submit' => '提交審核'],
             self::PENDING => ['approve' => '審核通過', 'reject' => '駁回'],
-            self::APPROVED => ['complete' => '完成結案'],
+            self::APPROVED => [
+                'complete' => '完成結案',
+                'settle' => '提領至銀行',
+            ],            
             default => [],
         };
     }

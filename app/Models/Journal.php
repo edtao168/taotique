@@ -10,7 +10,6 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 
 class Journal extends Model
 {
@@ -26,7 +25,6 @@ class Journal extends Model
         'description',
         'reference_type',
         'reference_id',
-        // ❌ 沒有 source_type, source_id
         'status',
         'corrects_journal_id',
         'correction_reason',
@@ -39,7 +37,40 @@ class Journal extends Model
         'exchange_rate' => 'decimal:4',
         'status' => JournalStatus::class,
     ];
+	
+	// 新增 Accessor
+	public function getStatusLabelAttribute(): string
+	{
+		return $this->status instanceof JournalStatus 
+			? $this->status->label() 
+			: (string) $this->status;
+	}
 
+	public function getStatusColorAttribute(): string
+	{
+		return $this->status instanceof JournalStatus 
+			? $this->status->color() 
+			: 'badge-ghost';
+	}
+
+    // =========================================================================
+    // SECTION: 🆕 工作流相關
+    // =========================================================================
+	protected static function getStatusEnumClass(): string
+    {
+        return JournalStatus::class;
+    }
+
+    protected function getTransitionRules(): array
+    {
+        return [
+            ['from' => 'draft', 'to' => 'posted', 'event' => 'post', 'label' => '過帳'],
+            ['from' => 'posted', 'to' => 'closed', 'event' => 'close', 'label' => '結帳'],
+            ['from' => 'posted', 'to' => 'reversed', 'event' => 'reverse', 'label' => '沖銷'],
+            ['from' => 'closed', 'to' => 'reversed', 'event' => 'reverse', 'label' => '沖銷'],
+        ];
+    }
+	
     // ==================== 多型關聯（只用 reference） ====================
 
     /**
@@ -178,7 +209,7 @@ class Journal extends Model
                 'created_by' => $postedBy,
             ]);
 
-            Log::info('日記帳已過帳', [
+            logger('日記帳已過帳', [
                 'journal_id' => $this->id,
                 'description' => $this->description,
                 'posted_by' => $postedBy,
@@ -198,7 +229,7 @@ class Journal extends Model
             'updated_at' => now(),
         ]);
 
-        Log::info('日記帳已結帳', [
+        logger('日記帳已結帳', [
             'journal_id' => $this->id,
             'closed_by' => $closedBy,
         ]);
@@ -297,7 +328,7 @@ class Journal extends Model
             }
         });
 
-        Log::info('月結完成', [
+        logger('月結完成', [
             'period' => "{$year}-{$month}",
             'closed_by' => $closedBy,
             'result' => $result,

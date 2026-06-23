@@ -11,8 +11,10 @@ enum AmountSource: string
     // ==============================================
     case SUBTOTAL = 'subtotal';
     case CUSTOMER_TOTAL = 'customer_total';
+	case CUSTOMER_TOTAL_INC_TAX = 'customer_total_inc_tax';
     case FINAL_NET_AMOUNT = 'final_net_amount';
     case SUBTOTAL_AFTER_DISCOUNT = 'subtotal_after_discount';
+	case NET_REVENUE = 'net_revenue';
     case TOTAL_FEES = 'total_fees';
     case COST_AMOUNT = 'cost_amount';
 
@@ -84,8 +86,10 @@ enum AmountSource: string
         return match($this) {
             self::SUBTOTAL => '商品小計 (subtotal)',
             self::CUSTOMER_TOTAL => '買家實付總額 (customer_total)',
+			self::CUSTOMER_TOTAL_INC_TAX => '買家含稅總額 (customer_total_inc_tax)',
             self::FINAL_NET_AMOUNT => '賣家最終實收 (final_net_amount)',
             self::SUBTOTAL_AFTER_DISCOUNT => '折讓後純商品淨額 (subtotal_after_discount)',
+			self::NET_REVENUE => '淨收入 (net_revenue) - 扣除所有折扣後',
             self::TOTAL_FEES => '平台摩擦費用總計 (total_fees)',
             self::COST_AMOUNT => '銷貨加權成本總計 (cost_amount)',
 
@@ -98,7 +102,6 @@ enum AmountSource: string
             self::COMMISSION => '平台佣金抽成 (commission)',
             self::RESTOCKING_FEE => '買家支付退貨處理費 (restocking_fee)',
             self::RETURN_SHIPPING_FEE => '賣家承擔退貨運費 (return_shipping_fee)',
-
             self::TAX => '銷項稅額 (tax_amount)',
             self::FREIGHT_AMOUNT => '常規運費欄位 (freight_amount)',
             self::AMOUNT => '通用單一金額 (amount)',

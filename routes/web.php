@@ -139,14 +139,4 @@ Route::middleware(['auth'])->group(function () {
 	
 	// [本地操作] routes/web.php
 	Route::get('/settings/backup', BackupIndex::class)->name('settings.backup')->middleware('auth');
-	
-	Route::get('/test-journal/{id}', function ($id) {
-    $journal = App\Models\Journal::find($id);
-    
-    if (!$journal) {
-        abort(404, '找不到該日記帳');
-    }
-    
-    return view('test-journal', compact('journal'));
-})->name('test.journal');
 });

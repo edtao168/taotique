@@ -32,7 +32,22 @@ class JournalIndex extends Component
 		$this->showDrawer = true;
     }
 
-    // 關閉 Drawer
+    /**
+     * 選擇日記帳並打開抽屜
+     */
+    public function selectJournal($id)
+    {
+        info('selectJournal called', ['journalId' => $id]);
+		$this->selectedJournal = Journal::with(['items.account'])->find($id);
+		info('selectedJournal loaded', [
+        'id' => $this->selectedJournal?->id,
+        'status' => $this->selectedJournal?->status,
+        'is_corrected' => $this->selectedJournal?->is_corrected,
+    ]);
+        $this->showDrawer = true;
+    }
+	
+	// 關閉 Drawer
     public function closeDrawer(): void
     {
         $this->selectedJournalId = null;
@@ -172,7 +187,6 @@ class JournalIndex extends Component
 
         return view('livewire.accountings.journal-index', [
             'journals' => $query->paginate(15),
-            'statuses' => ['draft', 'posted', 'cancelled', 'closed']
         ]);
     }
 

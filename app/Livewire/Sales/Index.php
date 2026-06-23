@@ -3,13 +3,11 @@
 
 namespace App\Livewire\Sales;
 
-use App\Models\AccountingRule;
+use App\Enums\WorkflowStatus;
 use App\Models\Inventory;
-use App\Models\Product;
 use App\Models\Sale;
 use App\Models\Setting;
 use App\Models\Warehouse;
-use App\Services\AccountingService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Livewire\Component;
@@ -23,143 +21,177 @@ class Index extends Component
     public string $search = '';
     public bool $drawer = false;
     public ?Sale $selectedSale = null;
-	public $selectedWarehouse = null;
+    public $selectedWarehouse = null;
     public $warehouses = [];
+    public $dateRange = 'month';
 
-    // 篩選條件
-    public $dateRange = 'month'; 
+    public function mount()
+    {
+        $this->warehouses = Warehouse::where('is_active', true)
+            ->orderBy('id', 'asc')
+            ->get();
 
-    /**
-	 * 元件初始化
-	 */
-	public function mount()
-	{
-		// 1. 載入所有啟用的倉庫供篩選器或彈窗使用
-		$this->warehouses = Warehouse::where('is_active', true)
-			->orderBy('id', 'asc')
-			->get();
+        $this->selectedWarehouse = $this->selectedWarehouse ?? null;
 
-		// 2. 預設篩選邏輯：若無特定設定，預設選取第一個倉庫（或不限）	
-		$this->selectedWarehouse = $this->selectedWarehouse ?? null;
+        if (empty($this->dateRange)) {
+            $this->dateRange = 'month';
+        }
+    }
 
-		// 3. 初始化日期篩選範圍
-		if (empty($this->dateRange)) {
-			$this->dateRange = 'month'; 
-		}
+    public function updatedSelectedWarehouse($value)
+    {
+        $this->resetPage();
+    }
 
-		// 4. 如果是從特定銷售單跳轉過來（選填）
-		// 確保 selectedSale 結構完整以供 Drawer 渲染
-		/* if ($this->selectedSale) {
-			$this->selectedWarehouse = $this->selectedSale->warehouse_id;
-		} */
-	}
-		
-	/**
-	 * 處理倉庫篩選異動
-	 */
-	public function updatedSelectedWarehouse($value)
-	{
-		$this->resetPage(); // 切換倉庫時重置分頁
-	}
-	
-	/**
-     * 觸發詳情抽屜
-     */
     public function showDetail($id)
     {
         $this->selectedSale = Sale::with(['customer', 'items.product', 'user', 'shop', 'warehouse', 'fees'])->find($id);
         $this->drawer = true;
     }
-	
-	/**
-     * 執行出庫扣減庫存，同步產生會計日記帳與主營成本結轉
-     */
+
     public function submitStockOut(int $saleId)
-	{        
+    {
         try {
             $sale = Sale::find($saleId);
             if (!$sale) {
                 throw new \Exception("找不到該銷售單據。");
             }
 
-            // 1. 從系統配置表讀取是否允許負庫存開關
             $allowNegative = (bool) Setting::get('allow_negative_inventory', false);
-            
-            // 2. 呼叫 Model 修正後的厚邏輯（移除原本多傳的空陣列 []）
             $sale->processStockOut($allowNegative);
-            
-            // 3. 狀態重置
+
             $this->drawer = false;
             $this->selectedSale = null;
-            
+
             $this->success("銷售單 {$sale->invoice_number} 已成功完成出庫、三份財務傳票自動驗證過帳！");
         } catch (\Exception $e) {
-            // 如果中間任何一份傳票不平衡、未啟用或金額不正確，會在這裡被精準攔截，並完全回滾庫存異動
             $this->error('自動結轉失敗阻斷：' . $e->getMessage());
         }
     }
 
-    /**
-	 * 刪除訂單（含庫存回滾與關聯清理）
-	 */
-	public function delete($id)
+    public function delete($id)
     {
         try {
             DB::transaction(function () use ($id) {
-                // 💡 1. 行級鎖定當前欲刪除的單據
                 $sale = Sale::with(['items', 'fees'])->lockForUpdate()->find($id);
-                
+
                 if (!$sale) {
                     throw new \Exception('找不到該單據，可能已被其他操作員刪除。');
                 }
-                
+
                 if ($sale->hasReturnRecords()) {
                     throw new \Exception('此銷售單已有衍生退貨紀錄，禁止刪除。');
                 }
 
-                // 💡 2. 狀態機核心校驗：原本的狀態如果已經是 completed（已完成出庫/已記帳），絕對不允許直接刪除單據
-                if ($sale->status === 'completed') {
-                    throw new \Exception('該銷售單已出庫結案並生成財務傳票，若需調整請走「銷售退貨」流程，禁止直接刪除！');
-                }
+                // ✅ 如果已出庫，禁止刪除
+				if ($sale->stocked_out_at) {
+					throw new \Exception('已出庫的銷售單禁止刪除。');
+				}
 
-                // 💡 3. 回滾庫存（針對 pending 或 processing 狀態可能產生的預扣或佔用進行回滾）
-                foreach ($sale->items as $item) {
-                    $inventory = Inventory::where('product_id', $item->product_id)
-                        ->where('warehouse_id', $sale->warehouse_id)
-                        ->lockForUpdate()
-                        ->first();
+				// ✅ 草稿或已審核但未出庫都可以刪除
+				if (!in_array($sale->status, [WorkflowStatus::DRAFT, WorkflowStatus::APPROVED])) {
+					throw new \Exception('此狀態無法刪除。');
+				}
 
-                    if ($inventory) {
-                        // 嚴謹使用 bcadd 還原庫存
-                        $newQty = bcadd($inventory->quantity, $item->quantity, 4);
-                        $inventory->update(['quantity' => $newQty]);
-                    }
-                }
-
-                // 💡 4. 清理級聯關聯數據，防範外鍵約束衝突
                 $sale->fees()->delete();
                 $sale->items()->delete();
-
-                // 💡 5. 實體刪除（或軟刪除，依您的 Model 規劃而定）
                 $sale->delete();
             });
 
             $this->selectedSale = null;
             $this->drawer = false;
             $this->success('銷售單已安全刪除，相關商品庫存已全數平滑回滾。');
-            
         } catch (\Exception $e) {
             $this->error('刪除失敗：' . $e->getMessage());
         }
     }
-	
+
+    // =========================================================================
+    // SECTION: 🆕 結算相關方法
+    // =========================================================================
+
+    /**
+     * 銷售結算（approved → settled）
+     */
+    public function settleSale(int $saleId)
+    {
+        try {
+            $sale = Sale::findOrFail($saleId);
+
+            // ✅ 使用 Enum 的 canSettle() 方法
+            if (!$sale->status->canSettle()) {
+                throw new \Exception(
+                    "目前狀態為「{$sale->status->label()}」，無法結算。僅「已審核」或「待結算」狀態可結算。"
+                );
+            }
+
+            if ($sale->hasReturnRecords()) {
+                throw new \Exception('此訂單已有退貨紀錄，無法結算。');
+            }
+
+            if (!$sale->stocked_out_at) {
+                throw new \Exception('訂單尚未出貨，無法結算。');
+            }
+
+            if (!$sale->needsSettlement()) {
+				throw new \Exception(
+					"付款方式為「{$sale->payment_method_name}」，不需要結算。"
+				);
+			}
+		
+			$sale->settle(
+                actor: auth()->user(),
+                data: [
+                    'amount' => $sale->customer_total,
+                    'payment_method' => $sale->payment_method,
+                    'settled_at' => now(),
+                    'fee' => 0,
+                ]
+            );
+
+            $this->selectedSale = $sale->fresh(['customer', 'items.product', 'user', 'shop', 'warehouse', 'fees']);
+            $this->success("✅ 銷售單 {$sale->invoice_number} 已結算完成！");
+        } catch (\Exception $e) {
+            $this->error('結算失敗：' . $e->getMessage());
+        }
+    }
+
+    // =========================================================================
+    // SECTION: 🆕 計算屬性（供 Blade 判斷按鈕顯示）
+    // =========================================================================
+
+    public function getCanSettleProperty(): bool
+    {
+        if (!$this->selectedSale) {
+            return false;
+        }
+
+        return $this->selectedSale->status->canSettle()
+            && !$this->selectedSale->hasReturnRecords()
+            && $this->selectedSale->stocked_out_at
+			&& $this->selectedSale->needsSettlement();
+    }
+
+    public function getIsFinalizedProperty(): bool
+    {
+        if (!$this->selectedSale) {
+            return true;
+        }
+
+        return $this->selectedSale->status->isFinalized()
+            || $this->selectedSale->hasReturnRecords();
+    }
+
+    // =========================================================================
+    // SECTION: render()
+    // =========================================================================
+
     public function render()
     {
-        // --- 1. 統計數據邏輯 ---
         $startOfMonth = Carbon::now()->startOfMonth();
-        $endOfMonth   = Carbon::now()->endOfMonth();
+        $endOfMonth = Carbon::now()->endOfMonth();
         $startOfLastMonth = Carbon::now()->subMonth()->startOfMonth();
-        $endOfLastMonth   = Carbon::now()->subMonth()->endOfMonth();
+        $endOfLastMonth = Carbon::now()->subMonth()->endOfMonth();
 
         $monthSales = Sale::whereBetween('sold_at', [$startOfMonth, $endOfMonth])->sum('subtotal');
         $lastMonthSales = Sale::whereBetween('sold_at', [$startOfLastMonth, $endOfLastMonth])->sum('subtotal');
@@ -167,22 +199,22 @@ class Index extends Component
         $yearSales = Sale::whereYear('sold_at', date('Y'))->sum('subtotal');
         $monthProfit = Sale::whereBetween('sold_at', [$startOfMonth, $endOfMonth])->sum('final_net_amount');
 
-        // --- 2. 銷售清單查詢 (合併原 SalesIndex 邏輯) ---
-        $sales = Sale::with(['customer', 'user', 'shop', 'channel','warehouse', 'fees'])
+        $sales = Sale::with(['customer', 'user', 'shop', 'channel', 'warehouse', 'fees'])
             ->when($this->search, function ($query) {
                 $query->where('invoice_number', 'like', "%{$this->search}%")
-                      ->orWhereHas('customer', fn($q) => $q->where('name', 'like', "%{$this->search}%"));
+                    ->orWhereHas('customer', fn($q) => $q->where('name', 'like', "%{$this->search}%"));
             })
             ->orderBy('sold_at', 'desc')
             ->paginate(10);
 
         $headers = [
             ['key' => 'invoice_number', 'label' => '銷售單號', 'class' => 'font-mono'],
+            ['key' => 'status', 'label' => '狀態', 'class' => 'w-32'],
             ['key' => 'shop.name', 'label' => '分店', 'class' => 'w-40'],
-			['key' => 'channel.name', 'label' => '銷售通路'],
+            ['key' => 'channel.name', 'label' => '銷售通路'],
             ['key' => 'customer.name', 'label' => '客戶'],
             ['key' => 'customer_total', 'label' => '買家實付', 'textAlign' => 'text-right'],
-			['key' => 'final_net_amount', 'label' => '最終進帳', 'textAlign' => 'text-right'],
+            ['key' => 'final_net_amount', 'label' => '最終進帳', 'textAlign' => 'text-right'],
             ['key' => 'sold_at', 'label' => '銷售日期', 'class' => 'w-32'],
         ];
 
@@ -192,7 +224,9 @@ class Index extends Component
             'yearSales' => $yearSales,
             'monthProfit' => $monthProfit,
             'sales' => $sales,
-            'headers' => $headers
+            'headers' => $headers,
+            'canSettle' => $this->canSettle,
+            'isFinalized' => $this->isFinalized,
         ]);
     }
 }

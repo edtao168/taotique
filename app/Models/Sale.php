@@ -36,8 +36,6 @@ class Sale extends Model
         'stocked_out_at'   => 'datetime:Y-m-d H:i:s',
         'exchange_rate'    => 'decimal:4',
         'subtotal'         => 'decimal:4',
-        'tax_amount'       => 'decimal:4',
-        'freight_amount'   => 'decimal:4',
         'status'           => WorkflowStatus::class,
     ];
 
@@ -59,22 +57,34 @@ class Sale extends Model
         ];
     }
     
+	/**
+	 * 取得付款帳戶科目
+	 */
     protected function getPaymentAccount(): string
     {
-        return match($this->payment_method) {
-            'cash' => '1001',
-            'bank_transfer' => '1002',
-            default => '1122',
-        };
+        // 從 config 讀取映射
+		$mapping = config('business.payment_accounts', []);
+		
+		// 正規化 payment_method（支援新舊命名）
+		$payment = match($this->payment_method) {
+			'bank_transfer' => 'transfer',
+			default => $this->payment_method,
+		};
+		
+		return $mapping[$payment] ?? '112202';
     }
     
-    protected function getRevenueAccount(): string
+    /**
+	 * 取得收入帳戶科目
+	 */
+	protected function getRevenueAccount(): string
     {
-        return match($this->channel) {
-            'retail' => '5001',
-            'online' => '5002',
-            default => '5001',
-        };
+        $channel = $this->getChannelCode();
+		$revenueConfig = config('business.accounting_accounts.revenue', []);
+		
+		return $revenueConfig[$channel]['code'] 
+			?? $revenueConfig['default']['code'] 
+			?? '500101';
     }
 
     // =========================================================================
@@ -102,32 +112,39 @@ class Sale extends Model
     // =========================================================================
 	public function getCustomerTotalAttribute(): string
 	{
-		$net = $this->subtotal_after_discount ?? '0.0000';
-		$tax = (string) ($this->tax_amount ?? '0.0000');
-		$freight = (string) ($this->freight_amount ?? '0.0000');
-
-		$total = bcadd($net, $tax, 4);
-		return bcadd($total, $freight, 4);
-	}
-
-	public function getSubtotalAfterDiscountAttribute(): string
-	{
+		// 1. 計算折讓後金額：subtotal - seller_discount
+		// sad: subtotal_after_discount
 		$subtotal = (string) ($this->subtotal ?? '0.0000');
-		$discount = $this->getFeeTotal('seller_discount');
-		return bcsub($subtotal, $discount, 4);
-	}
-
-	public function calculateTotalFees(): string
-	{
-		$fees = ['platform_fee', 'commission', 'seller_discount', 'shipping_fee_platform', 'order_adjustment'];
-		$total = '0.0000';
+		$sellerDiscount = $this->getFeeTotal('seller_discount');
+		$sad = bcsub($subtotal, $sellerDiscount, 4);
 		
-		foreach ($fees as $feeType) {
+		// 2. 從 config 讀取費用類型，動態加減
+		$feeTypes = config('business.fee_types', []);
+		
+		foreach ($feeTypes as $feeType => $config) {
+			$target = $config['target'] ?? '';
+			if (!in_array($target, ['customer', 'both', 'revenue_adjustment'])) {
+				continue;
+			}
+			
 			$amount = $this->getFeeTotal($feeType);
-			$total = bcadd($total, $amount, 4);
+			if (bccomp($amount, '0', 4) === 0) {
+				continue;
+			}
+			
+			$operator = $config['operator'] ?? 'add';
+			if ($operator === 'add') {
+				$sad = bcadd($sad, $amount, 4);
+			} elseif ($operator === 'sub') {
+				$sad = bcsub($sad, $amount, 4);
+			}
 		}
 		
-		return $total;
+		// 3. 加上稅金
+		$tax = $this->getFeeTotal('tax_amount');
+		$sad = bcadd($sad, $tax, 4);
+		
+		return $sad;
 	}
 
     // =========================================================================
@@ -164,60 +181,34 @@ class Sale extends Model
     /**
      * 定義狀態轉換規則
      */
-    protected function getTransitionRules(): array
-    {
-        return [
-            // 草稿流程
-            ['from' => 'draft', 'to' => 'pending', 'event' => 'submit', 'label' => '提交審核'],
-            ['from' => 'draft', 'to' => 'cancelled', 'event' => 'cancel', 'label' => '取消'],
-            
-            // 審核流程
-            ['from' => 'pending', 'to' => 'approved', 'event' => 'approve', 'label' => '審核通過'],
-            ['from' => 'pending', 'to' => 'rejected', 'event' => 'reject', 'label' => '駁回'],
-            ['from' => 'pending', 'to' => 'cancelled', 'event' => 'cancel', 'label' => '取消'],
-            
-            // 出貨流程
-            ['from' => 'approved', 'to' => 'completed', 'event' => 'ship', 'label' => '出貨完成'],
-            ['from' => 'approved', 'to' => 'cancelled', 'event' => 'cancel', 'label' => '取消'],
-        ];
-    }
+	protected function getTransitionRules(): array
+	{
+		return [
+			// ===== 審核流程 =====
+			['from' => 'pending', 'to' => 'approved', 'event' => 'approve', 'label' => '審核通過'],
+			
+			// ===== 捷徑 =====
+			['from' => 'draft', 'to' => 'approved', 'event' => 'approve', 'label' => '審核通過'],
+			
+			// ===== 出貨 =====
+			['from' => 'approved', 'to' => 'completed', 'event' => 'stock_out', 'label' => '出貨完成'],
+			
+			// ===== 結算 =====
+			['from' => 'approved', 'to' => 'settled', 'event' => 'settle', 'label' => '銷售結算'],
+			
+			// ===== 結案（不涉及金流）=====
+			['from' => 'approved', 'to' => 'completed', 'event' => 'complete', 'label' => '完成結案'],
+			
+			// ===== 取消 =====
+			['from' => 'draft', 'to' => 'cancelled', 'event' => 'cancel', 'label' => '取消'],
+			['from' => 'pending', 'to' => 'cancelled', 'event' => 'cancel', 'label' => '取消'],
+			['from' => 'approved', 'to' => 'cancelled', 'event' => 'cancel', 'label' => '取消'],
+		];
+	}
 
     // =========================================================================
     // SECTION: 🆕 業務方法（狀態轉換）
     // =========================================================================
-
-    /**
-     * 提交審核（draft → pending）
-     */
-    public function submit(User $actor): void
-    {
-        if ($this->status !== WorkflowStatus::DRAFT) {
-            throw new \RuntimeException('只有草稿可以提交審核');
-        }
-        $this->transitionTo('pending', 'submit', $actor);
-    }
-
-    /**
-     * 審核通過（pending → approved）
-     */
-    public function approve(User $actor): void
-    {
-        if ($this->status !== WorkflowStatus::PENDING) {
-            throw new \RuntimeException('只有待審核可以審核');
-        }
-        $this->transitionTo('approved', 'approve', $actor);
-    }
-
-    /**
-     * 駁回（pending → rejected）
-     */
-    public function reject(User $actor, string $reason): void
-    {
-        if ($this->status !== WorkflowStatus::PENDING) {
-            throw new \RuntimeException('只有待審核可以駁回');
-        }
-        $this->transitionTo('rejected', 'reject', $actor, ['reason' => $reason]);
-    }
 
     /**
      * 取消訂單
@@ -229,30 +220,101 @@ class Sale extends Model
             throw new \RuntimeException('此狀態無法取消');
         }
         
-        if ($this->stocked_out_at) {
-            throw new \RuntimeException('已出貨的訂單無法取消，請走退貨流程');
-        }
+        // 驗證：已出貨不能取消
+		if ($this->stocked_out_at) {
+			throw new \RuntimeException('已出貨的訂單無法取消，請走退貨流程');
+		}
+		
+		// 驗證：已有退貨不能取消
+		if ($this->hasReturnRecords()) {
+			throw new \RuntimeException('已有退貨紀錄的訂單無法取消');
+		}
         
         $this->transitionTo('cancelled', 'cancel', $actor, ['reason' => $reason]);
     }
 
-    /**
-     * 出貨完成（approved → completed）
-     * 
-     * 注意：會執行原有的 processStockOut() 邏輯，但狀態轉換由 transitionTo 統一管理
-     */
-    public function ship(User $actor): void
-    {
-        if ($this->status !== WorkflowStatus::APPROVED) {
-            throw new \RuntimeException('只有已審核的訂單可以出貨');
-        }
-        
-        // 執行原有的出庫邏輯（不更新 status，由 transitionTo 處理）
-        $this->processStockOutInternal(Setting::get('allow_negative_stock', false));
-        
-        // 狀態轉換由 transitionTo 統一管理
-        $this->transitionTo('completed', 'ship', $actor);
-    }
+
+	// =========================================================================
+	// SECTION: 🆕 清算相關業務方法
+	// =========================================================================
+
+	/**
+	 * 銷售結算（approved → settled）
+	 * 
+	 * 意義：將銷售款項結算至最終收款帳戶
+	 * 會計：借：DYNAMIC:sale:payment / 貸：101202 蝦皮錢包
+	 * 
+	 * @param array $data 包含 amount, payment_method, settled_at, fee
+	 */
+	public function settle(User $actor, array $data = []): void
+	{
+		if ($this->status !== WorkflowStatus::APPROVED) {
+			throw new \RuntimeException('只有已審核的訂單可以結算');
+		}
+		
+		// ✅ 防呆：現金銷售不需要結算
+		if ($this->payment_method === 'cash') {
+			throw new \RuntimeException('現金銷售不需要結算，請使用「完成結案」');
+		}
+		
+		// ✅ 防呆：必須已出庫
+		if (!$this->stocked_out_at) {
+			throw new \RuntimeException('訂單尚未出貨，無法結算');
+		}
+		
+		// ✅ 防呆：如果有退貨
+		if ($this->hasReturnRecords()) {
+			throw new \RuntimeException('此訂單已有退貨紀錄，無法結算');
+		}
+	
+		$amount = $data['amount'] ?? $this->customer_total;
+		if (bccomp((string)$amount, '0', 4) <= 0) {
+			throw new \RuntimeException('結算金額必須大於 0');
+		}
+		
+		// 如果有指定 payment_method，暫時更新以便動態科目解析
+		if (isset($data['payment_method'])) {
+			$this->payment_method = $data['payment_method'];
+		}
+		
+		DB::transaction(function () use ($actor, $data, $amount) {
+			// 1. 狀態轉換
+			$this->transitionTo(
+				WorkflowStatus::SETTLED->value,
+				'settle',
+				$actor,
+				[
+					'amount' => $amount,
+					'payment_method' => $data['payment_method'] ?? $this->payment_method,
+					'settled_at' => $data['settled_at'] ?? now(),
+					'fee' => $data['fee'] ?? 0,
+				]
+			);
+			
+			// 2. 產生傳票：借：DYNAMIC:sale:payment / 貸：101202 蝦皮錢包
+			$this->postJournal('sale_settlement');
+		}, 3);
+	}
+
+	/**
+	 * 判斷是否需要結算（清算）
+	 * 
+	 * 只有「非現金」的付款方式才需要結算
+	 */
+	public function needsSettlement(): bool
+	{
+		// 非現金付款方式
+		$nonCashMethods = [
+			'transfer', 
+			'bank_transfer', 
+			'credit_card', 
+			'shopee_pay', 
+			'line_pay', 
+			'taiwan_pay'
+		];
+		
+		return in_array($this->payment_method, $nonCashMethods);
+	}
 
     // =========================================================================
     // SECTION: 庫存管理核心控制
@@ -262,56 +324,55 @@ class Sale extends Model
      * 執行銷售單實體出庫（對外公開方法，保持向後相容）
      */
     public function processStockOut(bool $allowNegative = false): void
-    {
-        if ($this->stocked_out_at) {
-            throw new \Exception("銷售單 {$this->invoice_number} 已完成出庫，請勿重複執行。");
-        }
+	{
+		if ($this->stocked_out_at) {
+			throw new \Exception("銷售單 {$this->invoice_number} 已完成出庫，請勿重複執行。");
+		}
 
-        if ($this->hasReturnRecords()) {
-            throw new \Exception("銷售單 {$this->invoice_number} 已有退貨紀錄，無法出庫。");
-        }
+		if ($this->hasReturnRecords()) {
+			throw new \Exception("銷售單 {$this->invoice_number} 已有退貨紀錄，無法出庫。");
+		}
 
-        // 如果狀態不是 approved，自動轉為 approved 再出貨
-        if ($this->status !== WorkflowStatus::APPROVED && $this->status !== WorkflowStatus::COMPLETED) {
-            // 如果是 draft 或 pending，先轉為 approved
-            if (in_array($this->status, [WorkflowStatus::DRAFT, WorkflowStatus::PENDING])) {
-                $this->transitionTo('approved', 'auto_approve', auth()->user());
-            } else {
-                throw new \Exception("銷售單 {$this->invoice_number} 狀態為 {$this->status?->label()}，無法出庫。");
-            }
-        }
+		if ($this->status === WorkflowStatus::DRAFT) {
+			$this->transitionTo('approved', 'approve', auth()->user());
+		}
 
-        $this->processStockOutInternal($allowNegative);
-        $this->transitionTo('completed', 'stock_out', auth()->user());
-    }
+		// ✅ 使用 DB::transaction 確保一致性
+		DB::transaction(function () use ($allowNegative) {
+			// 1. 先過帳
+			$this->processStockOutInternal($allowNegative);
+			
+			// 2. 過帳成功後才更新狀態
+			$this->transitionTo('completed', 'stock_out', auth()->user());
+		}, 3);
+	}
 
     /**
      * 內部出庫方法（不處理狀態，只處理庫存和傳票）
      */
     private function processStockOutInternal(bool $allowNegative): void
-    {
-        DB::transaction(function () use ($allowNegative) {
-            // 1. 執行嚴謹的庫存扣減
-            $this->deductInventory($this->getCurrentItemsQuantity(), $allowNegative);
+	{
+		// ✅ 移除內層 DB::transaction（由外層 ship() 管理）
+		
+		// 1. 執行庫存扣減
+		$this->deductInventory($this->getCurrentItemsQuantity(), $allowNegative);
 
-            // 2. 重新載入最新關聯數據
-            $this->fresh(['items.product', 'fees', 'channel']); 
+		// 2. 重新載入最新關聯數據
+		$this->fresh(['items.product', 'fees', 'channel']); 
 
-            // 3. 驅動傳票自動結轉
-            $this->postJournal('sale_revenue');
-            $this->postJournal('sale_cost');
+		// 3. 產生傳票
+		$this->postJournal('sale_revenue');
+		$this->postJournal('sale_cost');
 
-            $totalFees = $this->calculateTotalFees();
-            if (bccomp($totalFees, '0.0000', 4) > 0) {
-                $this->postJournal('sale_fee');
-            }
+		// 4. 如果有費用，產生費用傳票
+		$totalFees = $this->calculateTotalFees();
+		if (bccomp($totalFees, '0.0000', 4) > 0) {
+			$this->postJournal('sale_fee');
+		}
 
-            // 4. 更新出庫時間（不更新 status）
-            $this->update([
-                'stocked_out_at' => now(),
-            ]);
-        }, 3);
-    }
+		// 5. 更新出庫時間
+		$this->update(['stocked_out_at' => now()]);
+	}
 
     /**
      * 撤銷出庫（反向操作）
@@ -673,28 +734,42 @@ class Sale extends Model
         }
         
         return match ($source) {
-            'customer_total' => (string) ($this->customer_total ?? '0.0000'),
-            'subtotal_after_discount' => (string) ($this->subtotal_after_discount ?? $this->subtotal ?? '0.0000'),
-            'tax_amount' => (string) ($this->tax_amount ?? '0.0000'),
-            'freight_amount' => (string) ($this->freight_amount ?? '0.0000'),
-            'platform_fee' => $this->getFeeTotal('platform_fee'),
-            'commission' => $this->getFeeTotal('commission'),
-            'seller_discount' => $this->getFeeTotal('seller_discount'),
-            'shipping_fee_platform' => $this->getFeeTotal('shipping_fee_platform'),
-            'order_adjustment' => $this->getFeeTotal('order_adjustment'),
-            'total_fees' => $this->calculateTotalFees(),
-            'cost_amount' => $this->calculateRealtimeCost(),
-            'return_total' => (string) ($this->return_total ?? '0.0000'),
-            'return_cost' => (string) ($this->return_cost ?? '0.0000'),
-            'return_cost_base' => (string) ($this->return_cost_base ?? '0.0000'),
-            'purchase_base_items' => (string) ($this->purchase_base_items ?? '0.0000'),
-            'purchase_base_tax' => (string) ($this->purchase_base_tax ?? '0.0000'),
-            'purchase_base_shipping' => (string) ($this->purchase_base_shipping ?? '0.0000'),
-            'purchase_base_other_fees' => (string) ($this->purchase_base_other_fees ?? '0.0000'),
-            'purchase_base_total' => (string) ($this->purchase_base_total ?? '0.0000'),
-            default => '0.0000',
-        };
-    }
+			'customer_total' => (string) ($this->customer_total ?? '0.0000'),
+			'customer_total_inc_tax' => $this->customer_total_inc_tax,
+			'subtotal_after_discount' => (string) ($this->subtotal_after_discount ?? $this->subtotal ?? '0.0000'),
+			'net_revenue' => $this->net_revenue,
+			
+			// ===== 費用類（從 sale_fees 讀取） =====
+			'tax_amount' => $this->getFeeTotal('tax_amount'),
+			'freight_amount' => $this->getFeeTotal('freight_amount'),
+			'platform_fee' => $this->getFeeTotal('platform_fee'),
+			'commission' => $this->getFeeTotal('commission'),
+			'seller_discount' => $this->getFeeTotal('seller_discount'),
+			'shipping_fee_platform' => $this->getFeeTotal('shipping_fee_platform'),
+			'shipping_fee_customer' => $this->getFeeTotal('shipping_fee_customer'),
+			'platform_coupon' => $this->getFeeTotal('platform_coupon'),
+			'order_adjustment' => $this->getFeeTotal('order_adjustment'),			
+			
+			// ===== 總計 =====
+			'total_fees' => $this->calculateTotalFees(),
+			'cost_amount' => $this->calculateRealtimeCost(),
+			'final_net_amount' => (string) ($this->final_net_amount ?? '0.0000'),
+			
+			// ===== 退貨 =====
+			'return_total' => (string) ($this->return_total ?? '0.0000'),
+			'return_cost' => (string) ($this->return_cost ?? '0.0000'),
+			'return_cost_base' => (string) ($this->return_cost_base ?? '0.0000'),
+			
+			// ===== 採購 =====
+			'purchase_base_items' => (string) ($this->purchase_base_items ?? '0.0000'),
+			'purchase_base_tax' => (string) ($this->purchase_base_tax ?? '0.0000'),
+			'purchase_base_shipping' => (string) ($this->purchase_base_shipping ?? '0.0000'),
+			'purchase_base_other_fees' => (string) ($this->purchase_base_other_fees ?? '0.0000'),
+			'purchase_base_total' => (string) ($this->purchase_base_total ?? '0.0000'),
+			
+			default => '0.0000',
+		};
+	}
 
     private function getFeeTotal(string $feeType): string
     {
@@ -705,6 +780,36 @@ class Sale extends Model
         }
         return (string) ($total ?: '0.0000');
     }
+	
+	/**
+	 * 買家含稅總額 = customer_total + 銷項稅額
+	 */
+	public function getCustomerTotalIncTaxAttribute(): string
+	{
+		$customerTotal = $this->customer_total;
+		$tax = $this->getFeeTotal('tax_amount');
+		return bcadd($customerTotal, $tax, 4);
+	}
+	
+	/**
+	 * 淨收入（扣除所有折扣後）
+	 * 用於 sale_revenue 的貸方金額
+	 */
+	public function getNetRevenueAttribute(): string
+	{
+		$subtotalAfterDiscount = (string) ($this->subtotal_after_discount ?? $this->subtotal ?? '0.0000');
+		$platformCoupon = $this->getFeeTotal('platform_coupon');
+		
+		$result = bcsub($subtotalAfterDiscount, $platformCoupon, 4);
+		info('net_revenue 計算', [
+        'sale_id' => $this->id,
+        'subtotal' => $this->subtotal,
+        'subtotal_after_discount' => $this->subtotal_after_discount ?? 'null',
+        'platform_coupon' => $platformCoupon,
+        'result' => $result,
+    ]);
+		return bcsub($subtotalAfterDiscount, $platformCoupon, 4);
+	}
 
     // =========================================================================
     // SECTION: 核心業務方法
@@ -752,59 +857,29 @@ class Sale extends Model
 
         return $calculatedTotalCost;
     }
-
-    public function getPlatformFeeTotal(): string
-    {
-        return (string)($this->fees()->where('fee_type', 'platform_fee')->get()
-            ->sum(fn($fee) => (string)($fee->amount ?? '0.0000')) ?: '0.0000');
-    }
-
-    public function getCommissionTotal(): string
-    {
-        return (string)($this->fees()->where('fee_type', 'commission')->get()
-            ->sum(fn($fee) => (string)($fee->amount ?? '0.0000')) ?: '0.0000');
-    }
-
-    public function getSellerDiscountTotal(): string
-    {
-        return (string)($this->fees()->where('fee_type', 'seller_discount')->get()
-            ->sum(fn($fee) => (string)($fee->amount ?? '0.0000')) ?: '0.0000');
-    }
-
-    public function getPlatformShippingFeeTotal(): string
-    {
-        return (string)($this->fees()->where('fee_type', 'shipping_fee_platform')->get()
-            ->sum(fn($fee) => (string)($fee->amount ?? '0.0000')) ?: '0.0000');
-    }
-
-    private function getTotalFeesSum(): string
-    {
-        if (isset($this->fees_total_amount) && bccomp((string)$this->fees_total_amount, '0.0000', 4) > 0) {
-            return (string)$this->fees_total_amount;
-        }
-
-        return (string)($this->fees()->get()->sum(fn($fee) => (string)($fee->amount ?? '0.0000')) ?? '0.0000');
-    }
-
-    private function calculateTotalCost(): string
-    {
-        $this->load(['items.product']);
-
-        $totalCost = '0.0000';
-
-        foreach ($this->items as $item) {
-            $itemCost = (string)($item->unit_cost ?? '0.0000');
-
-            if (bccomp($itemCost, '0.0000', 4) === 0 && $item->product) {
-                $itemCost = (string)($item->product->cost ?? '0.0000');
-            }
-
-            $itemQty = (string)($item->quantity ?? '0.0000');
-            $totalCost = bcadd($totalCost, bcmul($itemCost, $itemQty, 4), 4);
-        }
-
-        return $totalCost;
-    }
+	
+	/**
+	 * 計算所有費用的總和
+	 */
+	public function calculateTotalFees(): string
+	{
+		$total = '0.0000';
+		$feeTypes = config('business.fee_types', []);
+    
+		foreach ($feeTypes as $feeType => $config) {
+			// ✅ 只計算賣家費用
+			if (($config['target'] ?? '') !== 'seller') {
+				continue;
+			}
+			
+			$amount = $this->getFeeTotal($feeType);
+			if (bccomp($amount, '0', 4) !== 0) {
+				$total = bcadd($total, $amount, 4);
+			}
+		}
+		
+		return $total;
+	}	
 
     // =========================================================================
     // SECTION: 動態科目解析（專屬於 Sale）
@@ -866,46 +941,22 @@ class Sale extends Model
         return $result;
     }
 
-    private function resolvePaymentAccount(): string
-    {
-        $channel = $this->getChannelCode();
-        $payment = $this->payment_method ?? 'default';
-        
-        info('Resolving payment account', [
-            'sale_id' => $this->id,
-            'channel' => $channel,
-            'payment' => $payment,
-        ]);
-        
-        $paymentAccount = config("business.payment_accounts.{$payment}");
-        if ($paymentAccount) {
-            return $paymentAccount;
-        }
+	/**
+	 * 解析付款帳戶（供動態科目使用）
+	 */
+	private function resolvePaymentAccount(): string
+	{
+		return $this->getPaymentAccount();
+	}
 
-        $channelReceivables = config("business.accounting_accounts.receivables.{$channel}");
-        if ($channelReceivables && isset($channelReceivables[$payment])) {
-            return $channelReceivables[$payment];
-        }
-
-        if ($channelReceivables && isset($channelReceivables['default'])) {
-            return $channelReceivables['default'];
-        }
-
-        return config('business.accounting_accounts.receivables.default', '1131');
-    }
-
-    private function resolveRevenueAccount(): string
-    {
-        $channel = $this->getChannelCode();
-
-        return match($channel) {
-            'shopee'   => '500102',
-            'facebook' => '500103',
-            'retail'   => '500101',
-            default    => '500101',
-        };
-    }
-
+	/**
+	 * 解析收入帳戶（供動態科目使用）
+	 */
+	private function resolveRevenueAccount(): string
+	{
+		return $this->getRevenueAccount();
+	}
+	
     private function resolveCostAccount(): string
     {
         return config('business.accounting_accounts.cost.cost_of_goods_sold', '5401');

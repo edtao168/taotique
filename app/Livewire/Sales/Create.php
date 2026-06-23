@@ -54,7 +54,7 @@ class Create extends Component
 
     public function mount(?Sale $sale = null)
     {
-        $this->stockoutWhenSold = Setting::getBool('so_auto_stock_out');
+        $this->stockoutWhenSold = false;
         
         // 初始化動態費用欄位
         foreach (config('business.fee_types', []) as $key => $config) {
@@ -177,7 +177,6 @@ class Create extends Component
             $subtotal = bcadd($subtotal, $lineTotal, 4);
         }
 
-        //$this->items_subtotal = $subtotal;
         $this->form['subtotal'] = $subtotal;
 		$sellerDiscount = (string)($this->form['seller_discount'] ?? '0.0000');
 		$adjustedSubtotal = bcsub($subtotal, $sellerDiscount, 4);
@@ -206,12 +205,14 @@ class Create extends Component
 					$cTotal = $isAdd ? bcadd($cTotal, $val, 4) : bcsub($cTotal, $val, 4);
 					$sNet = $isAdd ? bcadd($sNet, $val, 4) : bcsub($sNet, $val, 4);
 					break;
+				case 'revenue_adjustment':
+                // 收入調整：只影響買家實付（因為是從收入中扣除）
+                $cTotal = $isAdd ? bcadd($cTotal, $val, 4) : bcsub($cTotal, $val, 4);
+                // 不影響賣家實收（因為這是收入抵減，不是費用）
+                break;
 			}
         }
-        
-        //$this->customer_total = $cTotal;
-        //$this->final_net_amount = $sNet;
-        
+
         $this->form['customer_total'] = $cTotal;
         $this->form['final_net_amount'] = $sNet;
     }
@@ -369,12 +370,6 @@ class Create extends Component
 							'note'     => $config['name'] ?? $feeType,
 						]);
 					}
-				}
-
-				// 5. 【直接呼叫厚 Model 核心】優雅、內聚、絕不重複
-				if ($this->stockoutWhenSold) {
-					// 將設定與舊數量快照直接傳入 Model 執行
-					$currentSale->processStockOut($allowNegative, $oldItemsQty);
 				}
 			});
 

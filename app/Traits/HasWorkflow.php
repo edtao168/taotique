@@ -1,8 +1,9 @@
-<?php // app/Traits/HasWorkflow.php
+<?php
+// app/Traits/HasWorkflow.php
 
 namespace App\Traits;
 
-use App\Enums\WorkflowStatus;
+use Illuminate\Support\Facades\Log;
 
 trait HasWorkflow
 {
@@ -53,25 +54,96 @@ trait HasWorkflow
     {
         return $this->status?->isFinalized() ?? false;
     }
-	
-	/**
-     * 改變狀態
+
+    /**
+     * 狀態轉換
      */
-    public function setStatus(string $newStatus, ?string $event = null): void
+    public function transitionTo(string $newStatus, string $event, $actor = null, array $metadata = []): void
     {
         $oldStatus = $this->status;
         
+        // 檢查是否可轉換
+        if (!$this->canTransition($oldStatus, $newStatus, $event)) {
+            $fromLabel = $oldStatus?->label() ?? '未知';
+            $toLabel = $this->getStatusLabel($newStatus);
+            throw new \RuntimeException("不允許從 {$fromLabel} 轉換到 {$toLabel}");
+        }
+        
+        // 執行轉換
         $this->status = $newStatus;
         $this->save();
 
-        // 如果需要記錄歷史，可以在這裡加
-        // 如果不需要，這行刪掉也沒關係
         Log::info('狀態已變更', [
             'model' => static::class,
             'id' => $this->id,
-            'from' => $oldStatus,
+            'from' => $oldStatus?->value,
             'to' => $newStatus,
             'event' => $event,
+            'actor' => $actor?->id ?? $actor,
+            'metadata' => $metadata,
         ]);
     }
+
+    /**
+     * 檢查是否可轉換
+     */
+    protected function canTransition($from, string $to, string $event): bool
+    {
+        // 如果 $from 是 Enum，取其 value
+        $fromValue = $from instanceof \UnitEnum ? $from->value : $from;
+        info('canTransition 檢查', [
+        'from' => $fromValue,
+        'to' => $to,
+        'event' => $event,
+        'rules' => $this->getTransitionRules(),
+    ]);
+        $rules = $this->getTransitionRules();
+        
+        foreach ($rules as $rule) {
+            if ($rule['from'] === $fromValue && $rule['to'] === $to) {
+                if (!isset($rule['event']) || $rule['event'] === $event) {
+                    return true;
+                }
+            }
+        }
+        
+        return false;
+    }
+
+    /**
+     * 取得可用的操作
+     */
+    public function getAvailableActionsAttribute(): array
+    {
+        $actions = [];
+        $rules = $this->getTransitionRules();
+        $currentValue = $this->status instanceof \UnitEnum ? $this->status->value : $this->status;
+        
+        foreach ($rules as $rule) {
+            if ($rule['from'] === $currentValue) {
+                $actions[$rule['event']] = $rule['label'] ?? $rule['event'];
+            }
+        }
+        
+        return $actions;
+    }
+
+    /**
+     * 輔助方法：取得狀態標籤
+     */
+    protected function getStatusLabel(string $status): string
+    {
+        $enumClass = static::getStatusEnumClass();
+        return $enumClass::tryFrom($status)?->label() ?? $status;
+    }
+
+    /**
+     * 取得對應的 Enum class（子類必須實作）
+     */
+    abstract protected static function getStatusEnumClass(): string;
+
+    /**
+     * 定義轉換規則（子類必須實作）
+     */
+    abstract protected function getTransitionRules(): array;
 }
