@@ -2,6 +2,7 @@
 
 namespace App\Livewire\Purchases;
 
+use App\Enums\WorkflowStatus;
 use App\Models\Inventory;
 use App\Models\Product;
 use App\Models\Purchase;
@@ -49,8 +50,6 @@ class Create extends Component
 			$this->purchased_at = $purchase->purchased_at->format('Y-m-d');
 			$this->currency = $purchase->currency;
 			$this->exchange_rate = $purchase->exchange_rate;
-
-			// 【修正】費用數據載入：確保欄位對應正確且不歸零
 			$this->shipping_fee = (string) ($purchase->shipping_fee ?? '0.0000');
 			$this->discount = (string) ($purchase->discount ?? '0.0000');
 			$this->tax = (string) ($purchase->tax ?? '0.0000');
@@ -192,10 +191,8 @@ class Create extends Component
 
 		try {
 			DB::transaction(function () {
-				// 1. 取得全域設定：是否自動入庫
 				$autoStockIn = Setting::getBool('po_auto_stock_in', true);
 
-				// 2. 準備主表資料 (包含各項費用)
 				$purchaseData = [
 					'supplier_id'   => $this->supplier_id,
 					'warehouse_id'  => $this->warehouse_id,
@@ -208,15 +205,17 @@ class Create extends Component
 					'discount'      => $this->discount,
 					'purchased_at'  => $this->purchased_at,
 					'remark'        => $this->remark,
-					'subtotal'      => $this->subTotal, // 來自 Computed 屬性
-					'total_amount'  => $this->totalAmount, // 來自 Computed 屬性
-					'total_twd'     => $this->totalTwd, // 來自 Computed 屬性
+					'subtotal'      => $this->subTotal,
+					'total_amount'  => $this->totalAmount,
+					'total_base'    => $this->totalBase,
+					'status'        => $autoStockIn 
+						? WorkflowStatus::COMPLETED->value
+						: WorkflowStatus::DRAFT->value,
 				];
 
 				if ($this->isEdit && $this->purchase) {
-					// 編輯模式：檢查是否已過帳
-					if ($this->purchase->stocked_in_at) {
-						throw new \Exception("此單據已入庫過帳，不允許修改。請執行退貨或反過帳程序。");
+					if (!$this->purchase->isEditable()) {
+						throw new \Exception("此單據狀態為「{$this->purchase->status_label}」，不允許修改。");
 					}
 					
 					$currentPurchase = Purchase::where('id', $this->purchase->id)->lockForUpdate()->first();
@@ -224,27 +223,28 @@ class Create extends Component
 					$currentPurchase->items()->delete();
 					$msg = "採購單 {$currentPurchase->purchase_number} 修改成功";
 				} else {
-					// 新增模式
 					$purchaseData['purchase_number'] = $this->purchase_number;
 					$currentPurchase = Purchase::create($purchaseData);
 					$msg = "採購單 {$currentPurchase->purchase_number} 建立成功";
 				}
 
-				// 3. 處理明細與入庫
+				// ✅ 處理明細 - 確保所有欄位都有值
 				if ($autoStockIn) {
-					// 自動入庫：呼叫模型層的厚邏輯（處理 Inventory、WeightedAverageCost、stocked_in_at）
 					$currentPurchase->processInbound($this->items);
 					$msg .= "並完成入庫過帳";
 				} else {
-					// 僅存檔：純粹記錄明細 Snapshot
 					foreach ($this->items as $item) {
+						// ✅ 先計算 cost_base 和 subtotal_base
+						$costBase = bcmul($item['foreign_price'], $this->exchange_rate, 4);
+						$subtotalBase = bcmul($costBase, $item['quantity'], 4);
+						
 						$currentPurchase->items()->create([
 							'product_id'    => $item['product_id'],
 							'warehouse_id'  => $item['warehouse_id'],
 							'quantity'      => $item['quantity'],
 							'foreign_price' => $item['foreign_price'],
-							'cost_twd'      => bcmul($item['foreign_price'], $this->exchange_rate, 4),
-							'subtotal_twd'  => bcmul(bcmul($item['foreign_price'], $this->exchange_rate, 4), $item['quantity'], 4),
+							'cost_base'     => $costBase,
+							'subtotal_base' => $subtotalBase,
 						]);
 					}
 					$msg .= " (待入庫)";
@@ -256,6 +256,12 @@ class Create extends Component
 			$this->error('儲存失敗：' . $e->getMessage());
 		}
 	}
+	
+    #[Computed]
+    public function totalBase(): string
+    {
+        return bcmul($this->totalAmount, $this->exchange_rate ?: 0, 4);
+    }
     
     /**
      * 
@@ -346,16 +352,6 @@ class Create extends Component
 		return bcsub($sum, $this->discount ?: 0, 4);
 	}
 
-	/**
-	 * 即時計算本幣總額 (TWD)
-	 */
-	#[Computed]
-	public function totalTwd(): string
-	{
-		// totalAmount * exchange_rate
-		return bcmul($this->totalAmount, $this->exchange_rate ?: 0, 4);
-	}
-	
 	/**
      * 
      */

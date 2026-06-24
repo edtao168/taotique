@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\WorkflowStatus;
 use App\Models\Account;
 use App\Models\Inventory;
 use App\Models\Product;
@@ -12,6 +13,7 @@ use App\Models\Supplier;
 use App\Models\User;
 use App\Models\Warehouse;
 use App\Traits\HasAccounting;
+use App\Traits\HasWorkflow;
 use Exception;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -20,11 +22,12 @@ use Illuminate\Support\Facades\DB;
 
 class Purchase extends Model
 {
-    use HasAccounting;
+    use HasAccounting, HasWorkflow;
 	
 	protected $fillable = [
         'shop_id',
 		'purchase_number',
+		'status',
         'supplier_id',
 		'payment_method',
         'user_id',
@@ -37,7 +40,7 @@ class Purchase extends Model
         'other_fees',
         'discount',
         'total_amount',
-        'total_twd',
+        'total_base',
         'purchased_at',
 		'stocked_in_at',
         'remark'
@@ -50,7 +53,7 @@ class Purchase extends Model
 			'purchased_at' 	=> 'datetime',
 			'stocked_in_at' => 'datetime',
             'exchange_rate' => 'decimal:4',
-            'total_twd' 	=> 'decimal:4',
+            'total_base' 	=> 'decimal:4',
 			'subtotal' 		=> 'decimal:4',
             'total_amount' 	=> 'decimal:4',
 			'shipping_fee'  => 'decimal:4',
@@ -58,15 +61,131 @@ class Purchase extends Model
             'other_fees'    => 'decimal:4',
             'discount'      => 'decimal:4',
             'total_amount'  => 'decimal:4',
+			'status'        => WorkflowStatus::class,
         ];
     }
 
+    // ============================================
+    // 實作 HasWorkflow 的抽象方法
+    // ============================================
+    
+    protected static function getStatusEnumClass(): string
+    {
+        return WorkflowStatus::class;
+    }
+
+    /**
+     * 定義狀態轉換規則（一人店，跳過 pending）
+     */
+    protected function getTransitionRules(): array
+    {
+        return [
+            // ===== 草稿 → 審核通過（一人店捷徑） =====
+            [
+                'from' => WorkflowStatus::DRAFT->value,
+                'to' => WorkflowStatus::APPROVED->value,
+                'event' => 'approve',
+                'label' => '審核通過',
+            ],
+            
+            // ===== 審核通過 → 入庫完成 =====
+            [
+                'from' => WorkflowStatus::APPROVED->value,
+                'to' => WorkflowStatus::COMPLETED->value,
+                'event' => 'stock_in',
+                'label' => '完成入庫',
+            ],
+            
+            // ===== 草稿 → 完成（自動入庫捷徑） =====
+            [
+                'from' => WorkflowStatus::DRAFT->value,
+                'to' => WorkflowStatus::COMPLETED->value,
+                'event' => 'auto_stock_in',
+                'label' => '自動入庫',
+            ],
+            
+            // ===== 取消 =====
+            [
+                'from' => WorkflowStatus::DRAFT->value,
+                'to' => WorkflowStatus::CANCELLED->value,
+                'event' => 'cancel',
+                'label' => '取消單據',
+            ],
+            [
+                'from' => WorkflowStatus::APPROVED->value,
+                'to' => WorkflowStatus::CANCELLED->value,
+                'event' => 'cancel',
+                'label' => '取消單據',
+            ],
+        ];
+    }
+	
+	// ============================================
+    // 業務方法
+    // ============================================
+
+    /**
+     * 審核採購單（一人店使用）
+     */
+    public function approve(User $actor): void
+    {
+        if ($this->status !== WorkflowStatus::DRAFT) {
+            throw new \RuntimeException("目前狀態為「{$this->status->label()}」，無法審核。僅「草稿」可審核。");
+        }
+        
+        $this->transitionTo(
+            WorkflowStatus::APPROVED->value,
+            'approve',
+            $actor
+        );
+    }
+
+    /**
+     * 取消採購單
+     */
+    public function cancel(User $actor, ?string $reason = null): void
+    {
+        $allowed = [WorkflowStatus::DRAFT, WorkflowStatus::APPROVED];
+        if (!in_array($this->status, $allowed)) {
+            throw new \RuntimeException("目前狀態為「{$this->status->label()}」，無法取消。");
+        }
+        
+        // 已入庫不能取消
+        if ($this->stocked_in_at) {
+            throw new \RuntimeException('已入庫的採購單無法取消，請走退貨流程');
+        }
+        
+        // 已有退貨不能取消
+        if ($this->hasReturnRecords()) {
+            throw new \RuntimeException('已有退貨紀錄的採購單無法取消');
+        }
+        
+        $this->transitionTo(
+            WorkflowStatus::CANCELLED->value,
+            'cancel',
+            $actor,
+            ['reason' => $reason]
+        );
+    }
+	
+	// =============================================
+	
 	/**
      * 判定採購單是否已鎖定 (不允許任何修改)
+	 * 
+	 * 鎖定條件：
+	 * 1. 有進行中的退貨記錄
+	 * 2. 已是最終狀態（已完成/已取消等）
      */
 	public function isLocked(): bool
 	{
-		return $this->returns()->whereIn('status', ['pending', 'approved', 'completed'])->exists();
+		// 業務鎖定：有退貨記錄
+		if ($this->hasReturnRecords()) {
+			return true;
+		}
+		
+		// 工作流鎖定：最終狀態
+		return $this->isFinalized();
 	}
 	
 	/**
@@ -84,9 +203,9 @@ class Purchase extends Model
      * 判斷單據是否允許異動
      */
     public function canBeModified(): bool
-    {
-        return !$this->hasReturnRecords();
-    }
+	{
+		return $this->isEditable() && !$this->hasReturnRecords();
+	}
 	
 	// =========================================================================
 	// SECTION: 會計自動規則對齊介面
@@ -153,7 +272,7 @@ class Purchase extends Model
 		$total = bcadd($total, $this->other_fees, 4);
 		
 		$this->total_amount = $total;
-		$this->total_twd = bcmul($this->total_amount, $this->exchange_rate, 4);
+		$this->total_base = bcmul($this->total_amount, $this->exchange_rate, 4);
 	}
 
     /**
@@ -202,10 +321,10 @@ class Purchase extends Model
 
                 // 3. 🎯 成本計算：外幣單價 × 匯率 = 本幣採購成本
 				$foreignPrice = (string)($item->foreign_price ?? $item->price ?? '0.0000');
-				$currentCostTwd = bcmul($foreignPrice, $rate, 4);
+				$currentCostBase = bcmul($foreignPrice, $rate, 4);
 				
 				// 🛡️ 快照成本到 purchase_item 欄位（供未來追溯）
-				//$item->unit_cost = $currentCostTwd;
+				//$item->unit_cost = $currentCostBase;
 				//$item->save();
 
 				$oldQty = (string)($inventory->quantity ?? '0');
@@ -216,16 +335,18 @@ class Purchase extends Model
 
                 if (bccomp($totalQty, '0', 4) > 0) {
                     $oldTotalAmount = bcmul($oldQty, $oldCost, 4);
-                    $newTotalAmount = bcmul($newQty, $currentCostTwd, 4);
+                    $newTotalAmount = bcmul($newQty, $currentCostBase, 4);
                     $combinedAmount = bcadd($oldTotalAmount, $newTotalAmount, 4);
                     $newWeightedCost = bcdiv($combinedAmount, $totalQty, 4);
                 } else {
-                    $newWeightedCost = $currentCostTwd;
+                    $newWeightedCost = $currentCostBase;
                 }
 
                 $inventory->quantity = $totalQty;
                 $inventory->cost = $newWeightedCost;
                 $inventory->save();
+				// 將新的加權平均成本同步到 Product 主表
+				$product->updateWeightedAverageCost($newQty, $currentCostBase);
             }
 
             // 4. 變更採購單完工狀態快照
@@ -247,9 +368,25 @@ class Purchase extends Model
 				throw new Exception("會計過帳失敗：請檢查 {$eventType} 規則配置。");
 			}
 			
+			// 使用 workflow 轉為 completed
+			if ($this->status === WorkflowStatus::DRAFT) {
+				$this->transitionTo(
+					WorkflowStatus::APPROVED->value,
+					'approve',
+					auth()->user()
+				);
+			}
+			
+			$this->transitionTo(
+				WorkflowStatus::COMPLETED->value,
+				'stock_in',
+				auth()->user(),
+				['payment_mode' => $paymentMode, 'journal_id' => $journal->id]
+			);
+			
 			$this->stocked_in_at = now();
 			$this->save();
-		
+			
 			logger("採購單入庫完成", [
 				'purchase_id'		=> $this->id,
 				'purchase_number'	=> $this->purchase_number,
@@ -316,7 +453,7 @@ class Purchase extends Model
             'other_fees'   => $this->other_fees ?? '0.0000',
             'discount'     => $this->discount ?? '0.0000',
             'total_amount' => $this->total_amount ?? '0.0000',
-            'total_twd'    => $this->total_twd ?? '0.0000',
+            'total_base'    => $this->total_base ?? '0.0000',
             default        => $this->getAttribute($amountSource) ?? '0.0000',
         };
     }

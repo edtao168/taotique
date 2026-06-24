@@ -223,7 +223,7 @@
 					<div class="p-5 bg-primary/10 rounded-xl border border-primary/20">
 						<div class="text-[13px] text-primary font-bold uppercase tracking-widest mb-1">估計庫存成本 (TWD)</div>
 						<div class="text-3xl font-black text-base-content font-mono tracking-tighter">
-							NT$ {{ number_format($this->totalTwd, 0) }}
+							NT$ {{ number_format($this->totalBase, 0) }}
 						</div>
 					</div>
 

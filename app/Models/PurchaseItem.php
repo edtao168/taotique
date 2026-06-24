@@ -16,8 +16,8 @@ class PurchaseItem extends Model
         'warehouse_id',
         'quantity',
         'foreign_price',
-        'cost_twd',
-        'subtotal_twd',
+        'cost_base',
+        'subtotal_base',
     ];
 
     /**
@@ -28,8 +28,8 @@ class PurchaseItem extends Model
         return [
             'quantity'      => 'decimal:4',
             'foreign_price' => 'decimal:4',
-            'cost_twd'      => 'decimal:4',
-            'subtotal_twd'  => 'decimal:4',			
+            'cost_base'     => 'decimal:4',
+            'subtotal_base' => 'decimal:4',			
         ];
     }
 
