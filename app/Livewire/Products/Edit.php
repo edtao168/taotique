@@ -43,22 +43,52 @@ class Edit extends Component
         $this->is_active = $this->product->is_active;
     }
 
-    public function updatedTempMedia()
-    {
-        if (!empty($this->temp_media)) {
-			$this->isUploading = true;
-			
-            foreach ($this->temp_media as $file) {
-                if ($file instanceof \Livewire\Features\SupportFileUploads\TemporaryUploadedFile) {
-                    $this->new_media[] = $file;
-                }
-            }
-            $this->temp_media = [];
-            $this->dispatch('temp-media-merged');
-			
-			$this->isUploading = false;
-        }
-    }
+	public function updatedTempMedia()
+	{
+		// 防止空值或非陣列
+		if (empty($this->temp_media)) {
+			return;
+		}
+
+		$files = is_array($this->temp_media) ? $this->temp_media : [$this->temp_media];
+		$files = array_filter($files);
+
+		if (empty($files)) {
+			return;
+		}
+
+		// 檢查檔案大小（手機拍攝的圖片可能較大）
+		foreach ($files as $file) {
+			if ($file instanceof \Livewire\Features\SupportFileUploads\TemporaryUploadedFile) {
+				$maxSize = 20 * 1024 * 1024; // 20MB
+				if ($file->getSize() > $maxSize) {
+					$this->error('檔案 ' . $file->getClientOriginalName() . ' 超過 20MB 限制');
+					$this->reset('temp_media');
+					return;
+				}
+			}
+		}
+
+		try {
+			// 呼叫 Trait 中的上傳方法
+			$this->uploadMedia($this->product, $files);
+
+			// 清空暫存
+			$this->reset('temp_media');
+
+			// 重新整理產品資料
+			$this->product->refresh();
+
+			$this->success('媒體上傳成功！');
+		} catch (\Exception $e) {
+			\Log::error('媒體上傳失敗', [
+				'product_id' => $this->product->id,
+				'error' => $e->getMessage(),
+			]);
+			$this->error('上傳失敗：' . $e->getMessage());
+			$this->reset('temp_media');
+		}
+	}
 
     protected function rules()
     {
