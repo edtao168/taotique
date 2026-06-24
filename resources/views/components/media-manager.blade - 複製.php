@@ -69,32 +69,23 @@
     </div>
 
     @if($editable)
-		<div x-data="{ dragging: false }" 
-			 x-on:dragenter.prevent="dragging = true" 
-			 x-on:dragover.prevent="dragging = true" 
-			 x-on:dragleave.prevent="dragging = false" 
-			 x-on:drop.prevent="dragging = false; let files = Array.from($event.dataTransfer.files);
-				if(files.length > 0) {
-					@this.uploadMultiple('temp_media', files);
-				}"
-			 @click="$refs.fileInput.click()"
-			 @touchstart.prevent="$refs.fileInput.click()"
-			 :class="dragging ? 'border-primary bg-primary/10 ring-2 ring-primary/20' : 'border-base-300'" 
-			 class="m-4 p-6 border-2 border-dashed rounded-xl text-center bg-base-100 hover:border-primary transition-all cursor-pointer group">
+    <div x-data="{ dragging: false }" 
+         x-on:dragenter.prevent="dragging = true" 
+         x-on:dragover.prevent="dragging = true" 
+         x-on:dragleave.prevent="dragging = false" 
+         x-on:drop.prevent="dragging = false; let files = Array.from($event.dataTransfer.files);
+            if(files.length > 0) {
+                @this.uploadMultiple('temp_media', files);
+            }"
+         @click="$refs.fileInput.click()" 
+         :class="dragging ? 'border-primary bg-primary/10 ring-2 ring-primary/20' : 'border-base-300'" 
+         class="m-4 p-6 border-2 border-dashed rounded-xl text-center bg-base-100 hover:border-primary transition-all cursor-pointer group">
 
-			<x-icon name="o-cloud-arrow-up" class="w-8 h-8 mx-auto mb-2 text-base-content/30 group-hover:text-primary transition-colors" />
-			<p class="text-sm font-medium text-base-content/70 group-hover:text-primary">點擊或拖曳媒體至此上傳</p>
-			<p class="text-[10px] text-base-content/40 mt-1">支援 JPG, PNG, WebP, AVIF, HEIC, MP4, MOV (最大 20MB)</p>
-			
-			{{-- ✅ input 移入同一個 Alpine 組件，確保 $refs.fileInput 可訪問 --}}
-			<input type="file" 
-				   wire:model="temp_media" 
-				   multiple 
-				   accept="image/*,video/*" 
-				   class="hidden" 
-				   x-ref="fileInput" />
-		</div>
-	@endif
+        <x-icon name="o-cloud-arrow-up" class="w-8 h-8 mx-auto mb-2 text-base-content/30 group-hover:text-primary transition-colors" />
+        <p class="text-sm font-medium text-base-content/70 group-hover:text-primary">點擊或拖曳媒體至此上傳</p>
+        <p class="text-[10px] text-base-content/40 mt-1">支援 AVIF, JPG, PNG, WebP, MP4, MOV (最大 20MB)</p>
+    </div>
+    @endif
 
     {{-- ✅ wire:key 確保 Livewire re-render 時 Alpine 重新初始化 --}}
     <div x-data="mediaGallery({
@@ -228,7 +219,15 @@
                     <span class="loading loading-spinner loading-lg text-primary"></span>
                     <p class="text-sm text-base-content/70 mt-2">正在處理媒體...</p>
                 </div>
-            </div>            
+            </div>
+
+            <input type="file" 
+                   wire:model="temp_media" 
+                   multiple 
+                   accept="image/jpeg,image/png,image/webp,image/avif,video/*" 
+                   class="hidden" 
+                   id="media-upload-input" 
+                   x-ref="fileInput" />
         </div>
     @endif
 </div>
