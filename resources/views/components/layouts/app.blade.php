@@ -52,7 +52,7 @@
 
 					{{-- 1. 採購進貨系統 --}}
 					<x-menu-sub title="採購進貨系統" icon="o-shopping-bag">
-						<x-menu-item title="新增採購入庫" icon="o-plus-circle" :link="route('purchases.create')" />
+						<x-menu-item title="新增採購單" icon="o-plus-circle" :link="route('purchases.create')" />
 						<x-menu-item title="採購進貨紀錄" icon="o-clipboard-document-list" :link="route('purchases.index')" />
 						<x-menu-item title="採購退回紀錄" icon="o-arrow-path" :link="route('purchases.returns.index')" />
 						<x-menu-item title="供應商管理" icon="o-user-group" :link="route('purchases.suppliers.index')" />
@@ -88,6 +88,7 @@
 						<x-menu-item title="日記帳流水" icon="o-book-open" :link="route('accountings.journals.index')" />
 						<x-menu-item title="會計科目表" icon="o-list-bullet" :link="route('accounts.index')" />
 						<x-menu-item title="自動過帳規則" icon="o-adjustments-horizontal" :link="route('accounting_rules.index')" />
+						<x-menu-item title="會計期間管理" icon="o-calendar-days" :link="route('accountings.periods.index')" />
 					</x-menu-sub>
 					{{-- 
 					<x-menu-separator />

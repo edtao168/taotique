@@ -39,6 +39,7 @@ use App\Livewire\Products\Edit as ProductEdit;
 use App\Livewire\Accountings\JournalCorrect;
 use App\Livewire\Accountings\JournalCreate;
 use App\Livewire\Accountings\JournalIndex;
+use App\Livewire\Accountings\PeriodManagement;
 
 // 系統設定 (Settings)
 use App\Livewire\Settings\AccountingRules\Index as AccountingRuleIndex;
@@ -112,6 +113,7 @@ Route::middleware(['auth'])->group(function () {
 		Route::get('/journals/create', JournalCreate::class)->name('journals.create');
 		Route::get('/journals/{journal}/edit', JournalCreate::class)->name('journals.edit');
 		Route::get('/journals/{journal}/correct', JournalCorrect::class)->name('journals.correct');
+		Route::get('/periods', PeriodManagement::class)->name('periods.index');
 	});
 	
 	// --- 個人記帳 (Personal Journals) ---

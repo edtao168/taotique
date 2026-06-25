@@ -112,17 +112,15 @@ class Sale extends Model
     // =========================================================================
 	public function getCustomerTotalAttribute(): string
 	{
-		// 1. 計算折讓後金額：subtotal - seller_discount
-		// sad: subtotal_after_discount
 		$subtotal = (string) ($this->subtotal ?? '0.0000');
-		$sellerDiscount = $this->getFeeTotal('seller_discount');
-		$sad = bcsub($subtotal, $sellerDiscount, 4);
+		$sad = $subtotal;  // 從 subtotal 開始
 		
-		// 2. 從 config 讀取費用類型，動態加減
 		$feeTypes = config('business.fee_types', []);
 		
 		foreach ($feeTypes as $feeType => $config) {
 			$target = $config['target'] ?? '';
+			
+			// ✅ 只處理影響 customer 的費用
 			if (!in_array($target, ['customer', 'both', 'revenue_adjustment'])) {
 				continue;
 			}
@@ -140,7 +138,7 @@ class Sale extends Model
 			}
 		}
 		
-		// 3. 加上稅金
+		// ✅ 稅金另外處理（因為 tax 的 target 通常不是 customer）
 		$tax = $this->getFeeTotal('tax_amount');
 		$sad = bcadd($sad, $tax, 4);
 		
@@ -332,9 +330,13 @@ class Sale extends Model
 		if ($this->hasReturnRecords()) {
 			throw new \Exception("銷售單 {$this->invoice_number} 已有退貨紀錄，無法出庫。");
 		}
-
-		if ($this->status === WorkflowStatus::DRAFT) {
+		
+		if (in_array($this->status, [WorkflowStatus::DRAFT, WorkflowStatus::PENDING])) {
 			$this->transitionTo('approved', 'approve', auth()->user());
+		}
+
+		if ($this->status !== WorkflowStatus::APPROVED) {
+			throw new \Exception("訂單狀態為「{$this->status->label()}」，無法出庫。僅「已審核」狀態可出庫。");
 		}
 
 		// ✅ 使用 DB::transaction 確保一致性
@@ -797,7 +799,7 @@ class Sale extends Model
 	 */
 	public function getNetRevenueAttribute(): string
 	{
-		$subtotalAfterDiscount = (string) ($this->subtotal_after_discount ?? $this->subtotal ?? '0.0000');
+		$subtotalAfterDiscount = $this->subtotal_after_discount;
 		$platformCoupon = $this->getFeeTotal('platform_coupon');
 		
 		$result = bcsub($subtotalAfterDiscount, $platformCoupon, 4);
@@ -809,6 +811,16 @@ class Sale extends Model
         'result' => $result,
     ]);
 		return bcsub($subtotalAfterDiscount, $platformCoupon, 4);
+	}
+	
+	/**
+	 * 取得折讓後小計（subtotal - seller_discount）
+	 */
+	public function getSubtotalAfterDiscountAttribute(): string
+	{
+		$subtotal = (string) ($this->subtotal ?? '0.0000');
+		$sellerDiscount = $this->getFeeTotal('seller_discount');
+		return bcsub($subtotal, $sellerDiscount, 4);
 	}
 
     // =========================================================================
