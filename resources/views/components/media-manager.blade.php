@@ -78,7 +78,6 @@
 					@this.uploadMultiple('temp_media', files);
 				}"
 			 @click="$refs.fileInput.click()"
-			 @touchstart.prevent="$refs.fileInput.click()"
 			 :class="dragging ? 'border-primary bg-primary/10 ring-2 ring-primary/20' : 'border-base-300'" 
 			 class="m-4 p-6 border-2 border-dashed rounded-xl text-center bg-base-100 hover:border-primary transition-all cursor-pointer group">
 
@@ -91,7 +90,7 @@
 				   wire:model="temp_media" 
 				   multiple 
 				   accept="image/*,video/*" 
-				   class="hidden" 
+				   class="sr-only" 
 				   x-ref="fileInput" />
 		</div>
 	@endif
