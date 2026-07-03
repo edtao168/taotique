@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Traits\HasAccountAndDynamicSearch;
 use App\Traits\HasAccounting;
 use App\Traits\HasShop;
+use App\Traits\HasWorkflow;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -13,7 +14,10 @@ use Illuminate\Support\Facades\Log;
 
 class SalesReturn extends Model
 {
-    use HasShop, HasAccounting, HasAccountAndDynamicSearch;
+    use HasShop,
+		HasAccounting,
+		HasAccountAndDynamicSearch,
+		HasWorkflow;
 
     protected $table = 'sales_returns';
 

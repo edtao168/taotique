@@ -82,8 +82,7 @@ class PeriodManagement extends Component
             // 檢查未結算的非現金訂單
             $unsettledSales = Sale::whereMonth('sold_at', $month)
                 ->whereYear('sold_at', $year)
-                ->where('payment_method', '!=', 'cash')
-                ->where('status', '!=', WorkflowStatus::SETTLED->value)
+                ->needsSettlement()
                 ->count();
 
             if ($unsettledSales > 0) {

@@ -55,6 +55,96 @@ trait HasWorkflow
         return $this->status?->isFinalized() ?? false;
     }
 
+    // =========================================================================
+    // SECTION: 🆕 結算相關方法
+    // =========================================================================
+
+    /**
+     * 取得需要結算的付款方式
+     * 可在子類別中覆寫
+     */
+    protected function getNonCashPaymentMethods(): array
+    {
+        return config('business.non_cash_payment_methods', [
+            'transfer',
+            'bank_transfer',
+            'credit_card',
+            'shopee_pay',
+            'line_pay',
+            'taiwan_pay',
+        ]);
+    }
+
+    /**
+     * 取得結算排除的狀態（這些狀態不需要結算）
+     * 可在子類別中覆寫
+     */
+    protected function getSettlementExcludedStatuses(): array
+    {
+        $enumClass = static::getStatusEnumClass();
+        
+        return [
+            $enumClass::SETTLED->value,
+            $enumClass::COMPLETED->value,
+            $enumClass::CANCELLED->value,
+            $enumClass::REJECTED->value,
+        ];
+    }
+
+    /**
+     * 判斷是否需要結算
+     */
+    public function needsSettlement(): bool
+    {
+        // 1. 檢查是否有 payment_method 屬性
+        if (!property_exists($this, 'payment_method')) {
+            return false;
+        }
+
+        // 2. 現金不需要結算
+        if ($this->payment_method === 'cash') {
+            return false;
+        }
+
+        // 3. 檢查是否為非現金付款方式
+        if (!in_array($this->payment_method, $this->getNonCashPaymentMethods())) {
+            return false;
+        }
+
+        // 4. 最終狀態不需要結算
+        if ($this->isFinalized()) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * 檢查是否已完成結算
+     */
+    public function isSettled(): bool
+    {
+        // 現金視為已結算
+        if ($this->payment_method === 'cash') {
+            return true;
+        }
+
+        $enumClass = static::getStatusEnumClass();
+        return $this->status === $enumClass::SETTLED;
+    }
+
+    /**
+     * Scope: 查詢需要結算的記錄
+     */
+    public function scopeNeedsSettlement($query)
+    {
+        $nonCashMethods = $this->getNonCashPaymentMethods();
+        $excludedStatuses = $this->getSettlementExcludedStatuses();
+
+        return $query->whereIn('payment_method', $nonCashMethods)
+                     ->whereNotIn('status', $excludedStatuses);
+    }
+	
     /**
      * 狀態轉換
      */
@@ -73,7 +163,7 @@ trait HasWorkflow
         $this->status = $newStatus;
         $this->save();
 
-        Log::info('狀態已變更', [
+        info('狀態已變更', [
             'model' => static::class,
             'id' => $this->id,
             'from' => $oldStatus?->value,
