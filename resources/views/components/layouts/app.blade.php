@@ -6,16 +6,25 @@
 		<meta name="csrf-token" content="{{ csrf_token() }}">
 		<title>{{ config('app.name', '陶老闆IMS') }}</title>
 		
-		<!-- Fonts -->
+		<link rel="icon" type="image/png" sizes="32x32" href="{{ asset('favicon.ico') }}">
+		<link rel="shortcut icon" href="{{ asset('favicon.ico') }}" type="image/x-icon">
+
+		<link rel="apple-touch-icon" sizes="180x180" href="{{ asset('web-app-manifest-192x192.png') }}">
+		<link rel="mask-icon" href="{{ asset('logo.png') }}" color="#4f46e5">
+
+		<meta name="msapplication-TileColor" content="#4f46e5">
+		<meta name="msapplication-TileImage" content="{{ asset('web-app-manifest-192x192.png') }}">
+		<meta name="application-name" content="陶老闆進銷存">
+
+		<link rel="manifest" href="{{ asset('manifest.json') }}">
+		<meta name="theme-color" content="#4f46e5">
 		<link rel="preconnect" href="https://fonts.bunny.net">
 		<link href="https://fonts.bunny.net/css?family=figtree:400,500,600&display=swap" rel="stylesheet" />
 		
-		<!-- Vite -->
 		@vite(['resources/css/app.css', 'resources/js/app.js'])
 		
 		@livewireStyles
 		
-		<!-- Chart.js -->
 		<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>	
 		
 		@stack('styles')
@@ -75,7 +84,7 @@
 						<x-menu-item title="庫存總覽" icon="o-magnifying-glass" :link="route('inventories.index')" />
 						<x-menu-item title="倉庫調撥" icon="o-arrows-right-left" :link="route('inventories.transfers')" />
 						<x-menu-item title="拆裝組合作業" icon="o-beaker" :link="route('inventories.conversions.create')" />
-		<x-menu-item title="拆裝作業紀錄" icon="o-list-bullet" :link="route('inventories.conversions.index')" />
+						<x-menu-item title="拆裝作業紀錄" icon="o-list-bullet" :link="route('inventories.conversions.index')" />
 						<x-menu-item title="庫存盤點" icon="o-check-badge" :link="route('inventories.stocktakes')" />
 						<x-menu-item title="異動流水帳" icon="o-clock" :link="route('inventories.movements')" />
 					</x-menu-sub>
@@ -90,14 +99,7 @@
 						<x-menu-item title="自動過帳規則" icon="o-adjustments-horizontal" :link="route('accounting_rules.index')" />
 						<x-menu-item title="會計期間管理" icon="o-calendar-days" :link="route('accountings.periods.index')" />
 					</x-menu-sub>
-					{{-- 
-					<x-menu-separator />
 
-					<x-menu-sub title="私人記帳" icon="o-user">
-						<x-menu-item title="記一筆" icon="o-pencil-square" :link="route('personal.ledgers.create')" />
-						<x-menu-item title="流水帳" icon="o-book-open" :link="route('personal.ledgers.index')" />
-					</x-menu-sub>
-						--}}
 					<x-menu-separator />
 
 					{{-- 4. 基本資料設定 --}}
@@ -141,34 +143,29 @@
 				{{ $slot }}
 			</x-slot:content>
 		</x-main>    
-		</div>
-		<form id="logout-form" action="{{ route('logout') }}" method="POST" class="hidden">
-			@csrf
-		</form>	
-		@livewireScripts
+	</div>
+	<form id="logout-form" action="{{ route('logout') }}" method="POST" class="hidden">
+		@csrf
+	</form>	
+	@livewireScripts
 		
-		<script>
-			document.addEventListener('focusin', (e) => {
-				// 針對 type="number" 或含有特定 class 的 input 進行處理
-				if (e.target.tagName === 'INPUT' && (e.target.type === 'number' || e.target.classList.contains('font-mono'))) {
-					// 當值為 0 時清空，方便使用者直接輸入
-					if (parseFloat(e.target.value) === 0) {
-						e.target.value = '';
-					}
+	<script>
+		document.addEventListener('focusin', (e) => {
+			if (e.target.tagName === 'INPUT' && (e.target.type === 'number' || e.target.classList.contains('font-mono'))) {
+				if (parseFloat(e.target.value) === 0) {
+					e.target.value = '';
 				}
-			});
+			}
+		});
 
-			document.addEventListener('focusout', (e) => {
-				if (e.target.tagName === 'INPUT' && (e.target.type === 'number' || e.target.classList.contains('font-mono'))) {
-					// 當使用者離開且未輸入內容時，補回 0
-					if (e.target.value === '') {
-						e.target.value = '0';
-						
-						// 手動觸發 input 事件以確保 Livewire 抓取到「補回 0」的變更
-						e.target.dispatchEvent(new Event('input'));
-					}
+		document.addEventListener('focusout', (e) => {
+			if (e.target.tagName === 'INPUT' && (e.target.type === 'number' || e.target.classList.contains('font-mono'))) {
+				if (e.target.value === '') {
+					e.target.value = '0';
+					e.target.dispatchEvent(new Event('input'));
 				}
-			});
-		</script>
+			}
+		});
+	</script>
 	</body>
 </html>

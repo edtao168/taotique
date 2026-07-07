@@ -1,0 +1,44 @@
+{
+    "name": "陶老闆零售進銷存系統",
+    "short_name": "陶老闆進銷存",
+    "description": "小型進銷存、日記賬管理系統",
+    "start_url": "/",
+    "display": "standalone",
+    "display_override": ["window-controls-overlay", "minimal-ui"],
+    "background_color": "#ffffff",
+    "theme_color": "#4f46e5",
+    "orientation": "any",
+    "icons": [
+        {
+            "src": "/favicon.ico",
+            "sizes": "32x32",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "/web-app-manifest-192x192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "/web-app-manifest-512x512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "/web-app-manifest-512x512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "maskable"
+        }
+    ],
+    "shortcuts": [
+        {
+            "name": "商品庫存查詢",
+            "url": "/products",
+            "description": "即時查看商品與加權平均成本"
+        }
+    ]
+}
