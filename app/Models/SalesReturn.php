@@ -53,6 +53,37 @@ class SalesReturn extends Model
     ];
 
     private const DECIMAL_PRECISION = 4;
+	
+	// =========================================================================
+	// SECTION: 🆕 工作流相關方法（實作 HasWorkflow Trait 的要求）
+	// =========================================================================
+
+	/**
+	 * 取得狀態列舉類別
+	 */
+	protected static function getStatusEnumClass(): string
+	{
+		return \App\Enums\WorkflowStatus::class;
+	}
+
+	/**
+	 * 定義狀態轉換規則
+	 */
+	protected function getTransitionRules(): array
+	{
+		return [
+			// 審核流程
+			['from' => 'pending', 'to' => 'approved', 'event' => 'approve', 'label' => '審核通過'],
+			['from' => 'draft', 'to' => 'approved', 'event' => 'approve', 'label' => '審核通過'],
+			
+			// 過帳/結案
+			['from' => 'approved', 'to' => 'completed', 'event' => 'post', 'label' => '退貨過帳'],
+			
+			// 取消
+			['from' => 'pending', 'to' => 'cancelled', 'event' => 'cancel', 'label' => '取消退貨'],
+			['from' => 'draft', 'to' => 'cancelled', 'event' => 'cancel', 'label' => '取消退貨'],
+		];
+	}
 
     // =========================================================================
     // SECTION: Trait 所需實作方法
