@@ -73,6 +73,7 @@ class Index extends Component
         ])->toArray();
         
         $this->myModal = true;
+		$this->resetErrorBag();
     }
 
     public function addLine()

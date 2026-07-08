@@ -134,8 +134,8 @@
     {{-- 新增/編輯 Modal --}}
     <x-modal wire:model="myModal" separator size="4xl" persistent>
         <x-slot:title>
-            {{ $editingItem ? '編輯規則 (#' . $editingItem . ')' : '新增規則' }}
-        </x-slot:title>
+			{{ $editingItem ? '編輯規則 (id#' . $editingItem->id . ')' : '新增規則' }}
+		</x-slot:title>
 
         <div class="space-y-4">
             <x-input label="事件類型" wire:model="event_type" :readonly="$editingItem !== null" 
