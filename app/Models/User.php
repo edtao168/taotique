@@ -107,6 +107,11 @@ class User extends Authenticatable
         return $this->hasAbility('view_cost');
     }
 	
+	public function isAdmin(): bool
+	{
+		return $this->role === 'admin' || $this->is_admin === true;
+	}
+	
 	/**
 	 * 帳號所屬的營業點
 	 */

@@ -319,6 +319,18 @@
 							/>
 						@endif
 						
+						{{-- ✅ 管理員專用：撤銷出庫（已出庫時顯示） --}}
+						@if($selectedSale->stocked_out_at && auth()->user()?->isAdmin())
+							<x-button 
+								label="撤銷出庫" 
+								icon="o-arrow-uturn-left" 
+								class="btn-error flex-1"
+								wire:click="reverseStockOut({{ $selectedSale->id }})"
+								wire:confirm="⚠️ 管理員操作：確定要撤銷此訂單的出庫嗎？這將會回補庫存並撤銷傳票！"
+								spinner 
+							/>
+						@endif
+						
 						@if($canSettle)
 							<x-button 
 								label="結算" 

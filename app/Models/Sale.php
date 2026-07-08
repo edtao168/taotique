@@ -187,6 +187,7 @@ class Sale extends Model
 			
 			// ===== 捷徑 =====
 			['from' => 'draft', 'to' => 'approved', 'event' => 'approve', 'label' => '審核通過'],
+			['from' => 'draft', 'to' => 'completed', 'event' => 'stock_out', 'label' => '過帳完成'],
 			
 			// ===== 出貨 =====
 			['from' => 'approved', 'to' => 'completed', 'event' => 'stock_out', 'label' => '出貨完成'],
@@ -321,8 +322,9 @@ class Sale extends Model
     /**
      * 執行銷售單實體出庫（對外公開方法，保持向後相容）
      */
-    public function processStockOut(bool $allowNegative = false): void
+	public function processStockOut(bool $allowNegative = false): void
 	{
+		// ✅ 前置檢查（不變更狀態）
 		if ($this->stocked_out_at) {
 			throw new \Exception("銷售單 {$this->invoice_number} 已完成出庫，請勿重複執行。");
 		}
@@ -331,94 +333,168 @@ class Sale extends Model
 			throw new \Exception("銷售單 {$this->invoice_number} 已有退貨紀錄，無法出庫。");
 		}
 		
-		if (in_array($this->status, [WorkflowStatus::DRAFT, WorkflowStatus::PENDING])) {
-			$this->transitionTo('approved', 'approve', auth()->user());
+		// ✅ 只允許草稿或待審核狀態執行過帳
+		if (!in_array($this->status, [WorkflowStatus::DRAFT, WorkflowStatus::PENDING])) {
+			throw new \Exception("訂單狀態為「{$this->status->label()}」，無法過帳。僅「草稿」或「待審核」狀態可過帳。");
 		}
 
-		if ($this->status !== WorkflowStatus::APPROVED) {
-			throw new \Exception("訂單狀態為「{$this->status->label()}」，無法出庫。僅「已審核」狀態可出庫。");
-		}
+		// ✅ 驗證過帳規則是否存在
+		$this->validateAccountingRules();
 
-		// ✅ 使用 DB::transaction 確保一致性
+		// ✅ 所有檢查通過後，在 Transaction 內執行
 		DB::transaction(function () use ($allowNegative) {
-			// 1. 先過帳
-			$this->processStockOutInternal($allowNegative);
+			// ============================================================
+			// 1. 執行庫存扣減
+			// ============================================================
+			$this->deductInventory($this->getCurrentItemsQuantity(), $allowNegative);
+
+			// 重新載入最新關聯數據
+			$this->fresh(['items.product', 'fees', 'channel']);
+
+			// ============================================================
+			// 2. 產生傳票（任何失敗都會 rollback）
+			// ============================================================
+			$journalRevenue = $this->postJournal('sale_revenue');
+			$journalCost = $this->postJournal('sale_cost');
+
+			$totalFees = $this->calculateTotalFees();
+			$journalFee = null;
+			if (bccomp($totalFees, '0.0000', 4) > 0) {
+				$journalFee = $this->postJournal('sale_fee');
+			}
+
+			// ============================================================
+			// 3. ✅ 確認傳票都已成功產生（防呆檢查）
+			// ============================================================
+			$this->ensureJournalsCreated([
+				'sale_revenue' => $journalRevenue,
+				'sale_cost' => $journalCost,
+				'sale_fee' => $journalFee,
+			]);
+
+			// ============================================================
+			// 4. 全部成功 → 更新出庫時間
+			// ============================================================
+			$this->update(['stocked_out_at' => now()]);
 			
-			// 2. 過帳成功後才更新狀態
+			// ============================================================
+			// 5. 狀態變更為 completed
+			// ============================================================
 			$this->transitionTo('completed', 'stock_out', auth()->user());
-		}, 3);
+			
+		}, 3); // 重試 3 次
 	}
 
-    /**
-     * 內部出庫方法（不處理狀態，只處理庫存和傳票）
-     */
-    private function processStockOutInternal(bool $allowNegative): void
+	/**
+	 * ✅ 防呆：確認傳票都已成功產生
+	 */
+	private function ensureJournalsCreated(array $journals): void
 	{
-		// ✅ 移除內層 DB::transaction（由外層 ship() 管理）
+		$errors = [];
 		
-		// 1. 執行庫存扣減
-		$this->deductInventory($this->getCurrentItemsQuantity(), $allowNegative);
+		foreach ($journals as $eventType => $journal) {
+			// sale_fee 可能為 null（沒有賣家費用）
+			if ($eventType === 'sale_fee' && $journal === null) {
+				continue;
+			}
+			
+			if (!$journal || !$journal->exists) {
+				$errors[] = "傳票 [{$eventType}] 建立失敗";
+				continue;
+			}
+			
+			// ✅ 檢查傳票是否有明細
+			$itemCount = $journal->items()->count();
+			if ($itemCount === 0) {
+				$errors[] = "傳票 [{$eventType}] 沒有明細項目";
+			}
+			
+			// ✅ 檢查傳票是否平衡
+			$debitTotal = $journal->items()->sum('debit');
+			$creditTotal = $journal->items()->sum('credit');
+			if (bccomp((string)$debitTotal, (string)$creditTotal, 4) !== 0) {
+				$errors[] = "傳票 [{$eventType}] 借貸不平衡 (借: {$debitTotal}, 貸: {$creditTotal})";
+			}
+		}
+		
+		if (!empty($errors)) {
+			// ✅ 拋出異常觸發 rollback
+			throw new \RuntimeException(
+				"傳票驗證失敗，操作已取消：\n" . implode("\n", $errors)
+			);
+		}
+	}
 
-		// 2. 重新載入最新關聯數據
-		$this->fresh(['items.product', 'fees', 'channel']); 
-
-		// 3. 產生傳票
-		$this->postJournal('sale_revenue');
-		$this->postJournal('sale_cost');
-
-		// 4. 如果有費用，產生費用傳票
+	/**
+	 * 驗證過帳規則是否存在
+	 */
+	private function validateAccountingRules(): void
+	{
+		$events = ['sale_revenue', 'sale_cost'];
+		
+		// 檢查是否有賣家費用需要過帳
 		$totalFees = $this->calculateTotalFees();
 		if (bccomp($totalFees, '0.0000', 4) > 0) {
-			$this->postJournal('sale_fee');
+			$events[] = 'sale_fee';
 		}
-
-		// 5. 更新出庫時間
-		$this->update(['stocked_out_at' => now()]);
+		
+		foreach ($events as $event) {
+			$rule = \App\Models\AccountingRule::where('event_type', $event)
+				->where('is_active', true)
+				->first();
+				
+			if (!$rule) {
+				throw new \RuntimeException("找不到已啟用的過帳規則 [{$event}]，請先設定規則再執行。");
+			}
+			
+			$lineCount = $rule->lines()->count();
+			if ($lineCount === 0) {
+				throw new \RuntimeException("過帳規則 [{$event}] 沒有設定明細行，請先設定再執行。");
+			}
+		}
 	}
 
     /**
      * 撤銷出庫（反向操作）
      */
-    public function reverseStockOut(): void
-    {
-        if (!$this->stocked_out_at) {
-            throw new \Exception("銷售單 {$this->invoice_number} 尚未出庫，無法撤銷。");
-        }
+	public function reverseStockOut(): void
+	{
+		if (!$this->stocked_out_at) {
+			throw new \Exception("銷售單 {$this->invoice_number} 尚未出庫，無法撤銷。");
+		}
 
-        if ($this->hasReturnRecords()) {
-            throw new \Exception("銷售單 {$this->invoice_number} 已有退貨紀錄，無法撤銷出庫。請走銷退流程。");
-        }
+		if ($this->hasReturnRecords()) {
+			throw new \Exception("銷售單 {$this->invoice_number} 已有退貨紀錄，無法撤銷出庫。請走銷退流程。");
+		}
 
-        DB::transaction(function () {
-            $accountingService = app(AccountingService::class);
+		DB::transaction(function () {
+			$accountingService = app(AccountingService::class);
 
-            // 1. 撤銷三份傳票（標記為 reversed）
-            $accountingService->reverseJournal('sale_revenue', $this);
-            $accountingService->reverseJournal('sale_cost', $this);
+			// 1. 撤銷傳票
+			$accountingService->reverseJournal('sale_revenue', $this);
+			$accountingService->reverseJournal('sale_cost', $this);
 
-            $totalFees = $this->calculateTotalFees();
-            if (bccomp($totalFees, '0.0000', 4) > 0) {
-                $accountingService->reverseJournal('sale_fee', $this);
-            }
+			$totalFees = $this->calculateTotalFees();
+			if (bccomp($totalFees, '0.0000', 4) > 0) {
+				$accountingService->reverseJournal('sale_fee', $this);
+			}
 
-            // 2. 回滾庫存
-            foreach ($this->items as $item) {
-                $this->restoreSingleProduct(
-                    $item->product_id,
-                    $item->warehouse_id ?? $this->warehouse_id,
-                    (float)$item->quantity
-                );
-            }
+			// 2. 回滾庫存
+			foreach ($this->items as $item) {
+				$this->restoreSingleProduct(
+					$item->product_id,
+					$item->warehouse_id ?? $this->warehouse_id,
+					(float)$item->quantity
+				);
+			}
 
-            // 3. 清除出庫狀態，回到 pending
-            $this->update([
-                'stocked_out_at' => null,
-            ]);
-            
-            // 使用 transitionTo 統一管理狀態
-            $this->transitionTo('pending', 'reverse_stock_out', auth()->user());
-        }, 3);
-    }
+			// 3. 清除出庫狀態，回到草稿
+			$this->update([
+				'stocked_out_at' => null,
+				'status' => WorkflowStatus::DRAFT->value,
+			]);
+		}, 3);
+	}
 
     /**
      * 編輯銷售單明細時的庫存多退少補調整校驗器

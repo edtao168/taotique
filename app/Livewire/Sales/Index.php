@@ -68,6 +68,39 @@ class Index extends Component
             $this->error('自動結轉失敗阻斷：' . $e->getMessage());
         }
     }
+	
+	// app/Livewire/Sales/Index.php
+
+	/**
+	 * 🚨 管理員專用：撤銷出庫
+	 */
+	public function reverseStockOut(int $saleId)
+	{
+		try {
+			// ✅ 只有管理員可以執行
+			if (!auth()->user()?->isAdmin()) {
+				throw new \Exception('只有管理員可以執行此操作');
+			}
+			
+			$sale = Sale::findOrFail($saleId);
+			
+			// ✅ 前置檢查：只有已出庫才能撤銷
+			if (!$sale->stocked_out_at) {
+				throw new \Exception('此訂單尚未出庫，無需撤銷');
+			}
+			
+			$sale->reverseStockOut();
+			
+			// 刷新選中的銷售單資料
+			$this->selectedSale = $sale->fresh(['customer', 'items.product', 'user', 'shop', 'warehouse', 'fees']);
+			$this->drawer = true; // 保持抽屜開啟顯示最新狀態
+			
+			$this->success("✅ 銷售單 {$sale->invoice_number} 已成功撤銷出庫，回到草稿狀態！");
+			
+		} catch (\Exception $e) {
+			$this->error('撤銷失敗：' . $e->getMessage());
+		}
+	}
 
     public function delete($id)
     {
