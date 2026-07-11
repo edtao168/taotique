@@ -78,6 +78,23 @@ enum AmountSource: string
     case COST_VARIANCE = 'cost_variance';
     case COST_VARIANCE_ABS = 'cost_variance_abs';
 
+    // ==============================================
+    // 🆕 結算/沖帳模組（Settlement）
+    // ==============================================
+    case SALE_SETTLE = 'sale:settle';           // 對應 DYNAMIC:sale:settle
+    case SALE_PAYMENT = 'sale:payment';         // 對應 DYNAMIC:sale:payment
+    case SALE_REVENUE = 'sale:revenue';         // 對應 DYNAMIC:sale:revenue
+    case AUTO_INVENTORY = 'auto:inventory';     // 對應 DYNAMIC:auto:inventory
+    case AUTO_COST = 'auto:cost';               // 對應 DYNAMIC:auto:cost
+    case PURCHASE_EXPENSE = 'purchase:expense'; // 對應 DYNAMIC:purchase:expense
+    case PURCHASE_PAYMENT = 'purchase:payment'; // 對應 DYNAMIC:purchase:payment
+    case SALES_RETURN_REFUND = 'sales_return:refund';  // 對應 DYNAMIC:sales_return:refund
+    case PURCHASE_RETURN_REFUND = 'purchase_return:refund'; // 對應 DYNAMIC:purchase_return:refund
+    case CONVERSION_OUTPUT = 'conversion:output'; // 對應 DYNAMIC:conversion:output
+    case CONVERSION_INPUT = 'conversion:input';   // 對應 DYNAMIC:conversion:input
+    case CONVERSION_LOSS = 'conversion:loss';     // 對應 DYNAMIC:conversion:loss
+    case CONVERSION_GAIN = 'conversion:gain';     // 對應 DYNAMIC:conversion:gain
+
     /**
      * 提供給後台 AccountingRule 設定頁面的 Mary UI 下拉選單繁體標籤
      */
@@ -129,6 +146,21 @@ enum AmountSource: string
             self::OUTPUT_TOTAL_COST => '成品產出總成本 (output_total_cost)',
             self::COST_VARIANCE => '成本差異（投入-產出）',
             self::COST_VARIANCE_ABS => '成本差異絕對值',
+
+            // 🆕 結算/動態標籤
+            self::SALE_SETTLE => '🔄 銷售結算 (sale:settle) - 應收/暫收',
+            self::SALE_PAYMENT => '💳 銷售付款方式 (sale:payment) - 依付款方式動態',
+            self::SALE_REVENUE => '📈 銷售收入 (sale:revenue) - 營業收入科目',
+            self::AUTO_INVENTORY => '📦 庫存自動對應 (auto:inventory) - 存貨科目',
+            self::AUTO_COST => '💰 成本自動對應 (auto:cost) - 成本科目',
+            self::PURCHASE_EXPENSE => '📋 採購費用 (purchase:expense) - 費用科目',
+            self::PURCHASE_PAYMENT => '💳 採購付款方式 (purchase:payment) - 依付款方式動態',
+            self::SALES_RETURN_REFUND => '↩️ 銷退退款 (sales_return:refund) - 退款科目',
+            self::PURCHASE_RETURN_REFUND => '↩️ 採退退款 (purchase_return:refund) - 退款科目',
+            self::CONVERSION_OUTPUT => '🔧 轉換產出 (conversion:output) - 成品產出',
+            self::CONVERSION_INPUT => '🔧 轉換投入 (conversion:input) - 原料投入',
+            self::CONVERSION_LOSS => '🔧 轉換損失 (conversion:loss) - 成本差異(損失)',
+            self::CONVERSION_GAIN => '🔧 轉換收益 (conversion:gain) - 成本差異(收益)',
         };
     }
 
@@ -152,6 +184,29 @@ enum AmountSource: string
             self::COMMISSION,
             self::RESTOCKING_FEE,
             self::RETURN_SHIPPING_FEE,
+        ]);
+    }
+
+    /**
+     * 🆕 判斷是否為動態標籤（Dynamic Tag）
+     * 這類標籤前綴為 DYNAMIC: 或格式為 xxx:xxx
+     */
+    public function isDynamicTag(): bool
+    {
+        return in_array($this, [
+            self::SALE_SETTLE,
+            self::SALE_PAYMENT,
+            self::SALE_REVENUE,
+            self::AUTO_INVENTORY,
+            self::AUTO_COST,
+            self::PURCHASE_EXPENSE,
+            self::PURCHASE_PAYMENT,
+            self::SALES_RETURN_REFUND,
+            self::PURCHASE_RETURN_REFUND,
+            self::CONVERSION_OUTPUT,
+            self::CONVERSION_INPUT,
+            self::CONVERSION_LOSS,
+            self::CONVERSION_GAIN,
         ]);
     }
 
