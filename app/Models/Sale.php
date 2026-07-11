@@ -49,6 +49,7 @@ class Sale extends Model
     {
         return [
             'DYNAMIC:sale:payment' => $this->getPaymentAccount(),
+			'DYNAMIC:sale:settle' => $this->getSettleAccount(), 
             'DYNAMIC:sale:revenue' => $this->getRevenueAccount(),
             'DYNAMIC:auto:inventory' => '1405',
             'DYNAMIC:auto:cost' => '5401',
@@ -57,6 +58,23 @@ class Sale extends Model
         ];
     }
     
+	/**
+	 * 取得結算最終收款帳戶（借方）
+	 * 根據通路決定錢最後匯到哪個銀行
+	 */
+	protected function getSettleAccount(): string
+	{
+		$settlementAccounts = config('business.settlement_accounts', []);
+    
+		if (!isset($settlementAccounts[$this->channel_id])) {
+			throw new \RuntimeException(
+				"通路 ID [{$this->channel_id}] 未定義結算帳戶，不應執行結算。"
+			);
+		}
+		
+		return $settlementAccounts[$this->channel_id];
+	}
+
 	/**
 	 * 取得付款帳戶科目
 	 */
@@ -296,23 +314,20 @@ class Sale extends Model
 	}
 
 	/**
-	 * 判斷是否需要結算（清算）
-	 * 
-	 * 只有「非現金」的付款方式才需要結算
+	 * 判斷此單據是否需要走平台撥款結算流程
 	 */
 	public function needsSettlement(): bool
 	{
-		// 非現金付款方式
-		$nonCashMethods = [
-			'transfer', 
-			'bank_transfer', 
-			'credit_card', 
-			'shopee_pay', 
-			'line_pay', 
-			'taiwan_pay'
-		];
+		$method = strtolower(trim($this->payment_method));
+				
+		// 現金不需要結算
+		if ($method === 'cash') {
+			return false;
+		}
 		
-		return in_array($this->payment_method, $nonCashMethods);
+		// 只有「有定義結算帳戶」的通路才需要結算
+		$settlementAccounts = config('business.settlement_accounts', []);
+		return isset($settlementAccounts[$this->channel_id]);
 	}
 
     // =========================================================================
@@ -991,6 +1006,7 @@ class Sale extends Model
     {
         return match($subType) {
             'payment'     => $this->resolvePaymentAccount(),
+			'settle'      => $this->resolveSettleAccount(),
             'revenue'     => $this->resolveRevenueAccount(),
             'cost'        => $this->resolveCostAccount(),
             'channel_fee' => $this->resolveChannelFeeAccount(),
@@ -999,6 +1015,14 @@ class Sale extends Model
             default       => throw new \RuntimeException("未知的銷售子科目類型: {$subType}"),
         };
     }
+	
+	/**
+	 * 解析結算帳戶（供動態科目使用）
+	 */
+	private function resolveSettleAccount(): string
+	{
+		return $this->getSettleAccount();
+	}
 
     private function resolveAutoDynamicAccount(?string $subType): string
     {
@@ -1011,22 +1035,18 @@ class Sale extends Model
 
     public function getChannelCode(): string
     {
-        if (!$this->relationLoaded('channel')) {
-            $this->load('channel');
-        }
-
-        $channelCode = $this->channel?->code ?? 'retail';
-        $mapping = config('business.channel_mapping', []);
-
-        $result = $mapping[$channelCode] ?? 'retail';
-    
-        info('getChannelCode result', [
-            'sale_id' => $this->id,
-            'channel_code' => $channelCode,
-            'mapped' => $result,
-        ]);
-        
-        return $result;
+        $channelId = $this->channel_id;
+		$channelMapping = config('business.channel_ids', []);
+		
+		// 根據 channel_id 找出對應的代碼
+		foreach ($channelMapping as $code => $id) {
+			if ($id == $channelId) {
+				return $code;
+			}
+		}
+		
+		// 預設為零售
+		return 'retail';
     }
 
 	/**

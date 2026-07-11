@@ -331,7 +331,8 @@
 							/>
 						@endif
 						
-						@if($canSettle)
+						{{-- 只要不是現金，其餘都要結算 --}}
+						@if($selectedSale && $selectedSale->status === WorkflowStatus::APPROVED && $selectedSale->needsSettlement())
 							<x-button 
 								label="結算" 
 								icon="o-banknotes" 

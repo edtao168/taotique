@@ -49,27 +49,44 @@ class Index extends Component
         $this->drawer = true;
     }
 
-    public function submitStockOut(int $saleId)
+    /**
+     * 執行銷售單出庫審核
+     */
+	public function submitStockOut(int $saleId)
     {
         try {
-            $sale = Sale::find($saleId);
-            if (!$sale) {
-                throw new \Exception("找不到該銷售單據。");
-            }
+            $sale = DB::transaction(function () use ($saleId) {
+                // 直接在內層宣告與鎖定當前單據，防範極短微秒內的併發連點
+                $sale = Sale::lockForUpdate()->find($saleId);
 
-            $allowNegative = (bool) Setting::get('allow_negative_inventory', false);
-            $sale->processStockOut($allowNegative);
+                if (!$sale) {
+                    throw new \Exception('找不到該銷售單據。');
+                }
+
+                // 在呼叫任何內層方法前，先用變數把「原始付款方式」記住
+				$originalPaymentMethod = $sale->payment_method;
+			
+				$allowNegative = (bool) Setting::get('allow_negative_inventory', false);
+                $sale->processStockOut($allowNegative);
+
+                // 3. 一人店極簡流程自動化
+                if (strtolower(trim($originalPaymentMethod)) === 'cash') {
+                // 只有最原始就是 cash 的單子，才可直接 COMPLETED (已結案)
+					$sale->transitionTo(WorkflowStatus::COMPLETED->value, 'complete', auth()->user());
+				}
+				return $sale;
+            });
 
             $this->drawer = false;
             $this->selectedSale = null;
 
             $this->success("銷售單 {$sale->invoice_number} 已成功完成出庫、三份財務傳票自動驗證過帳！");
+            
         } catch (\Exception $e) {
-            $this->error('自動結轉失敗阻斷：' . $e->getMessage());
+            logger()->error("銷售單 {$saleId} 出庫失敗: " . $e->getMessage());
+            $this->error('出庫處理失敗：' . $e->getMessage());
         }
     }
-	
-	// app/Livewire/Sales/Index.php
 
 	/**
 	 * 🚨 管理員專用：撤銷出庫
