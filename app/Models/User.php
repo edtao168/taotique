@@ -23,9 +23,9 @@ class User extends Authenticatable
      * @var list<string>
      */
     protected $fillable = [
-        'name',
-        'email',
-        'password',
+        'name', 'email', 'password',
+        'tenant_id', 'current_shop_id',
+        'role', 'is_active'
     ];
 
     /**
@@ -127,4 +127,22 @@ class User extends Authenticatable
 	{
 		return $this->belongsTo(Warehouse::class);
 	}
+	
+	// ✅ 關聯到租戶
+    public function tenant()
+    {
+        return $this->belongsTo(Tenant::class);
+    }
+
+    // ✅ 當前店鋪
+    public function currentShop()
+    {
+        return $this->belongsTo(Shop::class, 'current_shop_id');
+    }
+
+    // ✅ 使用者可以訪問的店鋪（多對多，未來擴充）
+    public function shops()
+    {
+        return $this->belongsToMany(Shop::class, 'user_shops');
+    }
 }

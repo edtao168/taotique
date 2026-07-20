@@ -2,12 +2,13 @@
 
 namespace App\Models;
 
+use App\Models\Traits\TenantScoped;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class CategoryDefinition extends Model
 {
-    use SoftDeletes;
+    use SoftDeletes, TenantScoped;
 	
 	// 如果你的主鍵是 code 而不是 id
     protected $primaryKey = 'code'; 
@@ -18,5 +19,5 @@ class CategoryDefinition extends Model
     // 如果主鍵不是自動遞增的數字
     public $incrementing = false;
 	
-	protected $fillable = ['name', 'remark'];
+	protected $fillable = ['code', 'name', 'remark'];
 }

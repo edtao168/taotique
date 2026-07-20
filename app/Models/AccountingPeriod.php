@@ -2,13 +2,16 @@
 
 namespace App\Models;
 
+use App\Models\Traits\TenantScoped;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class AccountingPeriod extends Model
 {
-    protected $fillable = [
+    use App\Models\Traits\TenantScoped;
+	
+	protected $fillable = [
         'period',
         'closed_at',
         'closed_by',

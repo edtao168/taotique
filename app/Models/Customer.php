@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Traits\TenantScoped;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -9,7 +10,7 @@ use Illuminate\Support\Facades\DB;
 
 class Customer extends Model
 {
-    use SoftDeletes;
+    use SoftDeletes, TenantScoped;
 	
 	protected $fillable = ['name', 'phone', 'email', 'wechat', 'address', 'notes'];
 

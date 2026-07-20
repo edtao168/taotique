@@ -2,12 +2,13 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Models\Traits\TenantScoped;
+Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class MaterialDefinition extends Model
 {
-    use SoftDeletes;
+    use SoftDeletes, TenantScoped;
 	
 	protected $fillable = ['bb_code', 'c_code', 'name', 'market_names'];
 }

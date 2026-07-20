@@ -2,13 +2,16 @@
 
 namespace App\Models;
 
+use App\Models\Traits\TenantScoped;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Account extends Model
 {
-    protected $table = 'accounts';
+    use TenantScoped;
+	
+	protected $table = 'accounts';
 
     protected $fillable = [
         'code',

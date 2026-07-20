@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Traits\TenantScoped;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -9,7 +10,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Partner extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory, SoftDeletes, TenantScoped;
 
     protected $fillable = [
         'user_id',
@@ -31,15 +32,7 @@ class Partner extends Model
         'is_active' => 'boolean',
 		'deleted_at' => 'datetime',
     ];
-
-    /**
-     * 關聯到登入帳號 (User)
-     */
-    public function user(): BelongsTo
-    {
-        return $this->belongsTo(User::class);
-    }
-	
+    
 	// 業務邏輯方法
     public function deactivate()
     {
@@ -78,5 +71,18 @@ class Partner extends Model
         }
         
         return $this->is_active ? 'active' : 'inactive';
+    }
+	
+	/**
+     * 關聯
+     */
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
+	
+	public function shop()
+    {
+        return $this->belongsTo(Shop::class);
     }
 }

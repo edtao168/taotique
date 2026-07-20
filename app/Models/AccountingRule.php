@@ -2,13 +2,16 @@
 
 namespace App\Models;
 
+use App\Models\Traits\TenantScoped;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\belongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class AccountingRule extends Model
 {
-    // 顯式定義資料表名稱
+    use TenantScoped;
+	
+	// 顯式定義資料表名稱
     protected $table = 'accounting_rules';
 
     // 允許批量賦值的欄位

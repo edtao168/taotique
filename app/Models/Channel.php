@@ -2,12 +2,15 @@
 
 namespace App\Models;
 
+use App\Models\Traits\TenantScoped;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Channel extends Model
 {
-    protected $fillable = ['name', 'type', 'platform_fee_rate', 'is_active'];
+    use TenantScoped;
+	
+	protected $fillable = ['name', 'type', 'platform_fee_rate', 'is_active'];
 	
 	protected $casts = [
 		'platform_fee_rate' => 'decimal:4',

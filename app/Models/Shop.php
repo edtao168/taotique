@@ -4,11 +4,14 @@
 
 namespace App\Models;
 
+use App\Models\Traits\TenantScoped;
 use Illuminate\Database\Eloquent\Model;
 
 class Shop extends Model
 {
-    protected $fillable = ['name'];
+    use TenantScoped;
+	
+	protected $fillable = ['name'];
 	
 	public function warehouses() { return $this->hasMany(Warehouse::class); }
 	

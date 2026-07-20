@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Traits\TenantScoped;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\DB;
@@ -9,7 +10,9 @@ use Illuminate\Support\Facades\Log;
 
 class Product extends Model
 {
-    protected $fillable = [
+    use TenantScoped;
+	
+	protected $fillable = [
 		'name',
 		'sku',
 		'is_unique',

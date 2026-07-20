@@ -1,0 +1,1069 @@
+ 驱动器 C 中的卷没有标签。
+ 卷的序列号是 0000-121B
+
+ c:\laragon\www\taotique\app 的目录
+
+26/05/15 週五  下午 10:08    <DIR>          .
+26/05/15 週五  下午 10:08    <DIR>          ..
+26/05/15 週五  下午 10:08    <DIR>          Actions
+26/07/11 週六  下午 04:52    <DIR>          Enums
+26/05/15 週五  下午 10:08    <DIR>          Http
+26/06/25 週四  下午 04:18    <DIR>          Livewire
+26/07/11 週六  下午 04:07    <DIR>          Models
+26/05/15 週五  下午 10:08    <DIR>          Observers
+26/05/15 週五  下午 10:08    <DIR>          Providers
+26/06/16 週二  下午 09:22    <DIR>          Services
+26/07/03 週五  下午 03:29    <DIR>          Traits
+               0 个文件              0 字节
+
+ c:\laragon\www\taotique\app\Actions 的目录
+
+26/05/15 週五  下午 10:08    <DIR>          .
+26/05/15 週五  下午 10:08    <DIR>          ..
+26/05/15 週五  下午 10:08    <DIR>          Fortify
+               0 个文件              0 字节
+
+ c:\laragon\www\taotique\app\Actions\Fortify 的目录
+
+26/05/15 週五  下午 10:08    <DIR>          .
+26/05/15 週五  下午 10:08    <DIR>          ..
+26/05/15 週五  上午 01:41               967 CreateNewUser.php
+26/05/15 週五  上午 01:41               415 PasswordValidationRules.php
+26/05/15 週五  上午 01:41               644 ResetUserPassword.php
+               3 个文件          2,026 字节
+
+ c:\laragon\www\taotique\app\Enums 的目录
+
+26/07/11 週六  下午 04:52    <DIR>          .
+26/07/11 週六  下午 04:52    <DIR>          ..
+26/07/11 週六  下午 04:52            10,818 AmountSource.php
+26/06/19 週五  上午 08:57             1,879 JournalStatus.php
+26/06/24 週三  下午 01:17             3,437 WorkflowStatus.php
+               3 个文件         16,134 字节
+
+ c:\laragon\www\taotique\app\Http 的目录
+
+26/05/15 週五  下午 10:08    <DIR>          .
+26/05/15 週五  下午 10:08    <DIR>          ..
+26/05/15 週五  下午 10:08    <DIR>          Controllers
+               0 个文件              0 字节
+
+ c:\laragon\www\taotique\app\Http\Controllers 的目录
+
+26/05/15 週五  下午 10:08    <DIR>          .
+26/05/15 週五  下午 10:08    <DIR>          ..
+26/05/15 週五  上午 01:41                77 Controller.php
+               1 个文件             77 字节
+
+ c:\laragon\www\taotique\app\Livewire 的目录
+
+26/06/25 週四  下午 04:18    <DIR>          .
+26/06/25 週四  下午 04:18    <DIR>          ..
+26/07/03 週五  下午 03:38    <DIR>          Accountings
+26/05/15 週五  下午 10:08    <DIR>          Actions
+26/05/15 週五  下午 10:08    <DIR>          Auth
+26/06/18 週四  下午 04:55    <DIR>          Conversions
+26/05/15 週五  下午 10:08    <DIR>          Customers
+26/06/13 週六  下午 08:21    <DIR>          Dashboard
+26/05/15 週五  下午 10:08    <DIR>          Inventories
+26/06/24 週三  下午 08:26    <DIR>          Products
+26/06/24 週三  下午 07:02    <DIR>          Purchases
+26/07/10 週五  下午 10:14    <DIR>          Sales
+26/06/02 週二  下午 07:44    <DIR>          Settings
+26/05/15 週五  下午 10:08    <DIR>          Skus
+26/05/15 週五  下午 10:08    <DIR>          Suppliers
+               0 个文件              0 字节
+
+ c:\laragon\www\taotique\app\Livewire\Accountings 的目录
+
+26/07/03 週五  下午 03:38    <DIR>          .
+26/07/03 週五  下午 03:38    <DIR>          ..
+26/06/19 週五  下午 04:29            19,737 JournalCorrect.php
+26/06/18 週四  下午 09:03            11,938 JournalCreate.php
+26/06/19 週五  下午 04:16             6,059 JournalIndex.php
+26/07/03 週五  下午 03:38             3,888 PeriodManagement.php
+               4 个文件         41,622 字节
+
+ c:\laragon\www\taotique\app\Livewire\Actions 的目录
+
+26/05/15 週五  下午 10:08    <DIR>          .
+26/05/15 週五  下午 10:08    <DIR>          ..
+26/05/15 週五  上午 01:41               383 Logout.php
+               1 个文件            383 字节
+
+ c:\laragon\www\taotique\app\Livewire\Auth 的目录
+
+26/05/15 週五  下午 10:08    <DIR>          .
+26/05/15 週五  下午 10:08    <DIR>          ..
+26/05/15 週五  上午 01:41               840 Login.php
+26/05/15 週五  上午 01:41               187 Register.php
+               2 个文件          1,027 字节
+
+ c:\laragon\www\taotique\app\Livewire\Conversions 的目录
+
+26/06/18 週四  下午 04:55    <DIR>          .
+26/06/18 週四  下午 04:55    <DIR>          ..
+26/06/18 週四  下午 04:55            12,132 Create.php
+26/06/18 週四  下午 04:44             5,159 Index.php
+               2 个文件         17,291 字节
+
+ c:\laragon\www\taotique\app\Livewire\Customers 的目录
+
+26/05/15 週五  下午 10:08    <DIR>          .
+26/05/15 週五  下午 10:08    <DIR>          ..
+26/05/15 週五  上午 01:41             3,264 Index.php
+               1 个文件          3,264 字节
+
+ c:\laragon\www\taotique\app\Livewire\Dashboard 的目录
+
+26/06/13 週六  下午 08:21    <DIR>          .
+26/06/13 週六  下午 08:21    <DIR>          ..
+26/06/13 週六  下午 08:08               604 AboutIndex.php
+26/06/04 週四  下午 03:18             3,135 Overview.php
+               2 个文件          3,739 字节
+
+ c:\laragon\www\taotique\app\Livewire\Inventories 的目录
+
+26/05/15 週五  下午 10:08    <DIR>          .
+26/05/15 週五  下午 10:08    <DIR>          ..
+26/05/15 週五  上午 01:41             2,798 Index.php
+26/05/15 週五  上午 01:41             2,269 Movements.php
+26/05/15 週五  上午 01:41             8,075 Stocktakes.php
+26/05/15 週五  上午 01:41             4,455 Transfers.php
+               4 个文件         17,597 字节
+
+ c:\laragon\www\taotique\app\Livewire\Products 的目录
+
+26/06/24 週三  下午 08:26    <DIR>          .
+26/06/24 週三  下午 08:26    <DIR>          ..
+26/05/15 週五  上午 01:41             4,680 Create.php
+26/06/24 週三  下午 08:26             5,483 Edit.php
+26/05/27 週三  下午 07:58             2,499 Index.php
+26/05/15 週五  上午 01:41               446 Show.php
+               4 个文件         13,108 字节
+
+ c:\laragon\www\taotique\app\Livewire\Purchases 的目录
+
+26/06/24 週三  下午 07:02    <DIR>          .
+26/06/24 週三  下午 07:02    <DIR>          ..
+26/06/24 週三  下午 03:42            10,835 Create.php
+26/06/24 週三  下午 07:02             8,000 Index.php
+26/06/10 週三  下午 03:31    <DIR>          Returns
+               2 个文件         18,835 字节
+
+ c:\laragon\www\taotique\app\Livewire\Purchases\Returns 的目录
+
+26/06/10 週三  下午 03:31    <DIR>          .
+26/06/10 週三  下午 03:31    <DIR>          ..
+26/05/16 週六  下午 03:38             5,435 ReturnCreate.php
+26/06/10 週三  下午 03:31             3,644 ReturnIndex.php
+               2 个文件          9,079 字节
+
+ c:\laragon\www\taotique\app\Livewire\Sales 的目录
+
+26/07/10 週五  下午 10:14    <DIR>          .
+26/07/10 週五  下午 10:14    <DIR>          ..
+26/06/23 週二  下午 09:48            14,607 Create.php
+26/07/10 週五  下午 10:14            10,030 Index.php
+26/06/10 週三  上午 09:03    <DIR>          Returns
+               2 个文件         24,637 字节
+
+ c:\laragon\www\taotique\app\Livewire\Sales\Returns 的目录
+
+26/06/10 週三  上午 09:03    <DIR>          .
+26/06/10 週三  上午 09:03    <DIR>          ..
+26/05/16 週六  下午 03:39             7,572 ReturnCreate.php
+26/06/10 週三  上午 09:03             3,533 ReturnIndex.php
+               2 个文件         11,105 字节
+
+ c:\laragon\www\taotique\app\Livewire\Settings 的目录
+
+26/06/02 週二  下午 07:44    <DIR>          .
+26/06/02 週二  下午 07:44    <DIR>          ..
+26/07/08 週三  下午 03:59    <DIR>          AccountingRules
+26/06/12 週五  下午 08:11    <DIR>          Accounts
+26/06/02 週二  下午 07:44             3,021 BackupIndex.php
+26/05/15 週五  下午 10:08    <DIR>          Categories
+26/05/15 週五  下午 10:08    <DIR>          Channels
+26/05/15 週五  下午 10:08    <DIR>          Materials
+26/05/15 週五  下午 10:08    <DIR>          Partners
+26/05/15 週五  下午 10:08    <DIR>          Shops
+26/05/15 週五  上午 01:41             1,922 SystemSettings.php
+26/05/15 週五  下午 10:08    <DIR>          Users
+26/05/15 週五  下午 10:08    <DIR>          Warehouses
+               2 个文件          4,943 字节
+
+ c:\laragon\www\taotique\app\Livewire\Settings\AccountingRules 的目录
+
+26/07/08 週三  下午 03:59    <DIR>          .
+26/07/08 週三  下午 03:59    <DIR>          ..
+26/07/08 週三  下午 03:59             8,208 Index.php
+               1 个文件          8,208 字节
+
+ c:\laragon\www\taotique\app\Livewire\Settings\Accounts 的目录
+
+26/06/12 週五  下午 08:11    <DIR>          .
+26/06/12 週五  下午 08:11    <DIR>          ..
+26/06/12 週五  下午 08:11             5,057 Index.php
+               1 个文件          5,057 字节
+
+ c:\laragon\www\taotique\app\Livewire\Settings\Categories 的目录
+
+26/05/15 週五  下午 10:08    <DIR>          .
+26/05/15 週五  下午 10:08    <DIR>          ..
+26/05/15 週五  上午 01:41             2,243 Index.php
+               1 个文件          2,243 字节
+
+ c:\laragon\www\taotique\app\Livewire\Settings\Channels 的目录
+
+26/05/15 週五  下午 10:08    <DIR>          .
+26/05/15 週五  下午 10:08    <DIR>          ..
+26/05/16 週六  下午 03:39             3,042 Index.php
+               1 个文件          3,042 字节
+
+ c:\laragon\www\taotique\app\Livewire\Settings\Materials 的目录
+
+26/05/15 週五  下午 10:08    <DIR>          .
+26/05/15 週五  下午 10:08    <DIR>          ..
+26/05/15 週五  上午 01:41             2,900 Index.php
+               1 个文件          2,900 字节
+
+ c:\laragon\www\taotique\app\Livewire\Settings\Partners 的目录
+
+26/05/15 週五  下午 10:08    <DIR>          .
+26/05/15 週五  下午 10:08    <DIR>          ..
+26/05/15 週五  上午 01:41             4,799 Index.php
+               1 个文件          4,799 字节
+
+ c:\laragon\www\taotique\app\Livewire\Settings\Shops 的目录
+
+26/05/15 週五  下午 10:08    <DIR>          .
+26/05/15 週五  下午 10:08    <DIR>          ..
+26/05/15 週五  上午 01:41             2,011 Index.php
+               1 个文件          2,011 字节
+
+ c:\laragon\www\taotique\app\Livewire\Settings\Users 的目录
+
+26/05/15 週五  下午 10:08    <DIR>          .
+26/05/15 週五  下午 10:08    <DIR>          ..
+26/05/15 週五  上午 01:41             4,305 UserManagement.php
+               1 个文件          4,305 字节
+
+ c:\laragon\www\taotique\app\Livewire\Settings\Warehouses 的目录
+
+26/05/15 週五  下午 10:08    <DIR>          .
+26/05/15 週五  下午 10:08    <DIR>          ..
+26/05/15 週五  上午 01:41             2,435 Index.php
+               1 个文件          2,435 字节
+
+ c:\laragon\www\taotique\app\Livewire\Skus 的目录
+
+26/05/15 週五  下午 10:08    <DIR>          .
+26/05/15 週五  下午 10:08    <DIR>          ..
+26/05/15 週五  上午 01:41               497 Index.php
+               1 个文件            497 字节
+
+ c:\laragon\www\taotique\app\Livewire\Suppliers 的目录
+
+26/05/15 週五  下午 10:08    <DIR>          .
+26/05/15 週五  下午 10:08    <DIR>          ..
+26/05/15 週五  上午 01:41             4,637 Index.php
+               1 个文件          4,637 字节
+
+ c:\laragon\www\taotique\app\Models 的目录
+
+26/07/11 週六  下午 04:07    <DIR>          .
+26/07/11 週六  下午 04:07    <DIR>          ..
+26/05/22 週五  上午 08:48             9,775 Account.php
+26/06/25 週四  下午 04:30             4,107 AccountingPeriod.php
+26/05/15 週五  上午 01:41               657 AccountingRule.php
+26/06/12 週五  下午 04:22             3,716 AccountingRuleLine.php
+26/05/15 週五  上午 01:41               516 CategoryDefinition.php
+26/05/16 週六  下午 03:40               578 Channel.php
+26/06/18 週四  下午 04:43            12,417 Conversion.php
+26/06/17 週三  下午 03:31             1,376 ConversionItem.php
+26/05/15 週五  上午 01:41             1,044 Customer.php
+26/05/15 週五  上午 01:41             1,530 Inventory.php
+26/05/15 週五  上午 01:41             1,230 InventoryMovement.php
+26/06/19 週五  下午 08:32            12,866 Journal.php
+26/05/15 週五  上午 01:41               934 JournalItem.php
+26/05/15 週五  上午 01:41               252 MaterialDefinition.php
+26/05/15 週五  上午 01:41             1,736 Partner.php
+26/05/27 週三  下午 08:03             5,188 Product.php
+26/05/15 週五  上午 01:41               417 ProductImage.php
+26/06/24 週三  下午 03:56            21,309 Purchase.php
+26/06/24 週三  下午 03:44             1,249 PurchaseItem.php
+26/07/03 週五  下午 03:35            12,603 PurchaseReturn.php
+26/05/15 週五  上午 01:41               881 PurchaseReturnItem.php
+26/07/11 週六  下午 04:07            39,305 Sale.php
+26/05/15 週五  上午 01:41               727 SaleFee.php
+26/05/25 週一  下午 12:47             2,263 SaleItem.php
+26/07/07 週二  下午 10:17            19,219 SalesReturn.php
+26/05/15 週五  上午 01:41               594 SalesReturnFee.php
+26/06/08 週一  下午 04:40               936 SalesReturnItem.php
+26/05/18 週一  下午 05:06             4,955 Setting.php
+26/05/15 週五  上午 01:41               421 Shop.php
+26/05/15 週五  上午 01:41             1,293 Stocktake.php
+26/05/15 週五  上午 01:41               666 StocktakeItem.php
+26/05/15 週五  上午 01:41               902 Supplier.php
+26/07/08 週三  下午 03:41             2,899 User.php
+26/05/15 週五  上午 01:41               762 Warehouse.php
+26/05/15 週五  上午 01:41               120 WarehouseLocation.php
+              35 个文件        169,443 字节
+
+ c:\laragon\www\taotique\app\Observers 的目录
+
+26/05/15 週五  下午 10:08    <DIR>          .
+26/05/15 週五  下午 10:08    <DIR>          ..
+26/05/15 週五  上午 01:41               822 ConversionObserver.php
+               1 个文件            822 字节
+
+ c:\laragon\www\taotique\app\Providers 的目录
+
+26/05/15 週五  下午 10:08    <DIR>          .
+26/05/15 週五  下午 10:08    <DIR>          ..
+26/05/15 週五  上午 01:41               694 AppServiceProvider.php
+26/05/15 週五  上午 01:41             2,159 FortifyServiceProvider.php
+26/05/15 週五  上午 01:41               494 VoltServiceProvider.php
+               3 个文件          3,347 字节
+
+ c:\laragon\www\taotique\app\Services 的目录
+
+26/06/16 週二  下午 09:22    <DIR>          .
+26/06/16 週二  下午 09:22    <DIR>          ..
+26/06/08 週一  上午 09:05             2,910 AccountCodeConverter.php
+26/06/16 週二  下午 09:22            15,439 AccountingService.php
+               2 个文件         18,349 字节
+
+ c:\laragon\www\taotique\app\Traits 的目录
+
+26/07/03 週五  下午 03:29    <DIR>          .
+26/07/03 週五  下午 03:29    <DIR>          ..
+26/06/10 週三  下午 12:38             2,587 HasAccountAndDynamicSearch.php
+26/06/10 週三  下午 12:09             2,272 HasAccounting.php
+26/05/29 週五  下午 08:54             1,857 HasAccountSearch.php
+26/05/16 週六  下午 03:41             3,958 HasBarcodeScanner.php
+26/05/15 週五  上午 01:41             2,590 HasProductMedia.php
+26/05/15 週五  上午 01:41             1,476 HasProductSearch.php
+26/05/16 週六  下午 03:41             1,177 HasShop.php
+26/07/03 週五  下午 03:29             6,449 HasWorkflow.php
+               8 个文件         22,366 字节
+
+ c:\laragon\www\taotique\resources 的目录
+
+26/05/15 週五  下午 10:08    <DIR>          .
+26/05/15 週五  下午 10:08    <DIR>          ..
+26/06/04 週四  上午 08:21    <DIR>          css
+26/05/15 週五  下午 10:08    <DIR>          js
+26/06/01 週一  下午 07:49    <DIR>          lang
+26/06/19 週五  上午 09:56    <DIR>          views
+               0 个文件              0 字节
+
+ c:\laragon\www\taotique\resources\css 的目录
+
+26/06/04 週四  上午 08:21    <DIR>          .
+26/06/04 週四  上午 08:21    <DIR>          ..
+26/06/04 週四  上午 08:21             1,711 app.css
+               1 个文件          1,711 字节
+
+ c:\laragon\www\taotique\resources\js 的目录
+
+26/05/15 週五  下午 10:08    <DIR>          .
+26/05/15 週五  下午 10:08    <DIR>          ..
+26/05/15 週五  上午 01:41               248 app.js
+26/05/15 週五  下午 10:08    <DIR>          components
+26/05/15 週五  下午 10:08    <DIR>          vendor
+               1 个文件            248 字节
+
+ c:\laragon\www\taotique\resources\js\components 的目录
+
+26/05/15 週五  下午 10:08    <DIR>          .
+26/05/15 週五  下午 10:08    <DIR>          ..
+26/05/16 週六  下午 03:45             4,100 media-gallery.js
+               1 个文件          4,100 字节
+
+ c:\laragon\www\taotique\resources\js\vendor 的目录
+
+26/05/15 週五  下午 10:08    <DIR>          .
+26/05/15 週五  下午 10:08    <DIR>          ..
+26/05/15 週五  下午 10:08    <DIR>          livewire-charts
+               0 个文件              0 字节
+
+ c:\laragon\www\taotique\resources\js\vendor\livewire-charts 的目录
+
+26/05/15 週五  下午 10:08    <DIR>          .
+26/05/15 週五  下午 10:08    <DIR>          ..
+26/05/15 週五  上午 01:41               855 app.js
+26/05/15 週五  上午 01:41             3,092 areaChart.js
+26/05/15 週五  上午 01:41             3,771 columnChart.js
+26/05/15 週五  上午 01:41               918 helpers.js
+26/05/15 週五  上午 01:41             4,050 lineChart.js
+26/05/15 週五  上午 01:41             3,636 multiColumnChart.js
+26/05/15 週五  上午 01:41             3,060 multiLineChart.js
+26/05/15 週五  上午 01:41             3,182 pieChart.js
+26/05/15 週五  上午 01:41             3,026 radarChart.js
+26/05/15 週五  上午 01:41             2,276 radialChart.js
+26/05/15 週五  上午 01:41             2,544 treeMapChart.js
+              11 个文件         30,410 字节
+
+ c:\laragon\www\taotique\resources\lang 的目录
+
+26/06/01 週一  下午 07:49    <DIR>          .
+26/06/01 週一  下午 07:49    <DIR>          ..
+26/05/15 週五  下午 10:08    <DIR>          en
+26/06/01 週一  下午 07:49    <DIR>          vendor
+26/05/15 週五  下午 10:08    <DIR>          zh_TW
+26/05/15 週五  上午 01:41            18,246 zh_TW.json
+               1 个文件         18,246 字节
+
+ c:\laragon\www\taotique\resources\lang\en 的目录
+
+26/05/15 週五  下午 10:08    <DIR>          .
+26/05/15 週五  下午 10:08    <DIR>          ..
+26/05/15 週五  上午 01:41               674 auth.php
+26/05/15 週五  上午 01:41               534 pagination.php
+26/05/15 週五  上午 01:41               744 passwords.php
+26/05/15 週五  上午 01:41            11,964 validation.php
+               4 个文件         13,916 字节
+
+ c:\laragon\www\taotique\resources\lang\vendor 的目录
+
+26/06/01 週一  下午 07:49    <DIR>          .
+26/06/01 週一  下午 07:49    <DIR>          ..
+26/06/01 週一  下午 07:49    <DIR>          backup
+               0 个文件              0 字节
+
+ c:\laragon\www\taotique\resources\lang\vendor\backup 的目录
+
+26/06/01 週一  下午 07:49    <DIR>          .
+26/06/01 週一  下午 07:49    <DIR>          ..
+26/06/01 週一  下午 07:49    <DIR>          ar
+26/06/01 週一  下午 07:49    <DIR>          bg
+26/06/01 週一  下午 07:49    <DIR>          bn
+26/06/01 週一  下午 07:49    <DIR>          cs
+26/06/01 週一  下午 07:49    <DIR>          da
+26/06/01 週一  下午 07:49    <DIR>          de
+26/06/01 週一  下午 07:49    <DIR>          en
+26/06/01 週一  下午 07:49    <DIR>          es
+26/06/01 週一  下午 07:49    <DIR>          fa
+26/06/01 週一  下午 07:49    <DIR>          fi
+26/06/01 週一  下午 07:49    <DIR>          fr
+26/06/01 週一  下午 07:49    <DIR>          he
+26/06/01 週一  下午 07:49    <DIR>          hi
+26/06/01 週一  下午 07:49    <DIR>          hr
+26/06/01 週一  下午 07:49    <DIR>          id
+26/06/01 週一  下午 07:49    <DIR>          it
+26/06/01 週一  下午 07:49    <DIR>          ja
+26/06/01 週一  下午 07:49    <DIR>          kk
+26/06/01 週一  下午 07:49    <DIR>          ko
+26/06/01 週一  下午 07:49    <DIR>          nl
+26/06/01 週一  下午 07:49    <DIR>          no
+26/06/01 週一  下午 07:49    <DIR>          pl
+26/06/01 週一  下午 07:49    <DIR>          pt
+26/06/01 週一  下午 07:49    <DIR>          pt_BR
+26/06/01 週一  下午 07:49    <DIR>          ro
+26/06/01 週一  下午 07:49    <DIR>          ru
+26/06/01 週一  下午 07:49    <DIR>          sk
+26/06/01 週一  下午 07:49    <DIR>          tr
+26/06/01 週一  下午 07:49    <DIR>          uk
+26/06/01 週一  下午 07:49    <DIR>          zh_CN
+26/06/01 週一  下午 07:49    <DIR>          zh_TW
+               0 个文件              0 字节
+
+ c:\laragon\www\taotique\resources\lang\vendor\backup\ar 的目录
+
+26/06/01 週一  下午 07:49    <DIR>          .
+26/06/01 週一  下午 07:49    <DIR>          ..
+26/06/01 週一  下午 07:49             3,605 notifications.php
+               1 个文件          3,605 字节
+
+ c:\laragon\www\taotique\resources\lang\vendor\backup\bg 的目录
+
+26/06/01 週一  下午 07:49    <DIR>          .
+26/06/01 週一  下午 07:49    <DIR>          ..
+26/06/01 週一  下午 07:49             4,193 notifications.php
+               1 个文件          4,193 字节
+
+ c:\laragon\www\taotique\resources\lang\vendor\backup\bn 的目录
+
+26/06/01 週一  下午 07:49    <DIR>          .
+26/06/01 週一  下午 07:49    <DIR>          ..
+26/06/01 週一  下午 07:49             4,772 notifications.php
+               1 个文件          4,772 字节
+
+ c:\laragon\www\taotique\resources\lang\vendor\backup\cs 的目录
+
+26/06/01 週一  下午 07:49    <DIR>          .
+26/06/01 週一  下午 07:49    <DIR>          ..
+26/06/01 週一  下午 07:49             2,835 notifications.php
+               1 个文件          2,835 字节
+
+ c:\laragon\www\taotique\resources\lang\vendor\backup\da 的目录
+
+26/06/01 週一  下午 07:49    <DIR>          .
+26/06/01 週一  下午 07:49    <DIR>          ..
+26/06/01 週一  下午 07:49             2,712 notifications.php
+               1 个文件          2,712 字节
+
+ c:\laragon\www\taotique\resources\lang\vendor\backup\de 的目录
+
+26/06/01 週一  下午 07:49    <DIR>          .
+26/06/01 週一  下午 07:49    <DIR>          ..
+26/06/01 週一  下午 07:49             2,839 notifications.php
+               1 个文件          2,839 字节
+
+ c:\laragon\www\taotique\resources\lang\vendor\backup\en 的目录
+
+26/06/01 週一  下午 07:49    <DIR>          .
+26/06/01 週一  下午 07:49    <DIR>          ..
+26/06/01 週一  下午 07:49             2,741 notifications.php
+               1 个文件          2,741 字节
+
+ c:\laragon\www\taotique\resources\lang\vendor\backup\es 的目录
+
+26/06/01 週一  下午 07:49    <DIR>          .
+26/06/01 週一  下午 07:49    <DIR>          ..
+26/06/01 週一  下午 07:49             3,342 notifications.php
+               1 个文件          3,342 字节
+
+ c:\laragon\www\taotique\resources\lang\vendor\backup\fa 的目录
+
+26/06/01 週一  下午 07:49    <DIR>          .
+26/06/01 週一  下午 07:49    <DIR>          ..
+26/06/01 週一  下午 07:49             3,655 notifications.php
+               1 个文件          3,655 字节
+
+ c:\laragon\www\taotique\resources\lang\vendor\backup\fi 的目录
+
+26/06/01 週一  下午 07:49    <DIR>          .
+26/06/01 週一  下午 07:49    <DIR>          ..
+26/06/01 週一  下午 07:49             2,798 notifications.php
+               1 个文件          2,798 字节
+
+ c:\laragon\www\taotique\resources\lang\vendor\backup\fr 的目录
+
+26/06/01 週一  下午 07:49    <DIR>          .
+26/06/01 週一  下午 07:49    <DIR>          ..
+26/06/01 週一  下午 07:49             3,098 notifications.php
+               1 个文件          3,098 字节
+
+ c:\laragon\www\taotique\resources\lang\vendor\backup\he 的目录
+
+26/06/01 週一  下午 07:49    <DIR>          .
+26/06/01 週一  下午 07:49    <DIR>          ..
+26/06/01 週一  下午 07:49             3,206 notifications.php
+               1 个文件          3,206 字节
+
+ c:\laragon\www\taotique\resources\lang\vendor\backup\hi 的目录
+
+26/06/01 週一  下午 07:49    <DIR>          .
+26/06/01 週一  下午 07:49    <DIR>          ..
+26/06/01 週一  下午 07:49             4,274 notifications.php
+               1 个文件          4,274 字节
+
+ c:\laragon\www\taotique\resources\lang\vendor\backup\hr 的目录
+
+26/06/01 週一  下午 07:49    <DIR>          .
+26/06/01 週一  下午 07:49    <DIR>          ..
+26/06/01 週一  下午 07:49             2,910 notifications.php
+               1 个文件          2,910 字节
+
+ c:\laragon\www\taotique\resources\lang\vendor\backup\id 的目录
+
+26/06/01 週一  下午 07:49    <DIR>          .
+26/06/01 週一  下午 07:49    <DIR>          ..
+26/06/01 週一  下午 07:49             2,781 notifications.php
+               1 个文件          2,781 字节
+
+ c:\laragon\www\taotique\resources\lang\vendor\backup\it 的目录
+
+26/06/01 週一  下午 07:49    <DIR>          .
+26/06/01 週一  下午 07:49    <DIR>          ..
+26/06/01 週一  下午 07:49             2,910 notifications.php
+               1 个文件          2,910 字节
+
+ c:\laragon\www\taotique\resources\lang\vendor\backup\ja 的目录
+
+26/06/01 週一  下午 07:49    <DIR>          .
+26/06/01 週一  下午 07:49    <DIR>          ..
+26/06/01 週一  下午 07:49             3,324 notifications.php
+               1 个文件          3,324 字节
+
+ c:\laragon\www\taotique\resources\lang\vendor\backup\kk 的目录
+
+26/06/01 週一  下午 07:49    <DIR>          .
+26/06/01 週一  下午 07:49    <DIR>          ..
+26/06/01 週一  下午 07:49             4,683 notifications.php
+               1 个文件          4,683 字节
+
+ c:\laragon\www\taotique\resources\lang\vendor\backup\ko 的目录
+
+26/06/01 週一  下午 07:49    <DIR>          .
+26/06/01 週一  下午 07:49    <DIR>          ..
+26/06/01 週一  下午 07:49             2,841 notifications.php
+               1 个文件          2,841 字节
+
+ c:\laragon\www\taotique\resources\lang\vendor\backup\nl 的目录
+
+26/06/01 週一  下午 07:49    <DIR>          .
+26/06/01 週一  下午 07:49    <DIR>          ..
+26/06/01 週一  下午 07:49             2,897 notifications.php
+               1 个文件          2,897 字节
+
+ c:\laragon\www\taotique\resources\lang\vendor\backup\no 的目录
+
+26/06/01 週一  下午 07:49    <DIR>          .
+26/06/01 週一  下午 07:49    <DIR>          ..
+26/06/01 週一  下午 07:49             2,688 notifications.php
+               1 个文件          2,688 字节
+
+ c:\laragon\www\taotique\resources\lang\vendor\backup\pl 的目录
+
+26/06/01 週一  下午 07:49    <DIR>          .
+26/06/01 週一  下午 07:49    <DIR>          ..
+26/06/01 週一  下午 07:49             3,094 notifications.php
+               1 个文件          3,094 字节
+
+ c:\laragon\www\taotique\resources\lang\vendor\backup\pt 的目录
+
+26/06/01 週一  下午 07:49    <DIR>          .
+26/06/01 週一  下午 07:49    <DIR>          ..
+26/06/01 週一  下午 07:49             3,009 notifications.php
+               1 个文件          3,009 字节
+
+ c:\laragon\www\taotique\resources\lang\vendor\backup\pt_BR 的目录
+
+26/06/01 週一  下午 07:49    <DIR>          .
+26/06/01 週一  下午 07:49    <DIR>          ..
+26/06/01 週一  下午 07:49             3,013 notifications.php
+               1 个文件          3,013 字节
+
+ c:\laragon\www\taotique\resources\lang\vendor\backup\ro 的目录
+
+26/06/01 週一  下午 07:49    <DIR>          .
+26/06/01 週一  下午 07:49    <DIR>          ..
+26/06/01 週一  下午 07:49             3,311 notifications.php
+               1 个文件          3,311 字节
+
+ c:\laragon\www\taotique\resources\lang\vendor\backup\ru 的目录
+
+26/06/01 週一  下午 07:49    <DIR>          .
+26/06/01 週一  下午 07:49    <DIR>          ..
+26/06/01 週一  下午 07:49             4,050 notifications.php
+               1 个文件          4,050 字节
+
+ c:\laragon\www\taotique\resources\lang\vendor\backup\sk 的目录
+
+26/06/01 週一  下午 07:49    <DIR>          .
+26/06/01 週一  下午 07:49    <DIR>          ..
+26/06/01 週一  下午 07:49             2,807 notifications.php
+               1 个文件          2,807 字节
+
+ c:\laragon\www\taotique\resources\lang\vendor\backup\tr 的目录
+
+26/06/01 週一  下午 07:49    <DIR>          .
+26/06/01 週一  下午 07:49    <DIR>          ..
+26/06/01 週一  下午 07:49             2,765 notifications.php
+               1 个文件          2,765 字节
+
+ c:\laragon\www\taotique\resources\lang\vendor\backup\uk 的目录
+
+26/06/01 週一  下午 07:49    <DIR>          .
+26/06/01 週一  下午 07:49    <DIR>          ..
+26/06/01 週一  下午 07:49             3,975 notifications.php
+               1 个文件          3,975 字节
+
+ c:\laragon\www\taotique\resources\lang\vendor\backup\zh_CN 的目录
+
+26/06/01 週一  下午 07:49    <DIR>          .
+26/06/01 週一  下午 07:49    <DIR>          ..
+26/06/01 週一  下午 07:49             2,492 notifications.php
+               1 个文件          2,492 字节
+
+ c:\laragon\www\taotique\resources\lang\vendor\backup\zh_TW 的目录
+
+26/06/01 週一  下午 07:49    <DIR>          .
+26/06/01 週一  下午 07:49    <DIR>          ..
+26/06/01 週一  下午 07:49             2,492 notifications.php
+               1 个文件          2,492 字节
+
+ c:\laragon\www\taotique\resources\lang\zh_TW 的目录
+
+26/05/15 週五  下午 10:08    <DIR>          .
+26/05/15 週五  下午 10:08    <DIR>          ..
+26/05/15 週五  上午 01:41             4,120 actions.php
+26/05/15 週五  上午 01:41               211 auth.php
+26/05/15 週五  上午 01:41             3,167 http-statuses.php
+26/05/15 週五  上午 01:41               669 pagination.php
+26/05/15 週五  上午 01:41               297 passwords.php
+26/05/15 週五  上午 01:41            17,084 validation.php
+               6 个文件         25,548 字节
+
+ c:\laragon\www\taotique\resources\views 的目录
+
+26/06/19 週五  上午 09:56    <DIR>          .
+26/06/19 週五  上午 09:56    <DIR>          ..
+26/07/11 週六  下午 09:04    <DIR>          components
+26/05/15 週五  下午 10:08    <DIR>          flux
+26/06/25 週四  下午 04:18    <DIR>          livewire
+26/05/15 週五  下午 10:08    <DIR>          partials
+26/06/19 週五  上午 09:56             1,657 test-journal.blade.php
+26/05/15 週五  上午 01:41             1,118 test.blade.php
+26/05/15 週五  下午 10:08    <DIR>          vendor
+26/05/15 週五  上午 01:41            79,578 welcome.blade.php
+               3 个文件         82,353 字节
+
+ c:\laragon\www\taotique\resources\views\components 的目录
+
+26/07/11 週六  下午 09:04    <DIR>          .
+26/07/11 週六  下午 09:04    <DIR>          ..
+26/05/15 週五  上午 01:41               452 action-message.blade.php
+26/05/15 週五  上午 01:41               714 app-logo-icon.blade.php
+26/05/15 週五  上午 01:41               357 app-logo.blade.php
+26/05/15 週五  上午 01:41               213 auth-header.blade.php
+26/05/15 週五  上午 01:41               167 auth-session-status.blade.php
+26/07/07 週二  上午 07:53    <DIR>          layouts
+26/06/25 週四  下午 03:08            11,640 media-manager.blade.php
+26/05/15 週五  上午 01:41               386 placeholder-pattern.blade.php
+26/05/22 週五  下午 02:12             3,946 sale-row.blade.php
+26/05/15 週五  下午 10:08    <DIR>          scanner
+26/05/16 週六  下午 03:46               588 scanner.blade.php
+26/05/15 週五  下午 10:08    <DIR>          settings
+               9 个文件         18,463 字节
+
+ c:\laragon\www\taotique\resources\views\components\layouts 的目录
+
+26/07/07 週二  上午 07:53    <DIR>          .
+26/07/07 週二  上午 07:53    <DIR>          ..
+26/05/15 週五  下午 10:08    <DIR>          app
+26/07/07 週二  上午 07:53             7,996 app.blade.php
+26/05/15 週五  下午 10:08    <DIR>          auth
+26/05/15 週五  上午 01:41                89 auth.blade.php
+               2 个文件          8,085 字节
+
+ c:\laragon\www\taotique\resources\views\components\layouts\app 的目录
+
+26/05/15 週五  下午 10:08    <DIR>          .
+26/05/15 週五  下午 10:08    <DIR>          ..
+26/05/15 週五  上午 01:41             5,780 header.blade.php
+26/05/15 週五  上午 01:41             6,251 sidebar.blade.php
+               2 个文件         12,031 字节
+
+ c:\laragon\www\taotique\resources\views\components\layouts\auth 的目录
+
+26/05/15 週五  下午 10:08    <DIR>          .
+26/05/15 週五  下午 10:08    <DIR>          ..
+26/05/15 週五  上午 01:41             1,235 card.blade.php
+26/05/15 週五  上午 01:41             1,050 simple.blade.php
+26/05/15 週五  上午 01:41             2,258 split.blade.php
+               3 个文件          4,543 字节
+
+ c:\laragon\www\taotique\resources\views\components\scanner 的目录
+
+26/05/15 週五  下午 10:08    <DIR>          .
+26/05/15 週五  下午 10:08    <DIR>          ..
+26/05/16 週六  下午 03:46               996 button.blade.php
+26/05/16 週六  下午 03:47             5,155 modal.blade.php
+26/05/16 週六  下午 03:48             5,208 scripts.blade.php
+               3 个文件         11,359 字节
+
+ c:\laragon\www\taotique\resources\views\components\settings 的目录
+
+26/05/15 週五  下午 10:08    <DIR>          .
+26/05/15 週五  下午 10:08    <DIR>          ..
+26/05/15 週五  上午 01:41             1,059 layout.blade.php
+               1 个文件          1,059 字节
+
+ c:\laragon\www\taotique\resources\views\flux 的目录
+
+26/05/15 週五  下午 10:08    <DIR>          .
+26/05/15 週五  下午 10:08    <DIR>          ..
+26/05/15 週五  下午 10:08    <DIR>          icon
+26/05/15 週五  下午 10:08    <DIR>          navlist
+               0 个文件              0 字节
+
+ c:\laragon\www\taotique\resources\views\flux\icon 的目录
+
+26/05/15 週五  下午 10:08    <DIR>          .
+26/05/15 週五  下午 10:08    <DIR>          ..
+26/05/15 週五  上午 01:41             1,201 book-open-text.blade.php
+26/05/15 週五  上午 01:41               988 chevrons-up-down.blade.php
+26/05/15 週五  上午 01:41             1,164 folder-git-2.blade.php
+26/05/15 週五  上午 01:41             1,143 layout-grid.blade.php
+               4 个文件          4,496 字节
+
+ c:\laragon\www\taotique\resources\views\flux\navlist 的目录
+
+26/05/15 週五  下午 10:08    <DIR>          .
+26/05/15 週五  下午 10:08    <DIR>          ..
+26/05/15 週五  上午 01:41             1,482 group.blade.php
+               1 个文件          1,482 字节
+
+ c:\laragon\www\taotique\resources\views\livewire 的目录
+
+26/06/25 週四  下午 04:18    <DIR>          .
+26/06/25 週四  下午 04:18    <DIR>          ..
+26/06/25 週四  下午 04:19    <DIR>          accountings
+26/05/15 週五  下午 10:08    <DIR>          auth
+26/06/17 週三  下午 07:40    <DIR>          conversions
+26/05/15 週五  下午 10:08    <DIR>          customers
+26/07/15 週三  下午 03:16    <DIR>          dashboard
+26/05/15 週五  下午 10:08    <DIR>          includes
+26/05/15 週五  下午 10:08    <DIR>          inventories
+26/05/15 週五  下午 10:08    <DIR>          products
+26/06/24 週三  下午 07:21    <DIR>          purchases
+26/07/10 週五  下午 09:41    <DIR>          sales
+26/05/15 週五  下午 10:08    <DIR>          settings
+26/06/13 週六  下午 04:58    <DIR>          suppliers
+               0 个文件              0 字节
+
+ c:\laragon\www\taotique\resources\views\livewire\accountings 的目录
+
+26/06/25 週四  下午 04:19    <DIR>          .
+26/06/25 週四  下午 04:19    <DIR>          ..
+26/06/19 週五  下午 08:15    <DIR>          includes
+26/06/01 週一  下午 12:44            12,986 journal-correct.blade.php
+26/05/29 週五  下午 09:22             7,477 journal-create.blade.php
+26/06/19 週五  下午 04:35            15,473 journal-index.blade.php
+26/06/25 週四  下午 04:19             5,478 period-management.blade.php
+               4 个文件         41,414 字节
+
+ c:\laragon\www\taotique\resources\views\livewire\accountings\includes 的目录
+
+26/06/19 週五  下午 08:15    <DIR>          .
+26/06/19 週五  下午 08:15    <DIR>          ..
+26/06/19 週五  下午 08:15             3,820 _journal-detail.blade.php
+               1 个文件          3,820 字节
+
+ c:\laragon\www\taotique\resources\views\livewire\auth 的目录
+
+26/05/15 週五  下午 10:08    <DIR>          .
+26/05/15 週五  下午 10:08    <DIR>          ..
+26/05/15 週五  上午 01:41               968 confirm-password.blade.php
+26/05/15 週五  上午 01:41             1,179 forgot-password.blade.php
+26/05/15 週五  上午 01:41             3,207 login.blade.php
+26/05/15 週五  上午 01:41             2,152 register.blade.php
+26/05/15 週五  上午 01:41             1,768 reset-password.blade.php
+26/05/15 週五  上午 01:41             3,756 two-factor-challenge.blade.php
+26/05/15 週五  上午 01:41             1,239 verify-email.blade.php
+               7 个文件         14,269 字节
+
+ c:\laragon\www\taotique\resources\views\livewire\conversions 的目录
+
+26/06/17 週三  下午 07:40    <DIR>          .
+26/06/17 週三  下午 07:40    <DIR>          ..
+26/06/15 週一  下午 08:58            10,887 create.blade.php
+26/06/17 週三  下午 07:40            13,683 index.blade.php
+               2 个文件         24,570 字节
+
+ c:\laragon\www\taotique\resources\views\livewire\customers 的目录
+
+26/05/15 週五  下午 10:08    <DIR>          .
+26/05/15 週五  下午 10:08    <DIR>          ..
+26/05/15 週五  上午 01:41             6,903 index.blade.php
+               1 个文件          6,903 字节
+
+ c:\laragon\www\taotique\resources\views\livewire\dashboard 的目录
+
+26/07/15 週三  下午 03:16    <DIR>          .
+26/07/15 週三  下午 03:16    <DIR>          ..
+26/07/15 週三  下午 03:16             8,057 about-index.blade.php
+26/06/04 週四  下午 03:40             8,764 overview.blade.php
+               2 个文件         16,821 字节
+
+ c:\laragon\www\taotique\resources\views\livewire\includes 的目录
+
+26/05/15 週五  下午 10:08    <DIR>          .
+26/05/15 週五  下午 10:08    <DIR>          ..
+26/05/15 週五  上午 01:41               753 _product-row.blade.php
+               1 个文件            753 字节
+
+ c:\laragon\www\taotique\resources\views\livewire\inventories 的目录
+
+26/05/15 週五  下午 10:08    <DIR>          .
+26/05/15 週五  下午 10:08    <DIR>          ..
+26/05/15 週五  上午 01:41             4,671 index.blade.php
+26/05/15 週五  上午 01:41             5,494 movements.blade.php
+26/05/15 週五  上午 01:41             5,908 stocktakes.blade.php
+26/05/15 週五  上午 01:41             2,717 transfers.blade.php
+               4 个文件         18,790 字节
+
+ c:\laragon\www\taotique\resources\views\livewire\products 的目录
+
+26/05/15 週五  下午 10:08    <DIR>          .
+26/05/15 週五  下午 10:08    <DIR>          ..
+26/05/15 週五  上午 01:41             3,309 create.blade.php
+26/05/15 週五  上午 01:41             2,872 edit.blade.php
+26/05/15 週五  上午 01:41            10,117 index.blade.php
+26/05/15 週五  上午 01:41             2,918 show.blade.php
+               4 个文件         19,216 字节
+
+ c:\laragon\www\taotique\resources\views\livewire\purchases 的目录
+
+26/06/24 週三  下午 07:21    <DIR>          .
+26/06/24 週三  下午 07:21    <DIR>          ..
+26/06/24 週三  下午 03:29            12,040 create.blade.php
+26/06/24 週三  下午 07:21            21,461 index.blade.php
+26/06/10 週三  下午 03:52    <DIR>          returns
+               2 个文件         33,501 字节
+
+ c:\laragon\www\taotique\resources\views\livewire\purchases\returns 的目录
+
+26/06/10 週三  下午 03:52    <DIR>          .
+26/06/10 週三  下午 03:52    <DIR>          ..
+26/05/16 週六  下午 03:49             7,120 return-create.blade.php
+26/06/10 週三  下午 03:52            14,388 return-index.blade.php
+               2 个文件         21,508 字节
+
+ c:\laragon\www\taotique\resources\views\livewire\sales 的目录
+
+26/07/10 週五  下午 09:41    <DIR>          .
+26/07/10 週五  下午 09:41    <DIR>          ..
+26/06/23 週二  下午 09:50            10,117 create.blade.php
+26/07/10 週五  下午 09:41            16,279 index.blade.php
+26/06/10 週三  上午 09:30    <DIR>          returns
+               2 个文件         26,396 字节
+
+ c:\laragon\www\taotique\resources\views\livewire\sales\returns 的目录
+
+26/06/10 週三  上午 09:30    <DIR>          .
+26/06/10 週三  上午 09:30    <DIR>          ..
+26/06/08 週一  下午 12:33             9,451 return-create.blade.php
+26/06/10 週三  上午 09:30            12,311 return-index.blade.php
+               2 个文件         21,762 字节
+
+ c:\laragon\www\taotique\resources\views\livewire\settings 的目录
+
+26/05/15 週五  下午 10:08    <DIR>          .
+26/05/15 週五  下午 10:08    <DIR>          ..
+26/07/08 週三  下午 04:05    <DIR>          accounting-rules
+26/06/12 週五  下午 09:45    <DIR>          accounts
+26/05/15 週五  上午 01:41               668 appearance.blade.php
+26/05/15 週五  上午 01:41             2,431 backup-index.blade.php
+26/05/15 週五  下午 10:08    <DIR>          categories
+26/05/15 週五  下午 10:08    <DIR>          channels
+26/05/15 週五  上午 01:41             2,216 delete-user-form.blade.php
+26/05/15 週五  下午 10:08    <DIR>          materials
+26/05/15 週五  下午 10:08    <DIR>          partners
+26/05/15 週五  上午 01:41             2,619 password.blade.php
+26/05/15 週五  上午 01:41             3,741 profile.blade.php
+26/05/15 週五  下午 10:08    <DIR>          shops
+26/05/15 週五  上午 01:41            12,248 system-settings.blade.php
+26/05/15 週五  下午 10:08    <DIR>          two-factor
+26/05/15 週五  上午 01:41            14,591 two-factor.blade.php
+26/05/15 週五  下午 10:08    <DIR>          users
+26/05/15 週五  下午 10:08    <DIR>          warehouses
+               7 个文件         38,514 字节
+
+ c:\laragon\www\taotique\resources\views\livewire\settings\accounting-rules 的目录
+
+26/07/08 週三  下午 04:05    <DIR>          .
+26/07/08 週三  下午 04:05    <DIR>          ..
+26/07/08 週三  下午 04:05            12,181 index.blade.php
+               1 个文件         12,181 字节
+
+ c:\laragon\www\taotique\resources\views\livewire\settings\accounts 的目录
+
+26/06/12 週五  下午 09:45    <DIR>          .
+26/06/12 週五  下午 09:45    <DIR>          ..
+26/06/12 週五  下午 09:45             5,593 index.blade.php
+               1 个文件          5,593 字节
+
+ c:\laragon\www\taotique\resources\views\livewire\settings\categories 的目录
+
+26/05/15 週五  下午 10:08    <DIR>          .
+26/05/15 週五  下午 10:08    <DIR>          ..
+26/05/15 週五  上午 01:41             3,207 index.blade.php
+               1 个文件          3,207 字节
+
+ c:\laragon\www\taotique\resources\views\livewire\settings\channels 的目录
+
+26/05/15 週五  下午 10:08    <DIR>          .
+26/05/15 週五  下午 10:08    <DIR>          ..
+26/05/16 週六  下午 03:50             4,813 index.blade.php
+               1 个文件          4,813 字节
+
+ c:\laragon\www\taotique\resources\views\livewire\settings\materials 的目录
+
+26/05/15 週五  下午 10:08    <DIR>          .
+26/05/15 週五  下午 10:08    <DIR>          ..
+26/05/15 週五  上午 01:41             3,676 index.blade.php
+               1 个文件          3,676 字节
+
+ c:\laragon\www\taotique\resources\views\livewire\settings\partners 的目录
+
+26/05/15 週五  下午 10:08    <DIR>          .
+26/05/15 週五  下午 10:08    <DIR>          ..
+26/05/15 週五  上午 01:41             2,068 form-drawer.blade.php
+26/05/15 週五  上午 01:41             7,483 index.blade.php
+26/05/15 週五  上午 01:41             3,794 view-drawer.blade.php
+               3 个文件         13,345 字节
+
+ c:\laragon\www\taotique\resources\views\livewire\settings\shops 的目录
+
+26/05/15 週五  下午 10:08    <DIR>          .
+26/05/15 週五  下午 10:08    <DIR>          ..
+26/05/15 週五  上午 01:41             2,947 index.blade.php
+               1 个文件          2,947 字节
+
+ c:\laragon\www\taotique\resources\views\livewire\settings\two-factor 的目录
+
+26/05/15 週五  下午 10:08    <DIR>          .
+26/05/15 週五  下午 10:08    <DIR>          ..
+26/05/15 週五  上午 01:41             4,572 recovery-codes.blade.php
+               1 个文件          4,572 字节
+
+ c:\laragon\www\taotique\resources\views\livewire\settings\users 的目录
+
+26/05/15 週五  下午 10:08    <DIR>          .
+26/05/15 週五  下午 10:08    <DIR>          ..
+26/05/15 週五  上午 01:41             6,478 user-management.blade.php
+               1 个文件          6,478 字节
+
+ c:\laragon\www\taotique\resources\views\livewire\settings\warehouses 的目录
+
+26/05/15 週五  下午 10:08    <DIR>          .
+26/05/15 週五  下午 10:08    <DIR>          ..
+26/05/15 週五  上午 01:41             4,084 index.blade.php
+               1 个文件          4,084 字节
+
+ c:\laragon\www\taotique\resources\views\livewire\suppliers 的目录
+
+26/06/13 週六  下午 04:58    <DIR>          .
+26/06/13 週六  下午 04:58    <DIR>          ..
+26/06/13 週六  下午 04:58             7,729 index.blade.php
+               1 个文件          7,729 字节
+
+ c:\laragon\www\taotique\resources\views\partials 的目录
+
+26/05/15 週五  下午 10:08    <DIR>          .
+26/05/15 週五  下午 10:08    <DIR>          ..
+26/05/15 週五  上午 01:41               543 head.blade.php
+26/05/15 週五  上午 01:41               271 settings-heading.blade.php
+               2 个文件            814 字节
+
+ c:\laragon\www\taotique\resources\views\vendor 的目录
+
+26/05/15 週五  下午 10:08    <DIR>          .
+26/05/15 週五  下午 10:08    <DIR>          ..
+26/05/15 週五  下午 10:08    <DIR>          livewire-charts
+               0 个文件              0 字节
+
+ c:\laragon\www\taotique\resources\views\vendor\livewire-charts 的目录
+
+26/05/15 週五  下午 10:08    <DIR>          .
+26/05/15 週五  下午 10:08    <DIR>          ..
+26/05/15 週五  上午 01:41               166 livewire-area-chart.blade.php
+26/05/15 週五  上午 01:41               168 livewire-column-chart.blade.php
+26/05/15 週五  上午 01:41               166 livewire-line-chart.blade.php
+26/05/15 週五  上午 01:41               173 livewire-multi-column-chart.blade.php
+26/05/15 週五  上午 01:41               171 livewire-multi-line-chart.blade.php
+26/05/15 週五  上午 01:41               165 livewire-pie-chart.blade.php
+26/05/15 週五  上午 01:41               166 livewire-radar-chart.blade.php
+26/05/15 週五  上午 01:41               167 livewire-radial-chart.blade.php
+26/05/15 週五  上午 01:41               168 livewire-tree-map-chart.blade.php
+               9 个文件          1,510 字节
+
+     所列文件总数:
+             149 个文件        697,348 字节
+             242 个目录 79,878,807,552 可用字节

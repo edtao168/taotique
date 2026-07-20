@@ -108,7 +108,14 @@
             </a>
         </div>
     </x-card>
-
+	
+	<x-card class="text-center">
+		<p class="mt-2 text-muted">覺得不賴，可以贊助一下。</p>
+		<img src="{{ asset('cathay_qr_code.png') }}" 
+			 alt="國泰QR Code" 
+			 style="width: 180px; height: auto; display: block; margin: 0 auto;">    
+	</x-card>
+	
     {{-- 技術棧與授權 --}}
     <x-card title="技術棧與授權" class="bg-base-100 shadow-sm border border-base-300" separator>
         <div class="space-y-3">
