@@ -10,7 +10,7 @@ class Channel extends Model
 {
     use TenantScoped;
 	
-	protected $fillable = ['name', 'type', 'platform_fee_rate', 'is_active'];
+	protected $fillable = ['tenant_id', 'name', 'type', 'platform_fee_rate', 'is_active'];
 	
 	protected $casts = [
 		'platform_fee_rate' => 'decimal:4',

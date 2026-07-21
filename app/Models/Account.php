@@ -23,7 +23,8 @@ class Account extends Model
         'currency',
         'account_number',
         'shop_id',
-        'is_active',
+        'tenant_id',
+		'is_active',
     ];
 
     protected $casts = [

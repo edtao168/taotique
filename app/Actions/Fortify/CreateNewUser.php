@@ -5,6 +5,8 @@ namespace App\Actions\Fortify;
 use App\Models\Tenant;
 use App\Models\Shop;
 use App\Models\User;
+use App\Services\TenantInitializer;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
@@ -36,20 +38,29 @@ class CreateNewUser implements CreatesNewUsers
         ]);
 
         // 2. 建立預設店鋪
-        $shop = Shop::create([
-            'tenant_id' => $tenant->id,
-            'name' => '總店',
-            'is_active' => true,
-        ]);
+        $shopId = DB::table('shops')->insertGetId([
+			'tenant_id' => $tenant->id,
+			'name' => '總店',
+			'is_active' => 1,
+			'created_at' => now(),
+			'updated_at' => now(),
+		]);
 
-        // 3. 建立使用者（admin）
+		// 手動建立 Shop 物件（讓後續程式能用）
+		$shop = Shop::find($shopId);
+
+        // ✅ 3. 初始化租戶資料（會計科目、倉庫、通路）
+        $initializer = new TenantInitializer();
+        $initializer->initialize($tenant);
+
+        // 4. 建立使用者
         return User::create([
             'name' => $input['name'],
             'email' => $input['email'],
             'password' => Hash::make($input['password']),
             'tenant_id' => $tenant->id,
             'current_shop_id' => $shop->id,
-            'role' => 'owner',  // ✅ 第一個使用者是管理員
+            'role' => 'owner',
             'is_active' => true,
         ]);
     }

@@ -11,9 +11,11 @@ class Shop extends Model
 {
     use TenantScoped;
 	
-	protected $fillable = ['name'];
+	protected $fillable = ['tenant_id', 'name', 
+        'is_active'];
 	
 	public function warehouses() { return $this->hasMany(Warehouse::class); }
+	public function tenant() { return $this->belongsTo(Tenant::class); }
 	
 	public static function getOptions(): array
 	{
