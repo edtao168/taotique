@@ -51,6 +51,30 @@
 						<span class="text-xs text-gray-500 italic truncate max-w-xs block sm:inline">第一版</span>
 					</div>
 				</div>
+				
+				{{-- 使用者資訊 --}}
+				@auth
+				<div class="px-5 pb-3 border-b border-base-200">
+					<div class="flex items-center gap-3">
+						<div class="avatar">
+							<div class="w-10 rounded-full">
+								@if(auth()->user()->partner?->photo_path)
+									<img src="{{ asset('storage/' . auth()->user()->partner->photo_path) }}" alt="{{ auth()->user()->name }}" />
+								@else
+									<div class="bg-primary text-primary-content rounded-full w-10 flex items-center justify-center text-sm font-medium">
+										{{ auth()->user()->name[0] ?? 'U' }}
+									</div>
+								@endif
+							</div>
+						</div>
+						<div class="flex-1 min-w-0">
+							<div class="font-semibold text-sm truncate">{{ auth()->user()->name }}</div>
+							<div class="text-xs text-gray-500 truncate">{{ auth()->user()->email }}</div>
+							<div class="text-xs text-gray-400 truncate">{{ auth()->user()->tenant?->name ?? '未設定' }}</div>
+						</div>
+					</div>
+				</div>
+				@endauth
 
 				{{-- 導覽選單 --}}			
 				<x-menu activate-by-route>

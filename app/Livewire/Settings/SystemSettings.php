@@ -11,10 +11,21 @@ class SystemSettings extends Component
     use Toast;
 
     public array $payload = [];
+	
+	public $tenant_name;
+	public $tenant_tax_id;
+	public $tenant_phone;
+	public $tenant_address;
 
     public function mount()
     {
-        // 使用新的 get 方法，自動處理解碼
+        $tenant = auth()->user()->tenant;
+		$this->tenant_name = $tenant->name ?? '';
+		$this->tenant_tax_id = $tenant->tax_id ?? '';
+		$this->tenant_phone = $tenant->phone ?? '';
+		$this->tenant_address = $tenant->address ?? '';
+	
+		// 使用新的 get 方法，自動處理解碼
         $defaults = [
             // 核心流程 (core)
             'allow_negative_stock' => false,
@@ -57,7 +68,14 @@ class SystemSettings extends Component
 
     public function save()
     {
-        foreach ($this->payload as $key => $value) {
+        $tenant = auth()->user()->tenant;
+		$tenant->update([
+			'name' => $this->tenant_name,
+			'tax_id' => $this->tenant_tax_id,
+			'phone' => $this->tenant_phone,
+			'address' => $this->tenant_address,
+		]);
+		foreach ($this->payload as $key => $value) {
             Setting::updateValue($key, $value);
         }
         

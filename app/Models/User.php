@@ -65,11 +65,6 @@ class User extends Authenticatable
             ->implode('');
     }
 	
-	public function partner()
-	{
-		return $this->hasOne(Partner::class);
-	}
-	
 	// 對應 config/acl.php
     public function canViewCost(): bool
     {
@@ -118,6 +113,14 @@ class User extends Authenticatable
 	public function shop(): BelongsTo
 	{
 		return $this->belongsTo(Shop::class);
+	}
+	
+	/**
+	 * 使用者對應的夥伴
+	 */	
+	public function partner()
+	{
+		return $this->hasOne(Partner::class);
 	}
 
 	/**
