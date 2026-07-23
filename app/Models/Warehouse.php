@@ -4,12 +4,14 @@
 
 namespace App\Models;
 
+use App\Models\Traits\ShopScoped;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Warehouse extends Model
 {
-    // 確保這裡對應你剛才改名的 shop_id
+    use ShopScoped;
+	// 確保這裡對應你剛才改名的 shop_id
     protected $fillable = ['name', 'shop_id', 'is_active'];
 
     /**

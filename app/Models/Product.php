@@ -125,8 +125,18 @@ class Product extends Model
 	 */
 	public static function totalInventoryValue(): string
 	{
-		// 直接加總所有庫存記錄，不考慮倉庫所屬店鋪
-		$total = self::join('inventories', 'products.id', '=', 'inventories.product_id')
+	    if (!auth()->check()) {
+			return '0';
+		}
+		
+		$tenantId = auth()->user()->tenant_id;
+		
+		$total = self::withoutGlobalScope('tenant')
+			->join('inventories', 'products.id', '=', 'inventories.product_id')
+			->join('warehouses', 'inventories.warehouse_id', '=', 'warehouses.id')
+			->join('shops', 'warehouses.shop_id', '=', 'shops.id')
+			->where('shops.tenant_id', $tenantId)
+			->where('products.tenant_id', $tenantId)
 			->select(DB::raw('SUM(inventories.quantity * products.cost) as total_value'))
 			->value('total_value') ?? '0';
 

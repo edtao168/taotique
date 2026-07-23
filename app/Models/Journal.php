@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\JournalStatus;
+use App\Models\Traits\ShopScoped;
 use App\Traits\HasWorkflow;
 use App\Services\AccountingService;
 use Illuminate\Database\Eloquent\Model;
@@ -13,7 +14,7 @@ use Illuminate\Support\Facades\DB;
 
 class Journal extends Model
 {
-    use HasWorkflow;
+    use HasWorkflow, ShopScoped;
 
     protected $table = 'journals';
 

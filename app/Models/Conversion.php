@@ -4,6 +4,7 @@
 namespace App\Models;
 
 use App\Enums\WorkflowStatus;
+use App\Models\Traits\ShopScoped;
 use App\Traits\HasAccounting;
 use App\Traits\HasWorkflow;
 use Illuminate\Database\Eloquent\Model;
@@ -12,7 +13,7 @@ use Illuminate\Support\Facades\DB;
 
 class Conversion extends Model
 {
-    use SoftDeletes, HasWorkflow, HasAccounting;
+    use SoftDeletes, HasWorkflow, HasAccounting, ShopScoped;
 
     protected $table = 'conversions';
 
@@ -38,6 +39,33 @@ class Conversion extends Model
     ];
 
     private const DECIMAL_PRECISION = 4;
+	
+	/**
+     * 取得對應的 Enum class
+     */
+    protected static function getStatusEnumClass(): string
+    {
+        return WorkflowStatus::class;
+    }
+
+    /**
+     * 定義狀態轉換規則
+     */
+    protected function getTransitionRules(): array
+    {
+        return [
+            // 審核流程
+			['from' => 'pending', 'to' => 'approved', 'event' => 'approve', 'label' => '審核通過'],
+			['from' => 'draft', 'to' => 'approved', 'event' => 'approve', 'label' => '審核通過'],
+			
+			// 過帳/結案
+			['from' => 'approved', 'to' => 'completed', 'event' => 'post', 'label' => '庫存結轉並過帳'],
+			
+			// 取消
+			['from' => 'pending', 'to' => 'cancelled', 'event' => 'cancel', 'label' => '取消'],
+			['from' => 'draft', 'to' => 'cancelled', 'event' => 'cancel', 'label' => '取消'],
+		];
+    }
 
     // =========================================================================
     // HasAccounting Trait 所需方法

@@ -33,29 +33,6 @@ class UserManagement extends Component
         ['id' => 'staff', 'name' => '店員 (Staff)'],
 		['id' => 'guest', 'name' => '來賓 (Guest)'],
     ];
-
-    public function render()
-    {	
-        // 進入頁面檢查：非 Owner 不能進來（或依據你的 ACL 定義）
-        if (auth()->user()->role !== 'owner') {
-            abort(403, '只有店主可以管理帳號');
-        }
-		
-        $headers = [
-            ['key' => 'id', 'label' => '#', 'class' => 'w-1'],
-            ['key' => 'name', 'label' => '使用者名稱'],
-            ['key' => 'role', 'label' => '權限角色', 'class' => 'w-50'],
-            ['key' => 'shop.name', 'label' => '所屬營業點'], // 顯示關聯店鋪
-            ['key' => 'is_active', 'label' => '啟用', 'class' => 'w-20'],
-        ];
-
-        return view('livewire.settings.users.user-management', [
-            'users' => User::with(['shop', 'warehouse'])->paginate(10),
-            'headers' => $headers,
-            'shops' => Shop::all(), // 供 Select 使用
-            'warehouses' => Warehouse::all(), // 供 Select 使用
-        ]);
-    }
 	
 	// 當搜尋關鍵字改變時，重置每頁數量與分頁狀態
     public function updatedSearch()
@@ -137,5 +114,30 @@ class UserManagement extends Component
         $user->is_active = !$user->is_active;
         $user->save();
         $this->info("帳號狀態已切換");
+    }
+	
+    public function render()
+    {	
+        // 進入頁面檢查：非 Owner 不能進來（或依據你的 ACL 定義）
+        if (auth()->user()->role !== 'owner') {
+            abort(403, '只有店主可以管理帳號');
+        }
+		
+        $headers = [
+            ['key' => 'id', 'label' => '#', 'class' => 'w-1'],
+            ['key' => 'name', 'label' => '使用者名稱'],
+            ['key' => 'role', 'label' => '權限角色', 'class' => 'w-50'],
+            ['key' => 'shop.name', 'label' => '所屬營業點'], // 顯示關聯店鋪
+            ['key' => 'is_active', 'label' => '啟用', 'class' => 'w-20'],
+        ];
+
+        return view('livewire.settings.users.user-management', [
+            'users' => User::with(['shop', 'warehouse'])
+				->where('tenant_id', auth()->user()->tenant_id)
+				->paginate(10),
+            'headers' => $headers,
+            'shops' => Shop::all(), // 供 Select 使用
+            'warehouses' => Warehouse::all(), // 供 Select 使用
+        ]);
     }
 }

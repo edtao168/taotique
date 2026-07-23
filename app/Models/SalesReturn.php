@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Traits\ShopScoped;
 use App\Traits\HasAccountAndDynamicSearch;
 use App\Traits\HasAccounting;
 use App\Traits\HasShop;
@@ -17,7 +18,8 @@ class SalesReturn extends Model
     use HasShop,
 		HasAccounting,
 		HasAccountAndDynamicSearch,
-		HasWorkflow;
+		HasWorkflow,
+		ShopScoped;
 
     protected $table = 'sales_returns';
 

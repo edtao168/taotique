@@ -4,7 +4,6 @@
 namespace App\Models;
 
 use App\Enums\WorkflowStatus;
-use App\Traits\HasWorkflow;
 use App\Models\Setting;
 use App\Models\AccountingRule;
 use App\Models\Inventory;
@@ -13,9 +12,11 @@ use App\Models\SaleItem;
 use App\Models\SaleFee;
 use App\Models\SalesReturn;
 use App\Models\Journal;
+use App\Models\Traits\ShopScoped;
 use App\Services\AccountingService;
 use App\Traits\HasAccountAndDynamicSearch;
 use App\Traits\HasAccounting;
+use App\Traits\HasWorkflow;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -25,7 +26,8 @@ class Sale extends Model
 {
     use HasAccounting, 
         HasAccountAndDynamicSearch, 
-        HasWorkflow;
+        HasWorkflow,
+		ShopScoped;
 
     protected $guarded = [];
 

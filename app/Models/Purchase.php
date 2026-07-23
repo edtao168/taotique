@@ -12,6 +12,7 @@ use App\Models\Setting;
 use App\Models\Supplier;
 use App\Models\User;
 use App\Models\Warehouse;
+use App\Models\Traits\ShopScoped;
 use App\Traits\HasAccounting;
 use App\Traits\HasWorkflow;
 use Exception;
@@ -22,7 +23,7 @@ use Illuminate\Support\Facades\DB;
 
 class Purchase extends Model
 {
-    use HasAccounting, HasWorkflow;
+    use HasAccounting, HasWorkflow, ShopScoped;
 	
 	protected $fillable = [
         'shop_id',

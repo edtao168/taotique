@@ -28,6 +28,7 @@ class Movements extends Component
     {
         $query = InventoryMovement::query()
 			->with(['product', 'warehouse.shop', 'user'])
+			->whereHas('product')
 			->withAggregate('product', 'sku')  // 產生 product_sku 欄位
 			->when($this->search, function ($q) {
 				$q->whereHas('product', fn($p) => $p->where('sku', 'like', "%{$this->search}%")

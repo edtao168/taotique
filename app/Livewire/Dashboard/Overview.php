@@ -60,6 +60,7 @@ class Overview extends Component
 	    public function render()
     {
         $now = Carbon::now();
+		$tenantId = auth()->user()->tenant_id;
 
         // 1. 統計數據
         $stats = [
@@ -67,12 +68,14 @@ class Overview extends Component
             'monthSales' => Sale::whereMonth('created_at', $now->month)->whereYear('created_at', $now->year)->sum('subtotal'),
             'monthNetProfit' => Sale::whereMonth('created_at', $now->month)->whereYear('created_at', $now->year)->sum('final_net_amount'),
             'inventoryValue' => Product::totalInventoryValue(),
-            'lowStockCount' => Inventory::whereExists(function ($query) {
-                $query->select(DB::raw(1))
-                      ->from('products')
-                      ->whereColumn('products.id', 'inventories.product_id')
-                      ->whereRaw('inventories.quantity <= products.min_stock');
-            })->count(),
+            'lowStockCount' => Inventory::whereHas('product', function ($q) use ($tenantId) {
+        $q->where('tenant_id', $tenantId)
+          ->whereColumn('inventories.quantity', '<=', 'products.min_stock');
+    })
+    ->whereHas('warehouse.shop', function ($q) use ($tenantId) {
+        $q->where('tenant_id', $tenantId);
+    })
+    ->count(),
         ];
 
         // 2. 生成最近 12 個月的月份列表（包含無數據的月份）

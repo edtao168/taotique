@@ -4,6 +4,7 @@
 
 namespace App\Models;
 
+use App\Models\Traits\ShopScoped;
 use App\Traits\HasAccounting;
 use App\Traits\HasAccountAndDynamicSearch;
 use App\Traits\HasShop;
@@ -18,7 +19,8 @@ class PurchaseReturn extends Model
     use HasShop,
 		HasAccounting,
 		HasAccountAndDynamicSearch,
-		HasWorkflow;
+		HasWorkflow,
+		ShopScoped;
 
     protected $table = 'purchase_returns';
 
@@ -54,6 +56,33 @@ class PurchaseReturn extends Model
     ];
 
     private const DECIMAL_PRECISION = 4;
+	
+	/**
+     * 取得對應的 Enum class
+     */
+    protected static function getStatusEnumClass(): string
+    {
+        return WorkflowStatus::class;
+    }
+
+    /**
+     * 定義狀態轉換規則
+     */
+    protected function getTransitionRules(): array
+    {
+        return [
+            // 審核流程
+			['from' => 'pending', 'to' => 'approved', 'event' => 'approve', 'label' => '審核通過'],
+			['from' => 'draft', 'to' => 'approved', 'event' => 'approve', 'label' => '審核通過'],
+			
+			// 過帳/結案
+			['from' => 'approved', 'to' => 'completed', 'event' => 'post', 'label' => '退貨過帳'],
+			
+			// 取消
+			['from' => 'pending', 'to' => 'cancelled', 'event' => 'cancel', 'label' => '取消退貨'],
+			['from' => 'draft', 'to' => 'cancelled', 'event' => 'cancel', 'label' => '取消退貨'],
+		];
+    }
 
     // =========================================================================
     // SECTION: HasAccounting Trait 所需方法

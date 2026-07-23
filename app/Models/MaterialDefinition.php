@@ -3,7 +3,7 @@
 namespace App\Models;
 
 use App\Models\Traits\TenantScoped;
-Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class MaterialDefinition extends Model
