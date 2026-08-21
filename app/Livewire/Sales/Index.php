@@ -49,10 +49,10 @@ class Index extends Component
         $this->drawer = true;
     }
 
-    /**
+	/**
      * 執行銷售單出庫審核
      */
-	public function submitStockOut(int $saleId)
+    public function submitStockOut(int $saleId)
     {
         try {
             $sale = DB::transaction(function () use ($saleId) {
@@ -63,18 +63,12 @@ class Index extends Component
                     throw new \Exception('找不到該銷售單據。');
                 }
 
-                // 在呼叫任何內層方法前，先用變數把「原始付款方式」記住
-				$originalPaymentMethod = $sale->payment_method;
-			
-				$allowNegative = (bool) Setting::get('allow_negative_inventory', false);
+                $allowNegative = (bool) Setting::get('allow_negative_inventory', false);
+                
+                // processStockOut 內部已包含扣庫存、過帳與將狀態轉為 completed
                 $sale->processStockOut($allowNegative);
 
-                // 3. 一人店極簡流程自動化
-                if (strtolower(trim($originalPaymentMethod)) === 'cash') {
-                // 只有最原始就是 cash 的單子，才可直接 COMPLETED (已結案)
-					$sale->transitionTo(WorkflowStatus::COMPLETED->value, 'complete', auth()->user());
-				}
-				return $sale;
+                return $sale;
             });
 
             $this->drawer = false;

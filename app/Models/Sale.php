@@ -199,31 +199,32 @@ class Sale extends Model
     /**
      * 定義狀態轉換規則
      */
-	protected function getTransitionRules(): array
-	{
-		return [
-			// ===== 審核流程 =====
-			['from' => 'pending', 'to' => 'approved', 'event' => 'approve', 'label' => '審核通過'],
-			
-			// ===== 捷徑 =====
-			['from' => 'draft', 'to' => 'approved', 'event' => 'approve', 'label' => '審核通過'],
-			['from' => 'draft', 'to' => 'completed', 'event' => 'stock_out', 'label' => '過帳完成'],
-			
-			// ===== 出貨 =====
-			['from' => 'approved', 'to' => 'completed', 'event' => 'stock_out', 'label' => '出貨完成'],
-			
-			// ===== 結算 =====
-			['from' => 'approved', 'to' => 'settled', 'event' => 'settle', 'label' => '銷售結算'],
-			
-			// ===== 結案（不涉及金流）=====
-			['from' => 'approved', 'to' => 'completed', 'event' => 'complete', 'label' => '完成結案'],
-			
-			// ===== 取消 =====
-			['from' => 'draft', 'to' => 'cancelled', 'event' => 'cancel', 'label' => '取消'],
-			['from' => 'pending', 'to' => 'cancelled', 'event' => 'cancel', 'label' => '取消'],
-			['from' => 'approved', 'to' => 'cancelled', 'event' => 'cancel', 'label' => '取消'],
-		];
-	}
+    protected function getTransitionRules(): array
+    {
+        return [
+            // ===== 審核流程 =====
+            ['from' => 'pending', 'to' => 'approved', 'event' => 'approve', 'label' => '審核通過'],
+            
+            // ===== 捷徑 =====
+            ['from' => 'draft', 'to' => 'approved', 'event' => 'approve', 'label' => '審核通過'],
+            ['from' => 'draft', 'to' => 'completed', 'event' => 'stock_out', 'label' => '過帳完成'],
+            ['from' => 'pending', 'to' => 'completed', 'event' => 'stock_out', 'label' => '過帳完成'],
+            
+            // ===== 出貨 =====
+            ['from' => 'approved', 'to' => 'completed', 'event' => 'stock_out', 'label' => '出貨完成'],
+            
+            // ===== 結算 =====
+            ['from' => 'approved', 'to' => 'settled', 'event' => 'settle', 'label' => '銷售結算'],
+            
+            // ===== 結案（不涉及金流）=====
+            ['from' => 'approved', 'to' => 'completed', 'event' => 'complete', 'label' => '完成結案'],
+            
+            // ===== 取消 =====
+            ['from' => 'draft', 'to' => 'cancelled', 'event' => 'cancel', 'label' => '取消'],
+            ['from' => 'pending', 'to' => 'cancelled', 'event' => 'cancel', 'label' => '取消'],
+            ['from' => 'approved', 'to' => 'cancelled', 'event' => 'cancel', 'label' => '取消'],
+        ];
+    }
 
     // =========================================================================
     // SECTION: 🆕 業務方法（狀態轉換）

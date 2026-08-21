@@ -1,28 +1,78 @@
-# 环境配置
+# ==========================================
+# 1. 環境設定與金鑰 (Environment & Keys)
+# ==========================================
 .env
 .env.*
+!.env.example
 config/local.php
 config/production.php
 
-# 依赖和缓存
-node_modules/
-vendor/
-cache/
-logs/
+# ==========================================
+# 2. 依賴套件 (Dependencies)
+# ==========================================
+/vendor/
+/node_modules/
+/composer.phar
+composer.lock
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# ==========================================
+# 3. Laravel 快取與儲存區 (Laravel Cache & Storage)
+# ==========================================
+/public/hot
+/public/storage
+/storage/*.key
+/storage/app/*
+!/storage/app/.gitignore
+/storage/framework/cache/*
+!/storage/framework/cache/.gitignore
+/storage/framework/sessions/*
+!/storage/framework/sessions/.gitignore
+/storage/framework/views/*
+!/storage/framework/views/.gitignore
+/storage/framework/testing/*
+!/storage/framework/testing/.gitignore
+
+# ==========================================
+# 4. 記錄檔與暫存 (Logs & Temp)
+# ==========================================
+/logs/
 *.log
+/storage/logs/*
+!/storage/logs/.gitignore
 tmp/
 temp/
-/composer.phar
-/public/hot
-/storage/*.session
-/storage/framework/sessions/*
+.phpunit.result.cache
 
-# IDE
+# ==========================================
+# 5. 測試工具 (Playwright & Testing)
+# ==========================================
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/
+.github/workflows/
+
+# ==========================================
+# 6. IDE 與編輯器 (IDEs & Editors)
+# ==========================================
 .vscode/
 .idea/
 *.swp
 *.swo
+*.sublime-workspace
+*.sublime-project
 
-# 系统文件
+# ==========================================
+# 7. 作業系統產出檔 (System Files)
+# ==========================================
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
