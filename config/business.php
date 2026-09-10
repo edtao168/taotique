@@ -51,6 +51,11 @@ return [
         
         // ========== 拆裝模組 (Conversion) ==========
         ['value' => 'DYNAMIC:conversion:output',     'label' => '動態：拆裝產出科目 (依成品類型)'],
+		
+		// ========== 共用動態科目 ==========
+        ['value' => 'DYNAMIC:auto:inventory',        'label' => '動態：庫存商品 (Inventory)'],
+        ['value' => 'DYNAMIC:auto:cost',             'label' => '動態：銷貨成本 (Cost of Goods Sold)'],
+        ['value' => 'DYNAMIC:inventory:account_code','label' => '動態：商品對應之存貨科目 (Inventory Account Code)'], // 🆕 新增此列
     ],
 
     // 採購專用付款方式

@@ -57,4 +57,23 @@ class InventoryMovement extends Model
 			default => 'badge-neutral',
 		};
 	}
+	
+	/**
+     * 手動庫存調整 (AdjustStock) 專用的下拉選單選項
+     * 排除由系統自動單據 (Sale, Purchase, Transfer, Stocktake) 觸發的類型
+     */
+    public static function getManualAdjustTypes(): array
+    {
+        return [
+            // 入庫類 (數量為正數)
+            'initial'          => '[入庫] 期初庫存導入 (舊店/搬遷轉入)',
+            'miscellaneous_in' => '[入庫] 雜項/其他入庫 (如：廠商無償贈樣、贈品轉商品)',
+            
+            // 出庫類 (數量為負數)
+            'gift'             => '[出庫] 公關贈送',
+            'scrap'            => '[出庫] 商品報廢 / 損耗',
+            'sample'           => '[出庫] 樣品領用 / 內部借用',
+            'miscellaneous_out'=> '[出庫] 雜項/其它出庫',
+        ];
+    }
 }

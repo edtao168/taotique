@@ -60,13 +60,6 @@ class AccountingService
 			// 🎯 確保是字串格式
 			$amount = (string) $amount;
 
-			info('Amount source debug', [
-				'amount_source' => $line->amount_source,
-				'amount_value' => $amount,
-				'line_id' => $line->id,
-				'sale_id' => $source->id ?? null,
-			]);
-			
 			$adjustedAmount = bcmul($amount, (string)$line->ratio, self::DECIMAL_PRECISION);
 
 			if (bccomp($adjustedAmount, '0.0000', self::DECIMAL_PRECISION) === 0) continue;
@@ -139,6 +132,7 @@ class AccountingService
             $journal->update([
                 'description' => "自動過帳 [{$eventType}] - 單據編號: {$source->getDocumentNumber()}",
                 'entry_date'  => now()->format('Y-m-d'),
+				'status'      => 'posted',
                 'updated_at'  => now(),
             ]);
 
@@ -166,8 +160,10 @@ class AccountingService
         return collect($entries)
             ->groupBy(fn($entry) => $entry['account_id'])
             ->map(function($group) {
-                $debitTotal = $group->where('is_debit', true)->sum('amount');
-                $creditTotal = $group->where('is_debit', false)->sum('amount');
+                $debitTotal = $group->where('is_debit', true)
+					->reduce(fn($carry, $e) => bcadd($carry, $e['amount'], self::DECIMAL_PRECISION), '0.0000');
+				$creditTotal = $group->where('is_debit', false)
+					->reduce(fn($carry, $e) => bcadd($carry, $e['amount'], self::DECIMAL_PRECISION), '0.0000');
 
                 if (bccomp($debitTotal, $creditTotal, self::DECIMAL_PRECISION) > 0) {
                     return [
@@ -229,7 +225,7 @@ class AccountingService
 
             try {
                 $resolvedCode = $source->resolveDynamicAccount($dynamicSpec, $context);
-            } catch (\Exception $e) {
+            } catch (\Throwable $e) {
                 throw new \RuntimeException(
                     sprintf(
                         '動態科目解析失敗 [規則ID: %d, 動態規格: %s, Model: %s#%d]: %s',
@@ -238,7 +234,7 @@ class AccountingService
                         get_class($source),
                         $source->id,
                         $e->getMessage()
-                    )
+                    ), 0, $e
                 );
             }
 
@@ -266,25 +262,17 @@ class AccountingService
      */
     private function getRule(string $eventType): AccountingRule
     {
-        \Log::info('getRule called', ['eventType' => $eventType]);
-
-        $rule = AccountingRule::where('event_type', $eventType)
-            ->where('is_active', true)
-            ->lockForUpdate()
-            ->first();
-
-        \Log::info('getRule result', [
-            'eventType' => $eventType,
-            'found' => $rule ? 'yes' : 'no',
-            'rule_id' => $rule?->id,
-            'lines_count' => $rule?->lines->count()
-        ]);
+        $rule = AccountingRule::with(['lines' => fn($q) => $q->orderBy('sort_order')])
+			->where('event_type', $eventType)
+			->where('is_active', true)
+			->lockForUpdate()
+			->first();
 
         if (!$rule) {
             throw new \RuntimeException("找不到已啟用的過帳規則 [{$eventType}]");
         }
 
-        return $rule->load(['lines' => fn($q) => $q->orderBy('sort_order')]);
+        return $rule;
     }
 
     /**
@@ -409,9 +397,11 @@ class AccountingService
     }
 
     /**
-     * 🎯 新增：撤銷（軟刪除）指定業務事件的傳票
-     * 供業務層在「取消出庫/入庫」等場景呼叫
-     */
+	 * 🎯 撤銷傳票
+	 *
+	 * ⚠️ 本方法僅改 journal.status = 'reversed'，不刪 items。
+	 * 因此所有報表查詢必須過濾 journal.status（見 JournalItem 類註解）。
+	 */
     public function reverseJournal(string $eventType, Model $source): void
     {
         $baseReferenceType = $source::getReferenceType();

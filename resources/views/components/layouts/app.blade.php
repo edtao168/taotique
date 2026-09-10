@@ -106,6 +106,7 @@
 					{{-- 3. 庫存管理系統 --}}
 					<x-menu-sub title="庫存管理" icon="o-archive-box">
 						<x-menu-item title="庫存總覽" icon="o-magnifying-glass" :link="route('inventories.index')" />
+						<x-menu-item title="手動庫存調整" icon="o-adjustments-vertical" :link="route('inventories.adjust')" />
 						<x-menu-item title="倉庫調撥" icon="o-arrows-right-left" :link="route('inventories.transfers')" />
 						<x-menu-item title="拆裝組合作業" icon="o-beaker" :link="route('inventories.conversions.create')" />
 						<x-menu-item title="拆裝作業紀錄" icon="o-list-bullet" :link="route('inventories.conversions.index')" />

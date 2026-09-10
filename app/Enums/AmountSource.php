@@ -77,6 +77,14 @@ enum AmountSource: string
     case OUTPUT_TOTAL_COST = 'output_total_cost';
     case COST_VARIANCE = 'cost_variance';
     case COST_VARIANCE_ABS = 'cost_variance_abs';
+	
+	// ==============================================
+    // 庫存調整與盤點模組 (Inventory Adjustment)
+    // ==============================================
+    case INVENTORY_ADJUSTMENT_AMOUNT = 'inventory_adjustment_amount'; // 庫存調整金額 (絕對值)
+    case INVENTORY_ADJUSTMENT_LOSS   = 'inventory_adjustment_loss';   // 盤損/抽檢/贈送 (損失金額)
+    case INVENTORY_ADJUSTMENT_GAIN   = 'inventory_adjustment_gain';   // 盤盈/期初 (收益金額)
+    case AUTO_INVENTORY_ACCOUNT      = 'auto:inventory_account';      // 對應 DYNAMIC:inventory:account_code
 
     // ==============================================
     // 🆕 結算/沖帳模組（Settlement）
@@ -146,6 +154,10 @@ enum AmountSource: string
             self::OUTPUT_TOTAL_COST => '成品產出總成本 (output_total_cost)',
             self::COST_VARIANCE => '成本差異（投入-產出）',
             self::COST_VARIANCE_ABS => '成本差異絕對值',
+			self::INVENTORY_ADJUSTMENT_AMOUNT => '📦 庫存調整金額 (inventory_adjustment_amount)',
+            self::INVENTORY_ADJUSTMENT_LOSS   => '📉 庫存盤損/報廢/贈送 (inventory_adjustment_loss)',
+            self::INVENTORY_ADJUSTMENT_GAIN   => '📈 庫存盤盈/期初 (inventory_adjustment_gain)',
+            self::AUTO_INVENTORY_ACCOUNT      => '📦 商品動態存貨科目 (auto:inventory_account)',
 
             // 🆕 結算/動態標籤
             self::SALE_SETTLE => '🔄 銷售結算 (sale:settle) - 應收/暫收',
@@ -207,6 +219,7 @@ enum AmountSource: string
             self::CONVERSION_INPUT,
             self::CONVERSION_LOSS,
             self::CONVERSION_GAIN,
+			self::AUTO_INVENTORY_ACCOUNT,
         ]);
     }
 

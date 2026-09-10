@@ -22,6 +22,7 @@ use App\Livewire\Sales\Returns\ReturnCreate;
 use App\Livewire\Sales\Returns\ReturnIndex;
 
 // 庫存與調撥 (Inventories)
+use App\Livewire\Inventories\AdjustStock;
 use App\Livewire\Inventories\Index as InventoryIndex;
 use App\Livewire\Inventories\Transfers;
 use App\Livewire\Inventories\Stocktakes;
@@ -90,6 +91,7 @@ Route::middleware(['auth'])->group(function () {
     // --- 庫存與調撥系統 (Inventories) ---
     Route::prefix('inventories')->name('inventories.')->group(function () {       
         Route::get('/', InventoryIndex::class)->name('index');
+		Route::get('/adjust', AdjustStock::class)->name('adjust');
 		Route::get('/transfers', Transfers::class)->name('transfers');
 		Route::get('/stocktakes', Stocktakes::class)->name('stocktakes');
         Route::get('/movements', Movements::class)->name('movements');
