@@ -9,7 +9,7 @@ use App\Models\Product;
 use App\Models\Warehouse;
 use App\Models\Setting;
 use App\Models\Shop;
-//use App\Traits\HasProductSearch;
+use App\Traits\HasProductSearch;
 use App\Traits\HasShop;
 use Livewire\Component;
 use Mary\Traits\Toast;
@@ -17,7 +17,7 @@ use Illuminate\Support\Facades\DB;
 
 class Create extends Component
 {
-    use Toast, HasShop;
+    use Toast, HasShop, HasProductSearch;
 
     public ?Conversion $conversion = null;
     public bool $isEdit = false;

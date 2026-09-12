@@ -27,18 +27,14 @@
 					class="bg-base-200"
                 />
 
-                <x-choices 
-                    label="選擇商品"
-					wire:model="product_id"
-					:options="$productOptions"
-					search-function="search"
-					debounce="300ms"
-					min-chars="1"
-					placeholder="請輸入SKU或商品名稱"
-					class="bg-base-200"
-					single
-					searchable
-                />
+                <x-product-picker 
+					name="product_id" 
+					:options="$productOptions" 
+					:selected-name="$product_name"
+					search-property="productSearch"
+					select-method="fillProduct"
+					clear-method="resetProduct"
+				/>
 
                 <x-input 
                     label="調撥數量" 

@@ -6,29 +6,43 @@ use App\Models\Product;
 use App\Models\Warehouse;
 use App\Models\Inventory;
 use App\Models\InventoryMovement;
-use App\Traits\HasProductSearch; // 引用 Trait
-use App\Traits\HasShop;           // 引用 HasShop 以取得當前 shop_id
+use App\Traits\HasSingleProductPicker;
+use App\Traits\HasShop;
 use Illuminate\Support\Facades\DB;
 use Livewire\Component;
 use Mary\Traits\Toast;
 
 class Transfers extends Component
 {
-    use HasProductSearch, HasShop, Toast; // 引入 Traits
+    use HasSingleProductPicker, HasShop, Toast;
 
     public ?int $from_warehouse_id = null;
     public ?int $to_warehouse_id = null;
     public ?int $product_id = null;
+    public string $product_name = ''; // 1. 補上顯示名稱，供 <x-product-picker> 顯示
     public string $quantity = '1.0000'; 
     public string $remark = '';
-    
-    // 與 HasProductSearch Trait 對齊的屬性名稱
-    public array $productOptions = []; 
+
+    // 注意：$productSearch 與 $productOptions 已由 Trait 提供，此處不需重複宣告
 
     public function mount()
     {
-        // 初始載入預設商品清單
-        $this->search(); 
+        // 初始載入 15 筆預設商品選單
+        $this->refreshProductOptions(); 
+    }
+
+    /**
+     * 當 product_id 變動時（例如由 fillProduct 觸發），同步更新顯示名稱
+     */
+    public function updatedProductId($value)
+    {
+        if ($value) {
+            $product = Product::find($value);
+            $this->product_name = $product ? $product->full_display_name : '';
+        } else {
+            $this->product_name = '';
+        }
+        $this->productSearch = '';
     }
 
     public function transfer()
@@ -101,8 +115,10 @@ class Transfers extends Component
             });
 
             $this->success("調撥完成");
-            $this->reset(['product_id', 'quantity', 'remark']);
-            $this->search(); // 重置並刷新商品下拉選單
+            
+            // 重置表單欄位與商品選擇器
+            $this->reset(['quantity', 'remark']);
+            $this->resetProduct(); // 自動清空 product_id, product_name 並重新刷新下拉選單
 
         } catch (\Exception $e) {
             $this->error($e->getMessage());

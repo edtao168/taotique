@@ -266,7 +266,6 @@ class Create extends Component
             'quantity'     => '1.0000',
             'price'        => '0.0000',			
         ];
-        $this->search('');
         $this->calculateAll();
     }
     

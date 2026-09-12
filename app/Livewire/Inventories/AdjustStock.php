@@ -7,13 +7,13 @@ use App\Models\InventoryAdjustment;
 use App\Models\InventoryMovement;
 use App\Models\Product;
 use App\Models\Warehouse;
-use App\Traits\HasProductSearch;
+use App\Traits\HasSingleProductPicker;
 use Livewire\Component;
 use Mary\Traits\Toast;
 
 class AdjustStock extends Component
 {
-    use HasProductSearch, Toast;
+    use HasSingleProductPicker, Toast;
 
     public $shop_id = 1;
     public $warehouse_id;
@@ -22,8 +22,6 @@ class AdjustStock extends Component
     public $product_name = '';
     public $quantity = 1;
     public $remark;
-
-    // 注意：$productSearch 與 $productOptions 由 HasProductSearch trait 提供
 
     public function mount()
     {

@@ -3,14 +3,14 @@
 namespace App\Livewire\Inventories;
 
 use App\Models\InventoryMovement;
+use App\Traits\HasProductFilter;
 use Livewire\Component;
 use Livewire\WithPagination;
 
 class Movements extends Component
 {
-    use WithPagination;
-
-    public string $search = '';
+    use WithPagination, HasProductFilter;
+    
     public ?string $type = null;
     public array $sortBy = ['column' => 'created_at', 'direction' => 'desc'];
     
@@ -22,6 +22,17 @@ class Movements extends Component
     {
         $this->perPage += 10;
     }
+	
+	/**
+     * 覆寫 HasProductFilter 的掛鉤，額外處理 perPage 重置
+     */
+    public function updatedHasProductFilter($property): void
+    {
+        if (in_array($property, ['search', 'selectedShop', 'selectedWarehouse', 'showLowStockOnly'])) {
+            $this->resetPage();
+            $this->perPage = 10;   // ← 配合 loadMore 的累加式分頁
+        }
+    }
     
     // 編譯並取得最終 HTML 原始碼 方法
     public function render()
@@ -29,7 +40,8 @@ class Movements extends Component
         $query = InventoryMovement::query()
 			->with(['product', 'warehouse.shop', 'user'])
 			->whereHas('product')
-			->withAggregate('product', 'sku')  // 產生 product_sku 欄位
+			->withAggregate('product', 'sku')
+			->withAggregate('product', 'name')
 			->when($this->search, function ($q) {
 				$q->whereHas('product', fn($p) => $p->where('sku', 'like', "%{$this->search}%")
 					->orWhere('name', 'like', "%{$this->search}%"));
@@ -42,6 +54,8 @@ class Movements extends Component
 
 		if ($column === 'product.sku') {
 			$query->orderBy('product_sku', $direction);
+		} elseif ($column === 'product_name') {
+			$query->orderBy('product_name', $direction);
 		} else {
 			$query->orderBy($column, $direction);
 		}
@@ -51,6 +65,7 @@ class Movements extends Component
         $headers = [
             ['key' => 'created_at', 'label' => '時間', 'class' => 'w-40'],
             ['key' => 'product.sku', 'label' => 'SKU'],
+			['key' => 'product.name', 'label' => '商品名稱'], 
             ['key' => 'warehouse.name', 'label' => '倉庫/店別'],
             ['key' => 'type_label', 'label' => '異動類型'],
             ['key' => 'quantity', 'label' => '異動量', 'class' => 'text-right font-bold'],

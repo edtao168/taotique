@@ -9,7 +9,7 @@ use App\Models\Stocktake;
 use App\Models\StocktakeItem;
 use App\Models\Warehouse;
 use App\Traits\HasBarcodeScanner;
-use App\Traits\HasProductSearch;
+use App\Traits\HasSingleProductPicker;
 use App\Traits\HasShop;
 use Illuminate\Support\Facades\DB;
 use Livewire\Component;
@@ -17,7 +17,7 @@ use Mary\Traits\Toast;
 
 class Stocktakes extends Component
 {
-    use HasBarcodeScanner, HasProductSearch, HasShop, Toast;
+    use HasBarcodeScanner, HasSingleProductPicker, HasShop, Toast;
 	
 	public array $headers = [
         ['key' => 'product.sku', 'label' => 'SKU'],
@@ -31,10 +31,10 @@ class Stocktakes extends Component
     public bool $confirmModal = false;
     public int $missing_count = 0;
     public ?int $product_id = null;
+	public ?string $product_name = null;
     public $current_quantity = 0; // 系統顯示數量 (快照)
     public $actual_quantity = 0;  // 實際清點數量
-    public string $remark = '';    
-	public array $productOptions = [];
+    public string $remark = '';    	
 	public bool $showScanner = false;
 	public ?Stocktake $currentStocktake = null;
 
@@ -44,6 +44,7 @@ class Stocktakes extends Component
     public function mount()
     {
         $this->currentStocktake = Stocktake::with('warehouse')
+			->where('shop_id', $this->shopId)
 			->where('status', 'pending')
 			->first();
 
@@ -51,9 +52,8 @@ class Stocktakes extends Component
 			$this->stocktake_id = $this->currentStocktake->id;
 			$this->warehouse_id = $this->currentStocktake->warehouse_id;
 		}
-        $this->search();
     }
-	
+
 	/**
      * 處理條碼掃描回調
      */
@@ -118,20 +118,34 @@ class Stocktakes extends Component
     public function updatedProductId($value)
     {
         if ($value && $this->stocktake_id) {
-            $item = StocktakeItem::where('stocktake_id', $this->stocktake_id)
-                ->where('product_id', $value)
-                ->first();
-            
-            if ($item) {
-                // 若已有點工數則保留，否則預設為系統數[cite: 2]
-                $this->actual_quantity = $item->actual_quantity ?? $item->system_quantity;
-            } else {
-                $this->warning("此商品不在該倉庫的盤點範圍內");
-                $this->product_id = null;
-            }
-        }
+			$item = StocktakeItem::where('stocktake_id', $this->stocktake_id)
+				->where('product_id', $value)
+				->with('product')          // ← eager load，順便拿 name
+				->first();
+			
+			if ($item) {
+				if (!$item->product) {
+					$this->warning("此商品資料已不存在");
+					$this->product_id = null;
+					$this->product_name = null;
+					return;
+				}
+				$this->product_name = $item->product->full_display_name;
+				$this->actual_quantity = $item->actual_quantity ?? $item->system_quantity;
+			} else {
+				$this->warning("此商品不在該倉庫的盤點範圍內");
+				$this->product_id = null;
+				$this->product_name = null;
+			}
+		}
     }
-
+	
+	public function selectProduct(int $productId): void
+	{
+		$this->product_id = $productId;
+		$this->updatedProductId($productId);
+	}
+	
     /**
      * 更新清點結果
      */
@@ -148,8 +162,9 @@ class Stocktakes extends Component
 
         if ($item) {
             $item->update(['actual_quantity' => (string)$this->actual_quantity]);            
-            $this->success("已更新清點數：{$item->product->name}");
-            $this->reset(['product_id', 'actual_quantity', 'current_quantity']);
+            $this->success("已更新清點數：" . ($item->product?->name ?? '未知商品'));
+			$this->reset(['product_id', 'product_name', 'actual_quantity', 'current_quantity']);
+
         }
     }
 
@@ -203,7 +218,12 @@ class Stocktakes extends Component
             $stocktake->update(['status' => 'completed', 'completed_at' => now()]);
         });
 
-        $this->reset(['stocktake_id', 'warehouse_id', 'confirmModal']);
+        $this->reset([
+			'stocktake_id', 'warehouse_id', 'confirmModal',
+			'product_id', 'product_name', 'actual_quantity',
+			'current_quantity',
+		]);
+		$this->currentStocktake = null;
         $this->success("結案成功，庫存已同步。");
     }
 
@@ -220,7 +240,8 @@ class Stocktakes extends Component
 					$stocktake->delete();
 				}
 			});
-            $this->reset(['stocktake_id', 'warehouse_id', 'product_id', 'actual_quantity']);
+            $this->reset(['stocktake_id', 'warehouse_id', 'product_id', 'product_name', 'actual_quantity']);
+			$this->currentStocktake = null;
             $this->warning("盤點任務已取消，未對庫存產生影響。");
         }
     }

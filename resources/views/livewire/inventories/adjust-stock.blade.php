@@ -40,14 +40,16 @@
                     <div class="grid grid-cols-1 sm:grid-cols-12 gap-4 items-start">
                         
                         {{-- 商品選擇區塊 --}}
-                        <div class="sm:col-span-6 pt-1">  
+                        <div class="sm:col-span-6 pt-1">
 							<x-product-picker 
 								name="product_id" 
 								:options="$productOptions" 
 								:selected-name="$product_name"
 								search-property="productSearch"
+								select-method="fillProduct"
+								clear-method="resetProduct"
 							/>
-                        </div>
+						</div>	
 
                         {{-- 異動數量 --}}
                         <div class="sm:col-span-6">

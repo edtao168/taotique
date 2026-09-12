@@ -1,33 +1,31 @@
-<?php // app/Livewire/Inventories/Index.php
+<?php
+// 檔案路徑：app/Livewire/Inventories/Index.php
 
 namespace App\Livewire\Inventories;
 
 use App\Models\Product;
 use App\Models\Warehouse;
 use App\Models\Shop;
+use App\Traits\HasProductFilter;
 use Livewire\Component;
 use Livewire\WithPagination;
 use Mary\Traits\Toast;
-use Illuminate\Support\Facades\DB;
 
 class Index extends Component
 {
-    use WithPagination, Toast;
+    use WithPagination, Toast, HasProductFilter;
 
-    public string $search = '';
-    public ?int $selectedShop = null;
-    public ?int $selectedWarehouse = null;
-    public bool $showLowStockOnly = false;
-	public int $perPage = 8;
+    public int $perPage = 8;
 
-	// 手機端點擊或滾動觸發
-	public function loadMore()
-	{
-		$this->perPage += 10;
-	}
-	
+    // 手機端點擊「載入更多」觸發
+    public function loadMore()
+    {
+        $this->perPage += 10;
+    }
+
     public function updated($property)
     {
+        // 觸發 Trait 的分頁重置邏輯
         if (in_array($property, ['search', 'selectedShop', 'selectedWarehouse', 'showLowStockOnly'])) {
             $this->resetPage();
         }
