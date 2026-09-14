@@ -10,7 +10,6 @@ use App\Models\SalesReturnFee;
 use App\Models\Product;
 use App\Models\Setting;
 use App\Models\Warehouse;
-use App\Traits\HasProductSearch;
 use Illuminate\Support\Facades\DB;
 use Livewire\Attributes\Computed;
 use Livewire\Component;
@@ -18,7 +17,7 @@ use Mary\Traits\Toast;
 
 class ReturnCreate extends Component
 {
-    use Toast, HasProductSearch;
+    use Toast;
 	
 	// 基礎屬性
     public Sale $sale;
