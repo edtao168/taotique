@@ -1,6 +1,5 @@
 <?php
-// 檔案路徑：app/Traits/HasMultiProductPicker.php
-// 多選組件專用
+// app/Traits/HasMultiProductPicker.php
 
 namespace App\Traits;
 
@@ -13,9 +12,6 @@ trait HasMultiProductPicker
     /** 當前聚焦的明細行索引 */
     public ?int $activeRowIndex = null;
 
-    /**
-     * 設定當前聚焦行（由 product-picker 的 @focus 觸發）
-     */
     public function setActiveRow(int $index): void
     {
         if ($this->activeRowIndex !== $index) {
@@ -25,9 +21,6 @@ trait HasMultiProductPicker
         }
     }
 
-    /**
-     * 為指定行填充商品資訊
-     */
     public function fillProductForRow(int $index, int $productId): void
     {
         if (!isset($this->items[$index])) {
@@ -44,19 +37,18 @@ trait HasMultiProductPicker
         $this->items[$index]['name']       = $product->full_display_name;
         $this->items[$index]['sku']        = $product->sku;
 
-        // 讓子類別決定「價格欄位怎麼填」（銷售填 price、採購填 cost）
         $this->applyProductPricing($this->items[$index], $product);
 
         $this->productSearch   = '';
         $this->productOptions  = [];
         $this->activeRowIndex  = null;
 
-        $this->calculateAll();
+        // ✅ 可選鉤子：若子類別有 calculateAll() 就呼叫
+        if (method_exists($this, 'calculateAll')) {
+            $this->calculateAll();
+        }
     }
 
-    /**
-     * 清除指定行的商品選擇
-     */
     public function resetProductForRow(int $index): void
     {
         if (!isset($this->items[$index])) {
@@ -73,24 +65,23 @@ trait HasMultiProductPicker
         $this->productOptions  = [];
         $this->activeRowIndex  = null;
 
-        $this->calculateAll();
+        if (method_exists($this, 'calculateAll')) {
+            $this->calculateAll();
+        }
     }
 
     /**
      * 子類別必須實作：商品選定後，價格欄位如何填寫
-     * 
-     * 銷售單：$row['price'] = $product->price
-     * 採購單：$row['price'] = $product->cost
      */
     abstract protected function applyProductPricing(array &$row, Product $product): void;
 
     /**
-     * 子類別必須實作：清除商品後，價格欄位如何歸零
+     * 子類別可選覆寫：清除商品後，價格欄位如何歸零
+     * 預設：清空 price 與 subtotal
      */
-    abstract protected function clearProductPricing(array &$row): void;
-
-    /**
-     * 子類別必須實作：重算總額
-     */
-    abstract protected function calculateAll(): void;
+    protected function clearProductPricing(array &$row): void
+    {
+        $row['price']    = '0.0000';
+        $row['subtotal'] = '0.0000';
+    }
 }

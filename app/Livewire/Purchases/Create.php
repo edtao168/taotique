@@ -10,7 +10,7 @@ use App\Models\Setting;
 use App\Models\Supplier;
 use App\Models\Warehouse;
 use App\Traits\HasBarcodeScanner;
-use App\Traits\HasProductSearch;
+use App\Traits\HasMultiProductPicker;
 use Illuminate\Support\Facades\DB;
 use Livewire\Attributes\Computed;
 use Livewire\Component;
@@ -18,7 +18,7 @@ use Mary\Traits\Toast;
 
 class Create extends Component
 {
-    use HasBarcodeScanner, HasProductSearch, Toast;
+    use HasBarcodeScanner, HasMultiProductPicker, Toast;
 
     public ?Purchase $purchase = null;
     public bool $isEdit = false;
@@ -133,9 +133,21 @@ class Create extends Component
             'quantity' => 1,
             'foreign_price' => 0,
         ];
-		$this->search('');
+		$this->productSearch = '';
+		$this->productOptions = [];
+		$this->activeRowIndex = count($this->items) - 1;
     }
 	
+	protected function applyProductPricing(array &$row, Product $product): void
+	{
+		$row['foreign_price'] = (string) ($product->last_purchase_price ?? '0');
+	}
+
+	protected function clearProductPricing(array &$row): void
+	{
+		$row['foreign_price'] = '0.0000';
+	}
+
 	/**
 	 * 計算最終應付總額 (外幣)
 	 * 公式：(商品小計 + 運費) - 折扣
@@ -302,7 +314,7 @@ class Create extends Component
             $this->items[$index]['name'] = $product->name;
             $this->items[$index]['foreign_price'] = $product->last_purchase_price ?? 0;
             $this->success("已選擇商品：{$product->name}");
-            $this->productOptions = $this->search();
+            $this->refreshProductOptions();
             return;
         }
 
