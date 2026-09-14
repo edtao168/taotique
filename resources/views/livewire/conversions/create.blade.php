@@ -131,14 +131,8 @@
 							</div>
 
 							<div class="grid grid-cols-2 gap-3">
-								<x-input label="數量" wire:model="items.{{ $index }}.quantity" type="number" step="0.0001" />
-								<x-input 
-									label="單位成本" 
-									wire:model="items.{{ $index }}.cost_snapshot" 
-									prefix="NT$"
-									type="number"
-									step="0.0001"
-								/>
+								<x-input label="數量" wire:model.live="items.{{ $index }}.quantity" type="number" step="0.0001" />
+								<x-input label="單位成本" "wire:model.live="items.{{ $index }}.cost_snapshot" prefix="NT$" type="number" step="0.0001"/>
 							</div>
 						</div>
 					@endif
@@ -177,14 +171,8 @@
                             </div>
 
                             <div class="grid grid-cols-2 gap-3">
-                                <x-input label="數量" wire:model="items.{{ $index }}.quantity" type="number" step="0.0001" />
-                                <x-input 
-                                    label="單位成本" 
-                                    wire:model="items.{{ $index }}.cost_snapshot" 
-                                    prefix="NT$"
-									type="number" 
-                                    step="0.0001"
-                                />
+                                <x-input label="數量" wire:model.live="items.{{ $index }}.quantity" type="number" step="0.0001" />
+                                <x-input label="單位成本" wire:model.live="items.{{ $index }}.cost_snapshot" prefix="NT$" type="number" step="0.0001"/>
                             </div>
                         </div>
                     @endif

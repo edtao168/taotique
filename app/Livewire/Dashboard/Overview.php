@@ -1,93 +1,216 @@
 <?php
+// app/Livewire/Dashboard/Overview.php
 
 namespace App\Livewire\Dashboard;
 
 use App\Models\Inventory;
 use App\Models\Product;
 use App\Models\Sale;
+use App\Services\Analytics\SalesAnalyticsService;
 use Carbon\Carbon;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Collection;
+use Livewire\Attributes\Computed;
 use Livewire\Component;
 
 class Overview extends Component
 {
     /**
-     * 獲取最近 12 個月數據，缺少的月份補 0
+     * ABC 分析：指標（revenue / gross_profit）
      */
-    private function getMonthlyDataWithGapsFilled()
+    public string $abcMetric = 'revenue';
+
+    /**
+     * ABC 分析：期間月數（1 / 3 / 6 / 12）
+     */
+    public int $abcMonths = 3;
+
+    /**
+     * 切換指標時，清除 computed 快取
+     */
+    public function updatedAbcMetric(): void
     {
-        $now = Carbon::now();
-        $startDate = $now->copy()->subMonths(11)->startOfMonth();
-        
-        // 生成 12 個月的空白模板
-        $months = collect();
-        for ($i = 0; $i < 12; $i++) {
-            $date = $startDate->copy()->addMonths($i);
-            $months->put($date->format('Y-m'), [
-                'month' => $date->format('Y-m'),
-                'sales' => 0,
-                'profit' => 0,
-            ]);
-        }
-
-        // 查詢實際數據
-        $actualData = Sale::select(
-                DB::raw("DATE_FORMAT(created_at, '%Y-%m') as month"),
-                DB::raw('SUM(subtotal) as sales'),
-                DB::raw('SUM(final_net_amount) as profit')
-            )
-            ->where('created_at', '>=', $startDate)
-            ->groupBy('month')
-            ->orderBy('month')
-            ->get()
-            ->keyBy('month');
-
-        // 合併數據：用實際數據覆蓋模板中的 0
-        $merged = $months->map(function ($defaultData, $monthKey) use ($actualData) {
-            if ($actualData->has($monthKey)) {
-                return [
-                    'month' => $monthKey,
-                    'sales' => (float) $actualData[$monthKey]->sales,
-                    'profit' => (float) $actualData[$monthKey]->profit,
-                ];
-            }
-            return $defaultData;
-        });
-
-        return $merged->values(); // 轉回數值索引陣列
+        unset($this->abcItems);
     }
-	
-	    public function render()
-    {
-        $now = Carbon::now();
-		$tenantId = auth()->user()->tenant_id;
 
-        // 1. 統計數據
-        $stats = [
-            'todaySales' => Sale::whereDate('created_at', Carbon::today())->sum('subtotal'),
-            'monthSales' => Sale::whereMonth('created_at', $now->month)->whereYear('created_at', $now->year)->sum('subtotal'),
-            'monthNetProfit' => Sale::whereMonth('created_at', $now->month)->whereYear('created_at', $now->year)->sum('final_net_amount'),
-            'inventoryValue' => Product::totalInventoryValue(),
-            'lowStockCount' => Inventory::whereHas('product', function ($q) use ($tenantId) {
-        $q->where('tenant_id', $tenantId)
-          ->whereColumn('inventories.quantity', '<=', 'products.min_stock');
-    })
-    ->whereHas('warehouse.shop', function ($q) use ($tenantId) {
-        $q->where('tenant_id', $tenantId);
-    })
-    ->count(),
+    /**
+     * 切換期間時，清除 computed 快取
+     */
+    public function updatedAbcMonths(): void
+    {
+        unset($this->abcItems);
+    }
+
+    /**
+     * ABC 分析資料（依當前 metric / months）
+     */
+    #[Computed]
+    public function abcItems(): Collection
+    {
+        $to   = now()->endOfMonth();
+		$from = now()->subMonths($this->abcMonths - 1)->startOfMonth();
+
+        return app(SalesAnalyticsService::class)
+            ->abcAnalysis($from, $to, $this->abcMetric);
+    }
+
+    /**
+     * ABC 分級後的統計摘要（給 Blade 顯示各級數量與金額）
+     */
+    #[Computed]
+    public function abcSummary(): array
+    {
+        $items = $this->abcItems;
+
+        $summary = [
+            'A' => ['count' => 0, 'total' => 0.0],
+            'B' => ['count' => 0, 'total' => 0.0],
+            'C' => ['count' => 0, 'total' => 0.0],
         ];
 
-        // 2. 生成最近 12 個月的月份列表（包含無數據的月份）
-        $monthlyData = $this->getMonthlyDataWithGapsFilled();
+        foreach ($items as $item) {
+            $summary[$item->grade]['count']++;
+            $summary[$item->grade]['total'] += $item->revenue;
+        }
+
+        $grandTotal = collect($summary)->sum('total');
+
+        foreach ($summary as $grade => &$row) {
+            $row['share'] = $grandTotal > 0
+                ? round(($row['total'] / $grandTotal) * 100, 1)
+                : 0.0;
+        }
+
+        return $summary;
+    }
+	
+	    /**
+     * 時段熱度：期間月數（1 / 3 / 6 / 12）
+     */
+    public int $heatmapMonths = 3;
+
+    /**
+     * 時段熱度：顯示模式（revenue / order_count）
+     */
+    public string $heatmapMode = 'revenue';
+
+    /**
+     * 切換期間時，清除 computed 快取
+     */
+    public function updatedHeatmapMonths(): void
+    {
+        unset($this->heatmapCells);
+    }
+
+    /**
+     * 切換模式時，清除 computed 快取
+     */
+    public function updatedHeatmapMode(): void
+    {
+        unset($this->heatmapCells);
+    }
+
+    /**
+     * 時段熱度資料（7×24 = 168 格）
+     */
+    #[Computed]
+    public function heatmapCells(): Collection
+    {
+        $to   = now()->endOfMonth();
+        $from = now()->subMonths($this->heatmapMonths - 1)->startOfMonth();
+
+        return app(SalesAnalyticsService::class)
+            ->hourlyHeatmap($from, $to);
+    }
+
+    /**
+     * 時段熱度：整理成 7×24 二維陣列 + 最大值（給 Blade 畫圖用）
+     */
+    #[Computed]
+    public function heatmapMatrix(): array
+    {
+        $cells = $this->heatmapCells;
+        $mode  = $this->heatmapMode;
+
+        // 初始化 7×24 矩陣
+        $matrix = [];
+        for ($d = 0; $d < 7; $d++) {
+            for ($h = 0; $h < 24; $h++) {
+                $matrix[$d][$h] = 0;
+            }
+        }
+
+        // 填入資料
+        $maxValue = 0;
+        foreach ($cells as $cell) {
+            $value = $mode === 'order_count' ? $cell->orderCount : $cell->revenue;
+            $matrix[$cell->dayOfWeek][$cell->hour] = $value;
+            if ($value > $maxValue) {
+                $maxValue = $value;
+            }
+        }
+
+        return [
+            'matrix'   => $matrix,
+            'maxValue' => $maxValue,
+        ];
+    }
+
+    /**
+     * 時段熱度：找出最佳時段（營收最高的前 3 格）
+     */
+    #[Computed]
+    public function heatmapTopSlots(): array
+    {
+        $cells = $this->heatmapCells;
+        $mode  = $this->heatmapMode;
+
+        return $cells
+            ->sortByDesc(fn ($c) => $mode === 'order_count' ? $c->orderCount : $c->revenue)
+            ->take(3)
+            ->map(fn ($c) => [
+                'day'       => $c->dayOfWeek,
+                'hour'      => $c->hour,
+                'revenue'   => $c->revenue,
+                'orderCount'=> $c->orderCount,
+            ])
+            ->values()
+            ->all();
+    }
+
+    public function render(SalesAnalyticsService $analytics)
+    {
+        $tenantId = auth()->user()->tenant_id;
+
+        // 1. 統計指標
+        $metrics = $analytics->overview();
+
+        // 2. 12 個月趨勢
+        $monthlyData = $analytics->monthlyTrend(12);
+
+        // 3. 庫存總額與低庫存預警
+        $inventoryValue = Product::totalInventoryValue();
+
+        $lowStockCount = Inventory::whereHas('product', function ($q) use ($tenantId) {
+                $q->where('tenant_id', $tenantId)
+                  ->whereColumn('inventories.quantity', '<=', 'products.min_stock');
+            })
+            ->whereHas('warehouse.shop', function ($q) use ($tenantId) {
+                $q->where('tenant_id', $tenantId);
+            })
+            ->count();
+
+        // 4. 最近 5 筆銷售
+        $recentSales = Sale::with(['shop', 'channel', 'customer', 'user'])
+            ->latest('sold_at')
+            ->take(5)
+            ->get();
 
         return view('livewire.dashboard.overview', [
-            'stats' => $stats,
-            'monthlyData' => $monthlyData,
-            'recentSales' => Sale::with(['shop', 'channel', 'customer', 'user']) // 務必加上 Eager Loading
-				->latest('sold_at')
-				->take(5)
-				->get(),
+            'metrics'        => $metrics,
+            'monthlyData'    => $monthlyData,
+            'inventoryValue' => $inventoryValue,
+            'lowStockCount'  => $lowStockCount,
+            'recentSales'    => $recentSales,
         ]);
     }
 }

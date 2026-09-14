@@ -271,17 +271,17 @@ class Sale extends Model
 			throw new \RuntimeException('只有已審核的訂單可以結算');
 		}
 		
-		// ✅ 防呆：現金銷售不需要結算
+		// 防呆：現金銷售不需要結算
 		if ($this->payment_method === 'cash') {
 			throw new \RuntimeException('現金銷售不需要結算，請使用「完成結案」');
 		}
 		
-		// ✅ 防呆：必須已出庫
+		// 防呆：必須已出庫
 		if (!$this->stocked_out_at) {
 			throw new \RuntimeException('訂單尚未出貨，無法結算');
 		}
 		
-		// ✅ 防呆：如果有退貨
+		// 防呆：如果有退貨
 		if ($this->hasReturnRecords()) {
 			throw new \RuntimeException('此訂單已有退貨紀錄，無法結算');
 		}
@@ -341,7 +341,7 @@ class Sale extends Model
      */
 	public function processStockOut(bool $allowNegative = false): void
 	{
-		// ✅ 前置檢查（不變更狀態）
+		// 前置檢查（不變更狀態）
 		if ($this->stocked_out_at) {
 			throw new \Exception("銷售單 {$this->invoice_number} 已完成出庫，請勿重複執行。");
 		}
@@ -350,15 +350,15 @@ class Sale extends Model
 			throw new \Exception("銷售單 {$this->invoice_number} 已有退貨紀錄，無法出庫。");
 		}
 		
-		// ✅ 只允許草稿或待審核狀態執行過帳
+		// 只允許草稿或待審核狀態執行過帳
 		if (!in_array($this->status, [WorkflowStatus::DRAFT, WorkflowStatus::PENDING])) {
 			throw new \Exception("訂單狀態為「{$this->status->label()}」，無法過帳。僅「草稿」或「待審核」狀態可過帳。");
 		}
 
-		// ✅ 驗證過帳規則是否存在
+		// 驗證過帳規則是否存在
 		$this->validateAccountingRules();
 
-		// ✅ 所有檢查通過後，在 Transaction 內執行
+		// 所有檢查通過後，在 Transaction 內執行
 		DB::transaction(function () use ($allowNegative) {
 			// ============================================================
 			// 1. 執行庫存扣減
@@ -381,7 +381,7 @@ class Sale extends Model
 			}
 
 			// ============================================================
-			// 3. ✅ 確認傳票都已成功產生（防呆檢查）
+			// 3. 確認傳票都已成功產生（防呆檢查）
 			// ============================================================
 			$this->ensureJournalsCreated([
 				'sale_revenue' => $journalRevenue,
@@ -403,7 +403,7 @@ class Sale extends Model
 	}
 
 	/**
-	 * ✅ 防呆：確認傳票都已成功產生
+	 * 防呆：確認傳票都已成功產生
 	 */
 	private function ensureJournalsCreated(array $journals): void
 	{
@@ -420,13 +420,13 @@ class Sale extends Model
 				continue;
 			}
 			
-			// ✅ 檢查傳票是否有明細
+			// 檢查傳票是否有明細
 			$itemCount = $journal->items()->count();
 			if ($itemCount === 0) {
 				$errors[] = "傳票 [{$eventType}] 沒有明細項目";
 			}
 			
-			// ✅ 檢查傳票是否平衡
+			// 檢查傳票是否平衡
 			$debitTotal = $journal->items()->sum('debit');
 			$creditTotal = $journal->items()->sum('credit');
 			if (bccomp((string)$debitTotal, (string)$creditTotal, 4) !== 0) {
@@ -435,7 +435,7 @@ class Sale extends Model
 		}
 		
 		if (!empty($errors)) {
-			// ✅ 拋出異常觸發 rollback
+			// 拋出異常觸發 rollback
 			throw new \RuntimeException(
 				"傳票驗證失敗，操作已取消：\n" . implode("\n", $errors)
 			);
@@ -649,8 +649,22 @@ class Sale extends Model
 
     public function canBeModified(): bool
     {
-        // ✅ 改用 WorkflowStatus 判斷
-        return !$this->hasReturnRecords() && $this->status !== WorkflowStatus::COMPLETED;
+        // 1. 有退貨紀錄 → 不可改
+		if ($this->hasReturnRecords()) {
+			return false;
+		}
+
+		// 2. 已出庫 → 不可改（不論狀態）
+		if ($this->stocked_out_at) {
+			return false;
+		}
+
+		// 3. 只允許 draft / pending / approved 可改
+		return in_array($this->status, [
+			WorkflowStatus::DRAFT,
+			WorkflowStatus::PENDING,
+			WorkflowStatus::APPROVED,
+		], true);
     }
 
     public function getAttribute($key)
@@ -683,9 +697,21 @@ class Sale extends Model
         static::creating(function ($sale) {
             if (empty($sale->invoice_number)) $sale->invoice_number = self::generateInvoiceNumber();
             if (empty($sale->shop_id)) $sale->shop_id = auth()->user()->shop_id ?? 1;
-            // ✅ 新建立時預設為 draft
+            // 新建立時預設為 draft
             if (empty($sale->status)) $sale->status = WorkflowStatus::DRAFT->value;
         });
+		
+		static::saved(function ($sale) {
+			if (auth()->check()) {
+				app(\App\Services\Analytics\AnalyticsCache::class)->flushForCurrentScope();
+			}
+		});
+
+		static::deleted(function ($sale) {
+			if (auth()->check()) {
+				app(\App\Services\Analytics\AnalyticsCache::class)->flushForCurrentScope();
+			}
+		});
     }
 
     public static function generateInvoiceNumber(): string
@@ -716,7 +742,7 @@ class Sale extends Model
             $feeConfigs = config('business.fee_types', []);
             $saleFields = array_diff_key($data, $feeConfigs);
             
-            // ✅ 確保 status 有預設值
+            // 確保 status 有預設值
             if (empty($saleFields['status'])) {
                 $saleFields['status'] = WorkflowStatus::DRAFT->value;
             }
@@ -943,11 +969,11 @@ class Sale extends Model
                     ->where('shop_id', $shopId)
                     ->first();
 
-                if ($inventory && isset($inventory->weighted_average_cost) && bccomp((string)$inventory->weighted_average_cost, '0.0000', 4) > 0) {
-                    $unitCost = $inventory->weighted_average_cost;
-                } else {
-                    $unitCost = DB::table('products')->where('id', $item->product_id)->value('cost') ?? '0.0000';
-                }
+                if ($inventory && bccomp((string)$inventory->cost, '0.0000', 4) > 0) {
+					$unitCost = $inventory->cost;
+				} else {
+					$unitCost = DB::table('products')->where('id', $item->product_id)->value('cost') ?? '0.0000';
+				}
             }
 
             $itemTotalCost = bcmul((string)$unitCost, (string)$qty, 4);
@@ -966,7 +992,7 @@ class Sale extends Model
 		$feeTypes = config('business.fee_types', []);
     
 		foreach ($feeTypes as $feeType => $config) {
-			// ✅ 只計算賣家費用
+			// 只計算賣家費用
 			if (($config['target'] ?? '') !== 'seller') {
 				continue;
 			}

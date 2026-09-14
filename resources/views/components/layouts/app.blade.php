@@ -100,7 +100,7 @@
 						<x-menu-item title="銷貨退回紀錄" icon="o-arrow-path" :link="route('sales.returns.index')" />
 						<x-menu-item title="客戶管理" icon="o-users" :link="route('sales.customers.index')" />
 						{{-- 業務報表嵌入 --}}
-						<x-menu-item title="銷售業績分析" icon="o-chart-pie" link="#" class="text-sm opacity-80" />
+						<x-menu-item title="銷售業績分析" icon="o-chart-pie" :link="route('sales.index')" />
 					</x-menu-sub>
 
 					{{-- 3. 庫存管理系統 --}}

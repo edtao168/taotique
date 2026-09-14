@@ -5,16 +5,13 @@ namespace App\Livewire\Sales;
 
 use App\Models\Channel;
 use App\Models\Customer;
-use App\Models\Inventory;
 use App\Models\Warehouse; 
 use App\Models\Product;
 use App\Models\Sale;
-use App\Models\SaleItem;
 use App\Models\Setting;
 use App\Models\Shop;
 use App\Traits\HasBarcodeScanner;
 use App\Traits\HasMultiProductPicker;
-use Illuminate\Support\Facades\DB;
 use Livewire\Component;
 use Mary\Traits\Toast;
 
@@ -63,6 +60,9 @@ class Create extends Component
         }
 
         if ($sale && $sale->exists) {
+			if (!$sale->canBeModified()) {
+				abort(403, '此銷售單無法編輯（已出庫、已結算、已取消或已有退貨紀錄）');
+			}
             $this->isEdit = true;
             $this->sale = $sale;
             
@@ -318,64 +318,58 @@ class Create extends Component
 		$this->validate();
 
 		try {
-			$allowNegative = (bool) Setting::get('allow_negative_inventory', false);
 
-			DB::transaction(function () use ($allowNegative) {
-				
-				$currentSale = $this->isEdit ? $this->sale : new Sale();
-				$currentSale->fill([
-					'shop_id'          => $this->form['shop_id'] ?? 1,
-					'customer_id'      => $this->form['customer_id'],
-					'user_id'          => auth()->id() ?? $this->form['user_id'],
-					'sold_at'          => $this->form['sold_at'] ?? now(),
-					'invoice_number'   => $this->isEdit ? $currentSale->invoice_number : Sale::generateInvoiceNumber(),
-					'warehouse_id'     => $this->form['warehouse_id'],
-					'channel_id'       => $this->form['channel_id'],
-					'payment_method'   => $this->form['payment_method'],
-					'remark'           => $this->form['remark'] ?? '',
-					'subtotal'         => $this->form['subtotal'],
-					'customer_total'   => $this->form['customer_total'],
-					'final_net_amount' => $this->form['final_net_amount'],
-				]);
-				$currentSale->save();
-
-				$oldItemsQty = [];
-				if ($this->isEdit) {
-					$oldItemsQty = SaleItem::where('sale_id', $currentSale->id)
-						->pluck('quantity', 'product_id')
-						->toArray();
-					$currentSale->items()->delete();
-				}
-
-				foreach ($this->items as $item) {
-					$currentSale->items()->create([
-						'shop_id'        => $currentSale->shop_id,
-						'warehouse_id'   => $item['warehouse_id'],
-						'product_id'     => $item['product_id'],
-						'quantity'       => $item['quantity'],
-						'price'          => $item['price'],
-						'subtotal'       => bcmul($item['quantity'], $item['price'], 4),
-					]);
-				}
-
-				$currentSale->fees()->delete();
-				$feeConfigs = config('business.fee_types', []);
-				foreach ($feeConfigs as $feeType => $config) {
-					$amount = $this->form[$feeType] ?? '0.0000';
-					
-					if (bccomp($amount, '0', 4) !== 0) {
-						$currentSale->fees()->create([
-							'shop_id'  => $currentSale->shop_id,
-							'fee_type' => $feeType,
-							'amount'   => $amount,
-							'note'     => $config['name'] ?? $feeType,
-						]);
-					}
-				}
-			});
-
-			$this->success($this->isEdit ? '銷售單修改成功' : '銷售單建立成功', redirectTo: route('sales.index'));
+			// 1. 準備資料
+			$data = [
+				'shop_id'          => $this->form['shop_id'] ?? 1,
+				'customer_id'      => $this->form['customer_id'],
+				'user_id'          => auth()->id() ?? $this->form['user_id'],
+				'sold_at'          => $this->form['sold_at'] ?? now(),
+				'warehouse_id'     => $this->form['warehouse_id'],
+				'channel_id'       => $this->form['channel_id'],
+				'payment_method'   => $this->form['payment_method'],
+				'remark'           => $this->form['remark'] ?? '',
+				'subtotal'         => $this->form['subtotal'],
+				'customer_total'   => $this->form['customer_total'],
+				'final_net_amount' => $this->form['final_net_amount'],
+			];
 			
+			// ✅ 建立新單時，帶入表單顯示的單號
+			if (!$this->isEdit) {
+				$data['invoice_number'] = $this->form['invoice_number'];
+			}
+
+			// 費用塞進 data（讓 Model 處理）
+			foreach (array_keys(config('business.fee_types', [])) as $feeType) {
+				$data[$feeType] = $this->form[$feeType] ?? '0.0000';
+			}
+
+			// 明細
+			$items = collect($this->items)->map(fn ($item) => [
+				'product_id'   => $item['product_id'],
+				'warehouse_id' => $item['warehouse_id'],
+				'quantity'     => $item['quantity'],
+				'price'        => $item['price'],
+			])->toArray();
+
+
+			// 2. 呼叫 Model
+			if ($this->isEdit) {
+				$this->sale->updateWithCalculations($data, $items);
+			} else {
+				Sale::createWithCalculations($data, $items);
+			}
+
+			$this->success(
+				$this->isEdit ? '銷售單修改成功' : '銷售單建立成功',
+				redirectTo: route('sales.index')
+			);
+		} catch (\Illuminate\Database\QueryException $e) {
+			if (str_contains($e->getMessage(), 'sales_invoice_number_unique')) {
+				$this->error('單號已被使用，請重新整理頁面後再試。');
+			} else {
+				$this->error('儲存失敗：' . $e->getMessage());
+			}
 		} catch (\Exception $e) {
 			$this->error('儲存失敗：' . $e->getMessage());
 		}

@@ -21,15 +21,188 @@
     </x-header>
 
     {{-- 1. 數據指標卡 (PC/手機通用) --}}
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <x-stat title="本月銷售額" value="NT$ {{ number_format($monthSales) }}" icon="o-shopping-cart"
-            description="{{ $salesGrowth >= 0 ? '▲' : '▼' }} {{ abs(round($salesGrowth, 1)) }}%"
-            class="{{ $salesGrowth >= 0 ? 'text-success' : 'text-error' }}" shadow />
-        
-        <x-stat title="本月預計淨利" value="NT$ {{ number_format($monthProfit) }}" icon="o-banknotes"
-            description="扣除成本與平台費" class="text-primary" shadow />
+	<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+		<x-stat title="本月銷售額" value="NT$ {{ number_format($metrics->monthSales) }}" icon="o-shopping-cart"
+			description="{{ $metrics->salesGrowth >= 0 ? '▲' : '▼' }} {{ abs(round($metrics->salesGrowth, 1)) }}% 較上月"
+			class="{{ $metrics->salesGrowth >= 0 ? 'text-success' : 'text-error' }}" shadow />
+		
+		<x-stat title="本月淨利" value="NT$ {{ number_format($metrics->monthNetProfit) }}" icon="o-banknotes"
+			description="商家實收（扣成本與平台費）" class="text-primary" shadow />
 
-        <x-stat title="本年度總計" value="NT$ {{ number_format($yearSales) }}" icon="o-arrow-trending-up" shadow />
+		<x-stat title="本年度總計" value="NT$ {{ number_format($metrics->yearSales) }}" icon="o-arrow-trending-up" shadow />
+
+		<x-stat title="本月訂單數" value="{{ $metrics->monthOrderCount }}" icon="o-receipt-percent"
+			description="平均客單 NT$ {{ number_format($metrics->monthAvgOrderValue) }}" shadow />
+	</div>
+	
+	    {{-- ============================================================ --}}
+    {{-- GMROI 毛利效率分析                                            --}}
+    {{-- ============================================================ --}}
+    <div class="shadow p-4 bg-white rounded-lg mb-6">
+        {{-- 標題列 --}}
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <div class="flex items-center gap-2">
+                <h3 class="text-lg font-bold text-gray-700">商品毛利效率（GMROI）</h3>
+                <x-popover>
+                    <x-slot:trigger>
+                        <x-icon name="o-information-circle" class="w-4 h-4 text-gray-400 cursor-help" />
+                    </x-slot:trigger>
+                    <x-slot:content class="max-w-xs text-xs">
+                        <p class="font-bold mb-1">GMROI 說明</p>
+                        <p class="mb-2">GMROI = 期間毛利 ÷ 平均庫存成本</p>
+                        <ul class="list-disc list-inside space-y-1">
+                            <li><b>> 3</b>：資金效率高，主力商品</li>
+                            <li><b>2 ~ 3</b>：良好</li>
+                            <li><b>1 ~ 2</b>：普通</li>
+                            <li><b>< 1</b>：卡資金，建議檢視</li>
+                        </ul>
+                        <p class="mt-2 text-gray-500">庫存成本採「租戶級加權平均成本」</p>
+                    </x-slot:content>
+                </x-popover>
+            </div>
+
+            <div class="flex items-center gap-2">
+                {{-- 期間切換 --}}
+                <x-select
+                    wire:model.live="gmroiMonths"
+                    :options="[
+                        ['id' => 1, 'name' => '近 1 個月'],
+                        ['id' => 3, 'name' => '近 3 個月'],
+                        ['id' => 6, 'name' => '近 6 個月'],
+                        ['id' => 12, 'name' => '近 12 個月'],
+                    ]"
+                    option-value="id"
+                    option-label="name"
+                    class="select-sm w-32"
+                />
+
+                {{-- 展開/收合 --}}
+                <x-button
+                    label="{{ $showGmroi ? '收合' : '展開' }}"
+                    icon="{{ $showGmroi ? 'o-chevron-up' : 'o-chevron-down' }}"
+                    wire:click="$toggle('showGmroi')"
+                    class="btn-ghost btn-sm"
+                />
+
+                <span wire:loading wire:target="gmroiMonths" class="text-xs text-gray-400">
+                    <x-icon name="o-arrow-path" class="w-4 h-4 animate-spin inline" />
+                </span>
+            </div>
+        </div>
+
+        @php
+            $gmroiItems = $this->gmroiItems;
+            $gmroiSummary = $this->gmroiSummary;
+        @endphp
+
+        @if($gmroiItems->isEmpty())
+            <div class="text-center py-6 text-gray-400 text-sm">
+                此期間尚無銷售資料
+            </div>
+        @else
+            {{-- 摘要卡 --}}
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                <div class="border rounded-lg p-3 bg-blue-50/50">
+                    <p class="text-[10px] text-gray-500 mb-1">整體 GMROI</p>
+                    <p class="text-xl font-black text-blue-700">
+                        {{ number_format($gmroiSummary['overallGmroi'], 2) }}
+                    </p>
+                </div>
+                <div class="border rounded-lg p-3 bg-emerald-50/50">
+                    <p class="text-[10px] text-gray-500 mb-1">期間毛利</p>
+                    <p class="text-lg font-bold text-emerald-700">
+                        NT$ {{ number_format($gmroiSummary['totalGrossProfit'], 0) }}
+                    </p>
+                </div>
+                <div class="border rounded-lg p-3 bg-amber-50/50">
+                    <p class="text-[10px] text-gray-500 mb-1">高效益商品</p>
+                    <p class="text-lg font-bold text-amber-700">
+                        {{ $gmroiSummary['highPerformers'] }} 項
+                    </p>
+                    <p class="text-[10px] text-gray-400">GMROI ≥ 3</p>
+                </div>
+                <div class="border rounded-lg p-3 bg-red-50/50">
+                    <p class="text-[10px] text-gray-500 mb-1">低效益商品</p>
+                    <p class="text-lg font-bold text-red-700">
+                        {{ $gmroiSummary['lowPerformers'] }} 項
+                    </p>
+                    <p class="text-[10px] text-gray-400">GMROI < 1</p>
+                </div>
+            </div>
+
+            {{-- 商品明細表 --}}
+            @if($showGmroi)
+                <div class="overflow-x-auto">
+                    <table class="table table-sm w-full">
+                        <thead>
+                            <tr class="text-xs text-gray-500">
+                                <th class="w-16 text-center">排名</th>
+                                <th>商品</th>
+                                <th class="text-right w-28">營收</th>
+                                <th class="text-right w-24">毛利</th>
+                                <th class="text-right w-20">毛利率</th>
+                                <th class="text-right w-24">庫存成本</th>
+                                <th class="text-right w-20">GMROI</th>
+                                <th class="w-24">效率</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach($gmroiItems->take(30) as $index => $item)
+                                <tr class="hover:bg-base-200">
+                                    <td class="text-center text-xs text-gray-400 font-mono">
+                                        #{{ $index + 1 }}
+                                    </td>
+                                    <td class="text-sm">{{ $item->productName }}</td>
+                                    <td class="text-right font-mono text-xs">
+                                        {{ number_format($item->revenue, 0) }}
+                                    </td>
+                                    <td class="text-right font-mono text-xs text-emerald-600">
+                                        {{ number_format($item->grossProfit, 0) }}
+                                    </td>
+                                    <td class="text-right font-mono text-xs">
+                                        {{ $item->grossMarginRate }}%
+                                    </td>
+                                    <td class="text-right font-mono text-xs text-gray-500">
+                                        {{ number_format($item->avgInventoryCost, 0) }}
+                                    </td>
+                                    <td class="text-right font-mono font-bold
+                                        {{ $item->gmroi >= 3 ? 'text-emerald-600' : ($item->gmroi >= 1 ? 'text-gray-700' : 'text-red-600') }}">
+                                        {{ number_format($item->gmroi, 2) }}
+                                    </td>
+                                    <td>
+                                        <div class="w-full bg-gray-100 rounded-full h-2">
+                                            <div
+                                                class="h-2 rounded-full {{ $item->gmroi >= 3 ? 'bg-emerald-500' : ($item->gmroi >= 1 ? 'bg-amber-400' : 'bg-red-500') }}"
+                                                style="width: {{ min($item->gmroi * 20, 100) }}%"
+                                            ></div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+
+                @if($gmroiItems->count() > 30)
+                    <div class="text-center text-xs text-gray-400 mt-3">
+                        僅顯示前 30 名，共 {{ $gmroiItems->count() }} 項商品
+                    </div>
+                @endif
+
+                {{-- 低效益提醒 --}}
+                @if($gmroiSummary['lowPerformers'] > 0)
+                    <div class="mt-4 p-3 bg-orange-50 border border-orange-200 rounded-lg text-xs text-orange-700">
+                        <x-icon name="o-exclamation-triangle" class="w-4 h-4 inline" />
+                        有 {{ $gmroiSummary['lowPerformers'] }} 項商品 GMROI < 1，代表庫存資金效率不佳。
+                        建議檢視是否降價促銷、減少進貨，或改為「接單後進貨」。
+                    </div>
+                @endif
+            @else
+                <div class="text-center text-xs text-gray-400 py-3">
+                    點擊「展開」查看商品明細
+                </div>
+            @endif
+        @endif
     </div>
 
     {{-- 2. 銷售清單區域 --}}

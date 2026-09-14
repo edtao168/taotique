@@ -8,8 +8,10 @@ use App\Models\Inventory;
 use App\Models\Sale;
 use App\Models\Setting;
 use App\Models\Warehouse;
-use Carbon\Carbon;
+use App\Services\Analytics\SalesAnalyticsService;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Livewire\Attributes\Computed;
 use Livewire\Component;
 use Livewire\WithPagination;
 use Mary\Traits\Toast;
@@ -226,51 +228,108 @@ class Index extends Component
             || $this->selectedSale->hasReturnRecords();
     }
 
+    /**
+     * GMROI 毛利效率分析：期間月數（1 / 3 / 6 / 12）
+     */
+    public int $gmroiMonths = 3;
+
+    /**
+     * GMROI 是否展開（避免頁面太長）
+     */
+    public bool $showGmroi = false;
+
+    /**
+     * 切換期間時，清除 computed 快取
+     */
+    public function updatedGmroiMonths(): void
+    {
+        unset($this->gmroiItems);
+    }
+
+    /**
+     * GMROI 分析資料
+     */
+    #[Computed]
+    public function gmroiItems(): Collection
+    {
+        $to   = now()->endOfMonth();
+        $from = now()->subMonths($this->gmroiMonths - 1)->startOfMonth();
+
+        return app(\App\Services\Analytics\SalesAnalyticsService::class)
+            ->gmroiAnalysis($from, $to);
+    }
+
+    /**
+     * GMROI 摘要統計（給摘要卡用）
+     */
+    #[Computed]
+    public function gmroiSummary(): array
+    {
+        $items = $this->gmroiItems;
+
+        if ($items->isEmpty()) {
+            return [
+                'totalRevenue'      => 0.0,
+                'totalGrossProfit'  => 0.0,
+                'totalInventoryCost'=> 0.0,
+                'overallGmroi'      => 0.0,
+                'highPerformers'    => 0,
+                'lowPerformers'     => 0,
+            ];
+        }
+
+        $totalRevenue       = $items->sum('revenue');
+        $totalGrossProfit   = $items->sum('grossProfit');
+        $totalInventoryCost = $items->sum('avgInventoryCost');
+
+        return [
+            'totalRevenue'       => $totalRevenue,
+            'totalGrossProfit'   => $totalGrossProfit,
+            'totalInventoryCost' => $totalInventoryCost,
+            'overallGmroi'       => $totalInventoryCost > 0
+                ? round($totalGrossProfit / $totalInventoryCost, 2)
+                : 0.0,
+            'highPerformers'     => $items->where('gmroi', '>=', 3)->count(),
+            'lowPerformers'      => $items->where('gmroi', '<', 1)->count(),
+        ];
+    }
+	
     // =========================================================================
     // SECTION: render()
     // =========================================================================
 
-    public function render()
-    {
-        $startOfMonth = Carbon::now()->startOfMonth();
-        $endOfMonth = Carbon::now()->endOfMonth();
-        $startOfLastMonth = Carbon::now()->subMonth()->startOfMonth();
-        $endOfLastMonth = Carbon::now()->subMonth()->endOfMonth();
+    public function render(SalesAnalyticsService $analytics)
+{
 
-        $monthSales = Sale::whereBetween('sold_at', [$startOfMonth, $endOfMonth])->sum('subtotal');
-        $lastMonthSales = Sale::whereBetween('sold_at', [$startOfLastMonth, $endOfLastMonth])->sum('subtotal');
-        $salesGrowth = $lastMonthSales > 0 ? (($monthSales - $lastMonthSales) / $lastMonthSales) * 100 : ($monthSales > 0 ? 100 : 0);
-        $yearSales = Sale::whereYear('sold_at', date('Y'))->sum('subtotal');
-        $monthProfit = Sale::whereBetween('sold_at', [$startOfMonth, $endOfMonth])->sum('final_net_amount');
+    // 統計指標：全部來自 Service（與儀表板一致）    
+    $metrics = $analytics->overview();
 
-        $sales = Sale::with(['customer', 'user', 'shop', 'channel', 'warehouse', 'fees'])
-            ->when($this->search, function ($query) {
-                $query->where('invoice_number', 'like', "%{$this->search}%")
-                    ->orWhereHas('customer', fn($q) => $q->where('name', 'like', "%{$this->search}%"));
-            })
-            ->orderBy('sold_at', 'desc')
-            ->paginate(10);
+    // 銷售清單（維持原本邏輯）
+    $sales = Sale::with(['customer', 'user', 'shop', 'channel', 'warehouse', 'fees'])
+        ->when($this->search, function ($query) {
+            $query->where('invoice_number', 'like', "%{$this->search}%")
+                ->orWhereHas('customer', fn($q) => $q->where('name', 'like', "%{$this->search}%"));
+        })
+        ->orderBy('sold_at', 'desc')
+        ->paginate(10);
 
-        $headers = [
-            ['key' => 'invoice_number', 'label' => '銷售單號', 'class' => 'font-mono'],
-            ['key' => 'status', 'label' => '狀態', 'class' => 'w-32'],
-            ['key' => 'shop.name', 'label' => '分店', 'class' => 'w-40'],
-            ['key' => 'channel.name', 'label' => '銷售通路'],
-            ['key' => 'customer.name', 'label' => '客戶'],
-            ['key' => 'customer_total', 'label' => '買家實付', 'textAlign' => 'text-right'],
-            ['key' => 'final_net_amount', 'label' => '最終進帳', 'textAlign' => 'text-right'],
-            ['key' => 'sold_at', 'label' => '銷售日期', 'class' => 'w-32'],
-        ];
+    $headers = [
+        ['key' => 'invoice_number', 'label' => '銷售單號', 'class' => 'font-mono'],
+        ['key' => 'status', 'label' => '狀態', 'class' => 'w-32'],
+        ['key' => 'shop.name', 'label' => '分店', 'class' => 'w-40'],
+        ['key' => 'channel.name', 'label' => '銷售通路'],
+        ['key' => 'customer.name', 'label' => '客戶'],
+        ['key' => 'customer_total', 'label' => '買家實付', 'textAlign' => 'text-right'],
+        ['key' => 'final_net_amount', 'label' => '最終進帳', 'textAlign' => 'text-right'],
+        ['key' => 'sold_at', 'label' => '銷售日期', 'class' => 'w-32'],
+    ];
 
-        return view('livewire.sales.index', [
-            'monthSales' => $monthSales,
-            'salesGrowth' => $salesGrowth,
-            'yearSales' => $yearSales,
-            'monthProfit' => $monthProfit,
-            'sales' => $sales,
-            'headers' => $headers,
-            'canSettle' => $this->canSettle,
-            'isFinalized' => $this->isFinalized,
-        ]);
-    }
+    return view('livewire.sales.index', [
+        'metrics' => $metrics,
+        'sales' => $sales,
+        'headers' => $headers,
+        'canSettle' => $this->canSettle,
+        'isFinalized' => $this->isFinalized,
+    ]);
+}
 }
