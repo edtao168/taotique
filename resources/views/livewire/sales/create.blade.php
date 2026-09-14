@@ -133,9 +133,8 @@
 				<div class="space-y-3">
 					@forelse($items as $index => $item)
                         <div wire:key="sale-row-block-{{ $index }}-{{ $item['product_id'] ?? 'new' }}">
-						    <x-sale-row :$index :$item :$warehouses :$productOptions mode="pc" />
-						    <x-sale-row :$index :$item :$warehouses :$productOptions mode="mobile" />
-                        </div>
+							<x-sale-row :$index :$item :$warehouses :$productOptions />
+						</div>
 					@empty        
 						<div class="p-12 text-center bg-base-200/20 rounded-b-lg border-dashed border-2">
 							<x-icon name="o-shopping-cart" class="w-12 h-12 mx-auto opacity-20" />

@@ -24,9 +24,11 @@ enum AmountSource: string
     case SHIPPING_FEE_CUSTOMER = 'shipping_fee_customer';
     case SELLER_DISCOUNT = 'seller_discount';
     case PLATFORM_COUPON = 'platform_coupon';
+	case PAYMENT_GATEWAY_FEE = 'payment_gateway_fee';
     case SHIPPING_FEE_PLATFORM = 'shipping_fee_platform';
     case PLATFORM_FEE = 'platform_fee';
-    case ORDER_ADJUSTMENT = 'order_adjustment';
+    case ORDER_ADJUSTMENT = 'order_adjustment';	
+	case PLATFORM_AD_FEE = 'platform_ad_fee';
     case COMMISSION = 'commission';
     case RESTOCKING_FEE = 'restocking_fee';
     case RETURN_SHIPPING_FEE = 'return_shipping_fee';
@@ -121,14 +123,16 @@ enum AmountSource: string
             self::SHIPPING_FEE_CUSTOMER => '買家自付運費 (shipping_fee_customer)',
             self::SELLER_DISCOUNT => '賣場自營折扣 (seller_discount)',
             self::PLATFORM_COUPON => '平台優惠券補貼 (platform_coupon)',
-            self::SHIPPING_FEE_PLATFORM => '平台代付運費 (shipping_fee_platform)',
-            self::PLATFORM_FEE => '平台手續費 (platform_fee)',
-            self::ORDER_ADJUSTMENT => '平台帳款調整 (order_adjustment)',
-            self::COMMISSION => '平台佣金抽成 (commission)',
+            self::SHIPPING_FEE_PLATFORM => '平台代付運費 (560106 shipping_fee_platform)',
+            self::PLATFORM_FEE => '平台手續費 (560107 platform_fee)',
+            self::ORDER_ADJUSTMENT => '平台帳款調整 (560108 order_adjustment)',
+			self::PLATFORM_AD_FEE => '平台廣告費(560109 platform_ad_fee)',
+            self::COMMISSION => '平台佣金抽成 (560111 commission)',
             self::RESTOCKING_FEE => '買家支付退貨處理費 (restocking_fee)',
             self::RETURN_SHIPPING_FEE => '賣家承擔退貨運費 (return_shipping_fee)',
             self::TAX => '銷項稅額 (tax_amount)',
-            self::FREIGHT_AMOUNT => '常規運費欄位 (freight_amount)',
+            self::PAYMENT_GATEWAY_FEE => '手續費(560105 payment_gateway_fee)',
+			self::FREIGHT_AMOUNT => '運費(560104 freight_amount)',
             self::AMOUNT => '通用單一金額 (amount)',
 
             self::PURCHASE_BASE_TOTAL => '採購本幣總金額 (purchase_base_total)',

@@ -13,14 +13,14 @@ use App\Models\SaleItem;
 use App\Models\Setting;
 use App\Models\Shop;
 use App\Traits\HasBarcodeScanner;
-use App\Traits\HasProductSearch;
+use App\Traits\HasMultiProductPicker;
 use Illuminate\Support\Facades\DB;
 use Livewire\Component;
 use Mary\Traits\Toast;
 
 class Create extends Component
 {
-    use HasBarcodeScanner, HasProductSearch, Toast;
+    use HasBarcodeScanner, HasMultiProductPicker, Toast;
 
     public ?Sale $sale = null;
     public bool $isEdit = false;
@@ -29,10 +29,12 @@ class Create extends Component
     public array $productOptions = [];
     public bool $showScanner = false;
     public string $invoice_number = '';
-    
+
+    // 索引模式：當前聚焦的明細行
+
     // 強型別結構宣告：防止 Livewire 在 OCI 生產環境下 Hydrate 丟失變數鍵值
     public array $form = [
-        'shop_id'          => 1, // 多店預留，初期預設為 1
+        'shop_id'          => 1,
         'customer_id'      => null,
         'user_id'          => null,
         'sold_at'          => null,
@@ -56,7 +58,6 @@ class Create extends Component
     {
         $this->stockoutWhenSold = false;
         
-        // 初始化動態費用欄位
         foreach (config('business.fee_types', []) as $key => $config) {
             $this->form[$key] = '0.0000';
         }
@@ -65,10 +66,8 @@ class Create extends Component
             $this->isEdit = true;
             $this->sale = $sale;
             
-            // 修正：完全以 stocked_out_at 是否有值來當作「是否已出庫」的邏輯判斷參數
             $this->stockoutWhenSold = !is_null($sale->stocked_out_at);
             
-            // 嚴謹封裝與型別強轉，確保對接 Mary UI 元件時不會因為型態錯誤而顯示空白或 null
             $this->form['id'] = $sale->id;
             $this->form['shop_id'] = (int) ($sale->shop_id ?? 1); 
             $this->form['customer_id'] = (int) $sale->customer_id;
@@ -90,8 +89,8 @@ class Create extends Component
             $this->items = $sale->items->map(function ($item) {
                 return [
                     'product_id'   => (int) $item->product_id,
-                    'warehouse_id' => (int) $item->warehouse_id, // 強轉 int 確保發貨倉庫 Select 可對接
-                    'quantity'     => (string) $item->quantity,   // 數值嚴謹性：使用字串
+                    'warehouse_id' => (int) $item->warehouse_id,
+                    'quantity'     => (string) $item->quantity,
                     'price'        => (string) $item->price,
                     'sku'          => $item->product->sku ?? '',
                     'name'         => $item->product?->full_display_name ?? '',
@@ -135,13 +134,10 @@ class Create extends Component
             'items.*.product_id'   => 'required|integer|exists:products,id',
             'items.*.quantity'     => 'required|numeric|min:0.0001',
             'items.*.price'        => 'required|numeric|min:0',
-            'items.*.warehouse_id' => 'required|integer|exists:warehouses,id', // 嚴謹驗證明細發貨倉庫
+            'items.*.warehouse_id' => 'required|integer|exists:warehouses,id',
         ];
     }
 
-	/**
-     * 自動生成如「客戶 是必填的」這樣的訊息。
-     */
     public function validationAttributes()
     {
         return [
@@ -163,15 +159,29 @@ class Create extends Component
     {
         $this->validateOnly($propertyName);
     }
+	
+    /**
+     * 實作 Trait 的抽象方法：銷售單的價格填充
+     */
+    protected function applyProductPricing(array &$row, Product $product): void
+    {
+        $row['price'] = (string) $product->price;
+    }
 
-    public function calculateAll()
+    protected function clearProductPricing(array &$row): void
+    {
+        $row['price']    = '0.0000';
+        $row['subtotal'] = '0.0000';
+    }
+	
+    public function calculateAll(): void
     {
         $subtotal = '0.0000';
 
         foreach ($this->items as $index => $item) {
             $price = (string)($item['price'] ?? '0');
             $qty = (string)($item['quantity'] ?? '0');
-            $lineTotal = bcmul($price, $qty, 4); // 零售金額嚴謹計算
+            $lineTotal = bcmul($price, $qty, 4);
             
             $this->items[$index]['subtotal'] = $lineTotal;
             $subtotal = bcadd($subtotal, $lineTotal, 4);
@@ -190,7 +200,6 @@ class Create extends Component
 			$val = (string)($this->form[$key] ?? '0.0000');
             $target = $config['target'] ?? '';
         
-			// 根據 operator 決定加減
 			$isAdd = ($config['operator'] === 'add');
 			
 			switch ($target) {
@@ -201,14 +210,11 @@ class Create extends Component
 					$sNet = $isAdd ? bcadd($sNet, $val, 4) : bcsub($sNet, $val, 4);
 					break;
 				case 'both':
-					// 同時影響買家實付和賣家實收
 					$cTotal = $isAdd ? bcadd($cTotal, $val, 4) : bcsub($cTotal, $val, 4);
 					$sNet = $isAdd ? bcadd($sNet, $val, 4) : bcsub($sNet, $val, 4);
 					break;
 				case 'revenue_adjustment':
-                // 收入調整：只影響買家實付（因為是從收入中扣除）
                 $cTotal = $isAdd ? bcadd($cTotal, $val, 4) : bcsub($cTotal, $val, 4);
-                // 不影響賣家實收（因為這是收入抵減，不是費用）
                 break;
 			}
         }
@@ -221,7 +227,6 @@ class Create extends Component
     {
         $feeKeys = array_keys(config('business.fee_types', []));
         if (in_array($key, $feeKeys) || $key === 'order_adjustment' || $key === 'warehouse_id') {
-            // 當業務歸屬倉庫變動時，自動同步明細中未填寫的發貨倉庫
             if ($key === 'warehouse_id' && !empty($value)) {
                 foreach ($this->items as $index => $item) {
                     if (empty($item['warehouse_id'])) {
@@ -233,25 +238,21 @@ class Create extends Component
         }
     }
 
+    /**
+     * 處理 product_id 變更（手動輸入 / 掃描條碼 / picker 選定後的程式化設定）
+     * 注意：picker 選定走 fillProductForRow，不會觸發此鉤子
+     */
     public function updatedItems($value, $key)
     {
         if (str_ends_with($key, '.product_id')) {
             $parts = explode('.', $key);
             $index = $parts[0];
 
-            if ($value) {
+            if ($value && isset($this->items[$index])) {
                 $product = Product::find($value);
                 if ($product) {
-                    $this->items[$index]['name'] = $product->full_display_name;
-                    $this->items[$index]['price'] = (string) $product->price;					
-                    
-                    $this->productOptions = Product::whereIn('id', collect($this->items)->pluck('product_id')->filter())
-                        ->get()
-                        ->map(fn($p) => [
-                            'id' => $p->id,
-                            'name' => $p->full_display_name,
-                        ])
-                        ->toArray();
+                    $this->items[$index]['name']  = $product->full_display_name;
+                    $this->items[$index]['price'] = (string) $product->price;
                 }
             }
         }
@@ -264,8 +265,14 @@ class Create extends Component
             'product_id'   => null,            
             'warehouse_id' => (int) ($this->form['warehouse_id'] ?? 1),
             'quantity'     => '1.0000',
-            'price'        => '0.0000',			
+            'price'        => '0.0000',
+            'subtotal'     => '0.0000',
         ];
+
+        // 聚焦新行並清空搜尋狀態
+        $this->productSearch  = '';
+        $this->productOptions = [];
+
         $this->calculateAll();
     }
     
@@ -273,12 +280,13 @@ class Create extends Component
     {
         unset($this->items[$index]);
         $this->items = array_values($this->items);
+
+        $this->productSearch  = '';
+        $this->productOptions = [];
+
         $this->calculateAll();
     }
     
-    /**
-     * 处理扫描到的条码
-     */
     public function onBarcodeScanned(string $barcode, ?int $index = null): void
     {
         $product = Product::where('barcode', $barcode)->first();
@@ -289,10 +297,12 @@ class Create extends Component
 
         $this->items[] = [
             'product_id' => $product->id,
-            'name'       => $product->name,
-            'quantity'   => 1,
-            'price'      => $product->price,
-            'subtotal'   => $product->price,
+            'name'       => $product->full_display_name,
+            'sku'        => $product->sku,
+            'warehouse_id' => (int) ($this->form['warehouse_id'] ?? 1),
+            'quantity'   => '1.0000',
+            'price'      => (string) $product->price,
+            'subtotal'   => (string) $product->price,
         ];
         $this->calculateAll();
     }
@@ -303,9 +313,6 @@ class Create extends Component
 		$this->customer_total = bcsub($this->subtotal, $discount, 2);
 	}
 
-    /**
-     * 核心儲存邏輯 (涵蓋新增、修改、併發重試、負庫存控制與全自動會計過帳)
-     */
 	public function save()
 	{
 		$this->validate();
@@ -315,7 +322,6 @@ class Create extends Component
 
 			DB::transaction(function () use ($allowNegative) {
 				
-				// 1. 建立或更新主表
 				$currentSale = $this->isEdit ? $this->sale : new Sale();
 				$currentSale->fill([
 					'shop_id'          => $this->form['shop_id'] ?? 1,
@@ -333,7 +339,6 @@ class Create extends Component
 				]);
 				$currentSale->save();
 
-				// 2. 擷取修改前的舊數量（若為修改模式）
 				$oldItemsQty = [];
 				if ($this->isEdit) {
 					$oldItemsQty = SaleItem::where('sale_id', $currentSale->id)
@@ -342,7 +347,6 @@ class Create extends Component
 					$currentSale->items()->delete();
 				}
 
-				// 3. 重新建立明細
 				foreach ($this->items as $item) {
 					$currentSale->items()->create([
 						'shop_id'        => $currentSale->shop_id,
@@ -354,13 +358,11 @@ class Create extends Component
 					]);
 				}
 
-				// 4. 處理費用
 				$currentSale->fees()->delete();
 				$feeConfigs = config('business.fee_types', []);
 				foreach ($feeConfigs as $feeType => $config) {
 					$amount = $this->form[$feeType] ?? '0.0000';
 					
-					// 只儲存非零金額的費用
 					if (bccomp($amount, '0', 4) !== 0) {
 						$currentSale->fees()->create([
 							'shop_id'  => $currentSale->shop_id,

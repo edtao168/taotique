@@ -91,6 +91,12 @@ class Sale extends Model
 			default => $this->payment_method,
 		};
 		
+		if (!isset($mapping[$payment])) {
+			throw new \RuntimeException(
+				"付款方式 [{$this->payment_method}] 未在 config('business.payment_accounts') 定義對應科目，無法過帳。"
+			);
+		}
+	
 		return $mapping[$payment] ?? '112202';
     }
     
@@ -133,23 +139,19 @@ class Sale extends Model
 	public function getCustomerTotalAttribute(): string
 	{
 		$subtotal = (string) ($this->subtotal ?? '0.0000');
-		$sad = $subtotal;  // 從 subtotal 開始
+		$sad = $subtotal;
 		
 		$feeTypes = config('business.fee_types', []);
 		
 		foreach ($feeTypes as $feeType => $config) {
 			$target = $config['target'] ?? '';
-			
-			// ✅ 只處理影響 customer 的費用
 			if (!in_array($target, ['customer', 'both', 'revenue_adjustment'])) {
 				continue;
 			}
-			
 			$amount = $this->getFeeTotal($feeType);
 			if (bccomp($amount, '0', 4) === 0) {
 				continue;
 			}
-			
 			$operator = $config['operator'] ?? 'add';
 			if ($operator === 'add') {
 				$sad = bcadd($sad, $amount, 4);
@@ -158,10 +160,7 @@ class Sale extends Model
 			}
 		}
 		
-		// ✅ 稅金另外處理（因為 tax 的 target 通常不是 customer）
-		$tax = $this->getFeeTotal('tax_amount');
-		$sad = bcadd($sad, $tax, 4);
-		
+		// ⚠️ 不再手動加 tax_amount，因為迴圈已處理
 		return $sad;
 	}
 
@@ -824,44 +823,38 @@ class Sale extends Model
     // =========================================================================
 
     public function getAmountFromSource(string $source, mixed $context = null): string
-    {
-        if (!$this->relationLoaded('items')) {
-            $this->load('items');
-        }
-        
-        return match ($source) {
-			'customer_total' => (string) ($this->customer_total ?? '0.0000'),
-			'customer_total_inc_tax' => $this->customer_total_inc_tax,
+	{
+		if (!$this->relationLoaded('items')) {
+			$this->load('items');
+		}
+		
+		// 動態處理所有 fee_types（一次涵蓋 tax_amount、freight_amount、
+		// platform_fee、commission、seller_discount、shipping_fee_*、
+		// platform_coupon、order_adjustment、以及未來新增的任何 fee_type）
+		if (array_key_exists($source, config('business.fee_types', []))) {
+			return $this->getFeeTotal($source);
+		}
+		
+		return match ($source) {
+			// ===== 銷售單特有欄位 =====
+			'customer_total'          => (string) ($this->customer_total ?? '0.0000'),
+			'customer_total_inc_tax'  => $this->customer_total_inc_tax,
+			'subtotal'                => (string) ($this->subtotal ?? '0.0000'),
 			'subtotal_after_discount' => (string) ($this->subtotal_after_discount ?? $this->subtotal ?? '0.0000'),
-			'net_revenue' => $this->net_revenue,
+			'net_revenue'             => $this->net_revenue,
+			'final_net_amount'        => (string) ($this->final_net_amount ?? '0.0000'),
 			
-			// ===== 費用類（從 sale_fees 讀取） =====
-			'tax_amount' => $this->getFeeTotal('tax_amount'),
-			'freight_amount' => $this->getFeeTotal('freight_amount'),
-			'platform_fee' => $this->getFeeTotal('platform_fee'),
-			'commission' => $this->getFeeTotal('commission'),
-			'seller_discount' => $this->getFeeTotal('seller_discount'),
-			'shipping_fee_platform' => $this->getFeeTotal('shipping_fee_platform'),
-			'shipping_fee_customer' => $this->getFeeTotal('shipping_fee_customer'),
-			'platform_coupon' => $this->getFeeTotal('platform_coupon'),
-			'order_adjustment' => $this->getFeeTotal('order_adjustment'),			
+			// ===== 計算型 =====
+			'total_fees'   => $this->calculateTotalFees(),
+			'cost_amount'  => $this->calculateRealtimeCost(),
 			
-			// ===== 總計 =====
-			'total_fees' => $this->calculateTotalFees(),
-			'cost_amount' => $this->calculateRealtimeCost(),
-			'final_net_amount' => (string) ($this->final_net_amount ?? '0.0000'),
-			
-			// ===== 退貨 =====
-			'return_total' => (string) ($this->return_total ?? '0.0000'),
-			'return_cost' => (string) ($this->return_cost ?? '0.0000'),
+			// ===== 退貨（由 SalesReturn 模組用） =====
+			'return_total'     => (string) ($this->return_total ?? '0.0000'),
+			'return_cost'      => (string) ($this->return_cost ?? '0.0000'),
 			'return_cost_base' => (string) ($this->return_cost_base ?? '0.0000'),
 			
-			// ===== 採購 =====
-			'purchase_base_items' => (string) ($this->purchase_base_items ?? '0.0000'),
-			'purchase_base_tax' => (string) ($this->purchase_base_tax ?? '0.0000'),
-			'purchase_base_shipping' => (string) ($this->purchase_base_shipping ?? '0.0000'),
-			'purchase_base_other_fees' => (string) ($this->purchase_base_other_fees ?? '0.0000'),
-			'purchase_base_total' => (string) ($this->purchase_base_total ?? '0.0000'),
+			// ===== 通用 =====
+			'amount' => (string) ($this->getAttribute('amount') ?? '0.0000'),
 			
 			default => '0.0000',
 		};

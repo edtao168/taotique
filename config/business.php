@@ -126,50 +126,68 @@ return [
         ],
         
         // 賣家相關（影響 final_net_amount）
+		        
+		'freight_amount' => [
+			'name'          => '運費',
+			'target'        => 'seller',
+			'operator'      => 'sub',
+			'icon'          => 'o-truck',
+			'account_code'  => '560104',      // 非平台運費
+			'side'          => 'debit',
+		],
+		
+		'payment_gateway_fee' => [
+			'name'          => '手續費',
+			'target'        => 'seller',
+			'operator'      => 'sub',
+			'icon'          => 'o-credit-card',
+			'account_code'  => '560105',      // 非平台手續費
+			'side'          => 'debit',
+		],
+ 
         'shipping_fee_platform' => [
             'name'          => '平台代付運費',
             'target'        => 'seller',
             'operator'      => 'sub',
             'icon'          => 'o-paper-airplane',
-            'account_code'  => '560106',      // 運費支出
+            'account_code'  => '560106',
             'side'          => 'debit',
         ],		
 		
-        'platform_fee' => [
-            'name'          => '手續費',
+		'platform_fee' => [
+            'name'          => '平台手續費',
             'target'        => 'seller',
             'operator'      => 'sub',
             'icon'          => 'o-calculator',
-            'account_code'  => '560105',      // 支付手續費
+            'account_code'  => '560107',
             'side'          => 'debit',
         ],
-        
+
+        'order_adjustment' => [
+            'name'          => '平台帳款調整',
+            'target'        => 'seller',
+            'operator'      => 'sub',
+            'icon'          => 'o-adjustments-horizontal',
+            'account_code'  => '560108',
+            'side'          => 'debit',
+        ],        
+	
+		'platform_ad_fee' => [
+			'name'          => '平台廣告費',
+			'target'        => 'seller',
+			'operator'      => 'sub',
+			'icon'          => 'o-megaphone',
+			'account_code'  => '560109',
+			'side'          => 'debit',
+		],
         'commission' => [
             'name'          => '佣金',
             'target'        => 'seller',
             'operator'      => 'sub',
             'icon'          => 'o-user-group',
-            'account_code'  => '560111',      // 佣金
-            'side'          => 'debit',
-        ],
-        
-        'order_adjustment' => [
-            'name'          => '帳款調整',
-            'target'        => 'seller',
-            'operator'      => 'sub',
-            'icon'          => 'o-adjustments-horizontal',
-            'account_code'  => '560108',      // 帳款調整
+            'account_code'  => '560111',
             'side'          => 'debit',
         ],        
-        
-		'freight_amount' => [
-			'name'          => '一般運費支出',
-			'target'        => 'seller',
-			'operator'      => 'sub',
-			'icon'          => 'o-truck',
-			'account_code'  => '560104',      // 一般物流費；運輸費
-			'side'          => 'debit',
-		],
 		
     ],
     
@@ -329,9 +347,9 @@ return [
 		'cash'          => '100101',   // 現金
 		'credit_card'   => '100201',   // 國泰世華
 		'transfer'      => '100201',   // 銀行轉帳
-		'taiwan_pay'    => '100201',   // 台灣Pay → 銀行
+		'taiwan_pay'    => '100204',   // 台灣Pay → 兆豐自動扣
 		'shopee_pay'    => '101202',   // 蝦皮錢包
-		'line_pay'      => '100201',   // LINE Pay → 銀行
+		'line_pay'      => '101203',   // LINE Pay，人工轉賬
 	],
 	
 	// 通路 ID 對應（請根據實際資料庫調整）
