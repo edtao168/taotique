@@ -33,7 +33,6 @@ use App\Livewire\Conversions\Create as ConversionCreate;
 // 商品管理
 use App\Livewire\Products\Index as ProductIndex;
 use App\Livewire\Products\Create as ProductCreate;
-use App\Livewire\Products\Show as ProductShow;
 use App\Livewire\Products\Edit as ProductEdit;
 
 // 日記賬
@@ -105,7 +104,6 @@ Route::middleware(['auth'])->group(function () {
     Route::prefix('products')->name('products.')->group(function () {
         Route::get('/', ProductIndex::class)->name('index');    
         Route::get('/create', ProductCreate::class)->name('create');
-        Route::get('/{product}', ProductShow::class)->name('show');
         Route::get('/{product}/edit', ProductEdit::class)->name('edit');
     });
 	
