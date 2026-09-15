@@ -21,13 +21,27 @@
     </x-header>
 
     {{-- 1. 數據指標卡 (PC/手機通用) --}}
-	<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+	<div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
 		<x-stat title="本月銷售額" value="NT$ {{ number_format($metrics->monthSales) }}" icon="o-shopping-cart"
 			description="{{ $metrics->salesGrowth >= 0 ? '▲' : '▼' }} {{ abs(round($metrics->salesGrowth, 1)) }}% 較上月"
 			class="{{ $metrics->salesGrowth >= 0 ? 'text-success' : 'text-error' }}" shadow />
 		
-		<x-stat title="本月淨利" value="NT$ {{ number_format($metrics->monthNetProfit) }}" icon="o-banknotes"
-			description="商家實收（扣成本與平台費）" class="text-primary" shadow />
+		<x-stat
+			title="本月淨營業額"
+			value="NT$ {{ number_format($metrics->monthNetRevenue) }}"
+			icon="o-banknotes"
+			description="商家實收（未扣成本）"
+			class="text-primary"
+			shadow
+		/>
+
+		<x-stat
+			title="本月毛利"
+			value="NT$ {{ number_format($metrics->monthGrossProfit) }}"
+			icon="o-arrow-trending-up"
+			description="毛利率 {{ $metrics->monthGrossMarginRate }}%"
+			shadow
+		/>
 
 		<x-stat title="本年度總計" value="NT$ {{ number_format($metrics->yearSales) }}" icon="o-arrow-trending-up" shadow />
 

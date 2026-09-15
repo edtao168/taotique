@@ -41,59 +41,93 @@ class SalesAnalyticsService
         );
     }
 
-    private function buildOverview(Carbon $date, AnalyticsScope $scope): SalesMetrics
-    {
-        if (!$scope->hasAnyShop()) {
-            return $this->emptyMetrics();
-        }
+	private function buildOverview(Carbon $date, AnalyticsScope $scope): SalesMetrics
+	{
+		if (!$scope->hasAnyShop()) {
+			return $this->emptyMetrics();
+		}
 
-        $monthStart = $date->copy()->startOfMonth();
-        $monthEnd   = $date->copy()->endOfMonth();
-        $prevStart  = $date->copy()->subMonthNoOverflow()->startOfMonth();
-        $prevEnd    = $date->copy()->subMonthNoOverflow()->endOfMonth();
-        $yearStart  = $date->copy()->startOfYear();
+		$monthStart = $date->copy()->startOfMonth();
+		$monthEnd   = $date->copy()->endOfMonth();
+		$prevStart  = $date->copy()->subMonthNoOverflow()->startOfMonth();
+		$prevEnd    = $date->copy()->subMonthNoOverflow()->endOfMonth();
+		$yearStart  = $date->copy()->startOfYear();
 
-        // Sale 有 ShopScoped，會自動加 shop 條件；
-        // 但為縱深防禦，這裡再顯式帶 shop_id（避免 Global Scope 被繞過）。
-        $row = Sale::query()
-            ->whereIn('shop_id', $scope->shopIds)
-            ->whereIn('status', $this->revenueStatuses())
-            ->selectRaw('
-                SUM(CASE WHEN sold_at BETWEEN ? AND ? THEN customer_total ELSE 0 END) as month_sales,
-                SUM(CASE WHEN sold_at BETWEEN ? AND ? THEN final_net_amount ELSE 0 END) as month_net,
-                SUM(CASE WHEN sold_at BETWEEN ? AND ? THEN customer_total ELSE 0 END) as prev_sales,
-                SUM(CASE WHEN sold_at BETWEEN ? AND ? THEN customer_total ELSE 0 END) as year_sales,
-                SUM(CASE WHEN DATE(sold_at) = ? THEN customer_total ELSE 0 END) as today_sales,
-                COUNT(CASE WHEN sold_at BETWEEN ? AND ? THEN 1 END) as month_orders
-            ', [
-                $monthStart, $monthEnd,
-                $monthStart, $monthEnd,
-                $prevStart,  $prevEnd,
-                $yearStart,  $monthEnd,
-                $date->toDateString(),
-                $monthStart, $monthEnd,
-            ])
-            ->first();
+		// ============================================================
+		// (1) 用 sales 算：營收、淨營業額、訂單數
+		// ============================================================
+		$row = Sale::query()
+			->whereIn('shop_id', $scope->shopIds)
+			->whereIn('status', $this->revenueStatuses())
+			->selectRaw('
+				SUM(CASE WHEN sold_at BETWEEN ? AND ? THEN customer_total ELSE 0 END) as month_sales,
+				SUM(CASE WHEN sold_at BETWEEN ? AND ? THEN final_net_amount ELSE 0 END) as month_net_revenue,
+				SUM(CASE WHEN sold_at BETWEEN ? AND ? THEN customer_total ELSE 0 END) as prev_sales,
+				SUM(CASE WHEN sold_at BETWEEN ? AND ? THEN customer_total ELSE 0 END) as year_sales,
+				SUM(CASE WHEN DATE(sold_at) = ? THEN customer_total ELSE 0 END) as today_sales,
+				COUNT(CASE WHEN sold_at BETWEEN ? AND ? THEN 1 END) as month_orders
+			', [
+				$monthStart, $monthEnd,
+				$monthStart, $monthEnd,
+				$prevStart,  $prevEnd,
+				$yearStart,  $monthEnd,
+				$date->toDateString(),
+				$monthStart, $monthEnd,
+			])
+			->first();
 
-        $monthSales  = (float) ($row->month_sales ?? 0);
-        $prevSales   = (float) ($row->prev_sales ?? 0);
-        $monthOrders = (int)   ($row->month_orders ?? 0);
+		$monthSales      = (float) ($row->month_sales ?? 0);
+		$monthNetRevenue = (float) ($row->month_net_revenue ?? 0);
+		$prevSales       = (float) ($row->prev_sales ?? 0);
+		$monthOrders     = (int)   ($row->month_orders ?? 0);
 
-        $growth = $prevSales > 0
-            ? (($monthSales - $prevSales) / $prevSales) * 100
-            : ($monthSales > 0 ? 100.0 : 0.0);
+		// ============================================================
+		// (2) 用 sale_items 算：本月商品成本
+		//     ⚠️ 成本只認「已出庫」的狀態（costStatuses）
+		// ============================================================
+		$costRow = DB::table('sale_items as si')
+			->join('sales as s', 's.id', '=', 'si.sale_id')
+			->join('products as p', 'p.id', '=', 'si.product_id')
+			->whereIn('s.shop_id', $scope->shopIds)
+			->where('p.tenant_id', $scope->tenantId)
+			->whereIn('s.status', $this->costStatuses())
+			->whereBetween('s.sold_at', [$monthStart, $monthEnd])
+			->selectRaw('SUM(si.quantity * COALESCE(p.cost, 0)) as month_cost')
+			->first();
 
-        return new SalesMetrics(
-            todaySales:         (float) ($row->today_sales ?? 0),
-            monthSales:         $monthSales,
-            monthNetProfit:     (float) ($row->month_net ?? 0),
-            yearSales:          (float) ($row->year_sales ?? 0),
-            monthSalesPrev:     $prevSales,
-            salesGrowth:        round($growth, 2),
-            monthOrderCount:    $monthOrders,
-            monthAvgOrderValue: $monthOrders > 0 ? round($monthSales / $monthOrders, 2) : 0.0,
-        );
-    }
+		$monthCost = (float) ($costRow->month_cost ?? 0);
+
+		// ============================================================
+		// (3) 算毛利與毛利率
+		// ============================================================
+		$monthGrossProfit = $monthNetRevenue - $monthCost;
+		$monthGrossMargin = $monthNetRevenue > 0
+			? round(($monthGrossProfit / $monthNetRevenue) * 100, 2)
+			: 0.0;
+
+		// ============================================================
+		// (4) 算月增率
+		// ============================================================
+		$growth = $prevSales > 0
+			? (($monthSales - $prevSales) / $prevSales) * 100
+			: ($monthSales > 0 ? 100.0 : 0.0);
+
+		// ============================================================
+		// (5) 回傳
+		// ============================================================
+		return new SalesMetrics(
+			todaySales:           (float) ($row->today_sales ?? 0),
+			monthSales:           $monthSales,
+			monthNetRevenue:      $monthNetRevenue,
+			yearSales:            (float) ($row->year_sales ?? 0),
+			monthSalesPrev:       $prevSales,
+			salesGrowth:          round($growth, 2),
+			monthOrderCount:      $monthOrders,
+			monthAvgOrderValue:   $monthOrders > 0 ? round($monthSales / $monthOrders, 2) : 0.0,
+			monthGrossProfit:     round($monthGrossProfit, 2),
+			monthGrossMarginRate: $monthGrossMargin,
+		);
+	}
 
     private function emptyMetrics(): SalesMetrics
     {

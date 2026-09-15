@@ -8,10 +8,25 @@
     </x-header>
 
     {{-- 統計卡片 --}}
-    <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
+    <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
         <x-stat title="今日營業額" value="NT$ {{ number_format($metrics->todaySales) }}" icon="o-sun" color="text-blue-500" />
         <x-stat title="本月營業額" value="NT$ {{ number_format($metrics->monthSales) }}" icon="o-calendar" description="買家實付" />
-        <x-stat title="本月淨利" value="NT$ {{ number_format($metrics->monthNetProfit) }}" icon="o-currency-dollar" color="text-emerald-500" description="商家實收" />
+        <x-stat
+			title="本月淨營業額"
+			value="NT$ {{ number_format($metrics->monthNetRevenue) }}"
+			icon="o-currency-dollar"
+			color="text-emerald-500"
+			description="商家實收（未扣成本）"
+		/>
+
+		<x-stat
+			title="本月毛利"
+			value="NT$ {{ number_format($metrics->monthGrossProfit) }}"
+			icon="o-banknotes"
+			color="text-primary"
+			description="毛利率 {{ $metrics->monthGrossMarginRate }}%"
+		/>
+		
         <x-stat title="庫存總額" value="NT$ {{ number_format($inventoryValue) }}" icon="o-circle-stack" />
         <x-stat title="庫存預警" value="{{ $lowStockCount }}" icon="o-exclamation-triangle" color="text-orange-500" />
     </div>
