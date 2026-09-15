@@ -232,7 +232,7 @@
 							 title="{{ $sale->status->label() }}" />
 				@endscope
 				
-				{{-- 新增：狀態欄位 --}}
+				{{-- 單據狀態 --}}
 				@scope('cell_status', $sale)
 					<x-badge :value="$sale->status->label()" 
 							 :class="$sale->status->color() . ' badge-sm'" />
@@ -481,6 +481,22 @@
 						</x-table>
 					</div>
 				</div>
+				
+				{{-- 4. 備註 --}}
+				@if(filled($selectedSale->remark))
+					<div>
+						<div class="flex items-center gap-2 mb-3 px-1">
+							<p class="text-sm font-bold border-l-4 border-primary pl-2">備註</p>
+							<x-icon name="o-chat-bubble-left-ellipsis" class="w-4 h-4 text-base-content/40" />
+						</div>
+
+						<div class="p-4 rounded-xl bg-base-100 border border-base-300 shadow-sm">
+							<p class="text-sm text-base-content break-words">
+								{{ $selectedSale->remark }}
+							</p>
+						</div>
+					</div>
+				@endif
 			</div>
 
 			{{-- 底部固定動作欄 --}}
