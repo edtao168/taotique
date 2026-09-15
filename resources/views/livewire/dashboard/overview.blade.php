@@ -278,7 +278,7 @@
 	@endscript
 
 {{-- ============================================================ --}}
-{{-- 時段熱度圖（單一 RWD，桌機 w-full，橙紅熱度）                    --}}
+{{-- 時段熱度分析：桌機熱度圖 + 手機 Top 列表                        --}}
 {{-- ============================================================ --}}
 <div class="shadow p-4 bg-base-100 text-base-content rounded-lg mb-8 w-full">
     {{-- 標題列 --}}
@@ -340,7 +340,7 @@
 
         $dayNamesFull = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'];
 
-        // 熱度色階：恢復橙紅體系
+        // 熱度色階：橙紅體系
         $getCellClass = function ($value) use ($maxValue) {
             if ($maxValue <= 0 || $value <= 0) {
                 return 'bg-base-200/40';
@@ -366,6 +366,9 @@
                 ? 'NT$ ' . number_format($value, 0)
                 : $value . ' 筆';
         };
+
+        // 手機 Top 列表：取前 10 名
+        $mobileTopSlots = collect($topSlots)->take(10);
     @endphp
 
     @if($maxValue <= 0)
@@ -373,88 +376,172 @@
             此期間尚無銷售資料
         </div>
     @else
-        {{-- 橫向捲動容器：桌機自動填滿，手機橫向滑動 --}}
-        <div class="overflow-x-auto">
-            <div class="w-full min-w-[880px]">
-                {{-- 小時標頭 --}}
-                <div class="grid grid-cols-[48px_repeat(24,minmax(0,1fr))] gap-[3px] mb-1">
-                    <div class="text-[10px] text-base-content/40 text-center"></div>
-                    @for($h = 0; $h < 24; $h++)
-                        <div class="text-[10px] text-base-content/40 text-center font-mono">
-                            {{ str_pad($h, 2, '0', STR_PAD_LEFT) }}
-                        </div>
-                    @endfor
-                </div>
-
-                {{-- 7 天資料列 --}}
-                @for($d = 0; $d < 7; $d++)
-                    <div class="grid grid-cols-[48px_repeat(24,minmax(0,1fr))] gap-[3px] mb-[3px]">
-                        <div class="text-xs font-bold text-base-content/60 flex items-center justify-center">
-                            {{ $dayNamesFull[$d] }}
-                        </div>
-
+        {{-- ============================================================ --}}
+        {{-- 桌機版：7×24 熱度圖                                           --}}
+        {{-- ============================================================ --}}
+        <div class="hidden lg:block">
+            <div class="overflow-x-auto w-full">
+                <div style="min-width: 880px;">
+                    {{-- 小時標頭 --}}
+                    <div class="grid grid-cols-[48px_repeat(24,minmax(0,1fr))] gap-[3px] mb-1">
+                        <div class="text-[10px] text-base-content/40 text-center"></div>
                         @for($h = 0; $h < 24; $h++)
-                            @php
-                                $value = $matrix[$d][$h] ?? 0;
-                                $cellClass = $getCellClass($value);
-                                $textClass = $getTextClass($value);
-                                $tooltip = $dayNamesFull[$d] . ' ' . str_pad($h, 2, '0', STR_PAD_LEFT) . ':00';
-                                $tooltip .= ' ｜ ' . ($value > 0 ? $formatValue($value) : '無銷售');
-                            @endphp
-                            <div
-                                class="{{ $cellClass }} {{ $textClass }} h-8 rounded-sm flex items-center justify-center text-[9px] font-mono cursor-pointer hover:ring-2 hover:ring-orange-500 transition"
-                                title="{{ $tooltip }}"
-                            >
-                                @if($value > 0 && $value == $maxValue)
-                                    ★
-                                @endif
+                            <div class="text-[10px] text-base-content/40 text-center font-mono">
+                                {{ str_pad($h, 2, '0', STR_PAD_LEFT) }}
                             </div>
                         @endfor
                     </div>
-                @endfor
-            </div>
-        </div>
 
-        {{-- 圖例 --}}
-        <div class="flex items-center justify-center gap-2 mt-4 text-[10px] text-base-content/50">
-            <span>低</span>
-            <div class="w-4 h-4 bg-base-200/40 rounded-sm border border-base-300"></div>
-            <div class="w-4 h-4 bg-orange-100 rounded-sm"></div>
-            <div class="w-4 h-4 bg-orange-300 rounded-sm"></div>
-            <div class="w-4 h-4 bg-orange-500 rounded-sm"></div>
-            <div class="w-4 h-4 bg-red-500 rounded-sm"></div>
-            <div class="w-4 h-4 bg-red-700 rounded-sm"></div>
-            <span>高</span>
-        </div>
+                    {{-- 7 天資料列 --}}
+                    @for($d = 0; $d < 7; $d++)
+                        <div class="grid grid-cols-[48px_repeat(24,minmax(0,1fr))] gap-[3px] mb-[3px]">
+                            <div class="text-xs font-bold text-base-content/60 flex items-center justify-center">
+                                {{ $dayNamesFull[$d] }}
+                            </div>
 
-        {{-- 最佳時段 Top 3 --}}
-        @if(!empty($topSlots))
-            <div class="mt-6 grid grid-cols-1 md:grid-cols-3 gap-3">
-                @foreach($topSlots as $index => $slot)
-                    <div class="border border-base-300 rounded-lg p-3 bg-base-200/40">
-                        <div class="flex items-center gap-2 mb-1">
-                            <span class="text-lg font-black text-orange-600">#{{ $index + 1 }}</span>
-                            <span class="text-xs text-base-content/50">最佳時段</span>
+                            @for($h = 0; $h < 24; $h++)
+                                @php
+                                    $value = $matrix[$d][$h] ?? 0;
+                                    $cellClass = $getCellClass($value);
+                                    $textClass = $getTextClass($value);
+                                    $tooltip = $dayNamesFull[$d] . ' ' . str_pad($h, 2, '0', STR_PAD_LEFT) . ':00';
+                                    $tooltip .= ' ｜ ' . ($value > 0 ? $formatValue($value) : '無銷售');
+                                @endphp
+                                <div
+                                    class="{{ $cellClass }} {{ $textClass }} h-8 rounded-sm flex items-center justify-center text-[9px] font-mono cursor-pointer hover:ring-2 hover:ring-orange-500 transition"
+                                    title="{{ $tooltip }}"
+                                >
+                                    @if($value > 0 && $value == $maxValue)
+                                        ★
+                                    @endif
+                                </div>
+                            @endfor
                         </div>
-                        <p class="text-sm font-bold">
-                            {{ $dayNamesFull[$slot['day']] }} {{ str_pad($slot['hour'], 2, '0', STR_PAD_LEFT) }}:00
-                        </p>
-                        <p class="text-xs text-base-content/50 mt-1">
-                            @if($heatmapMode === 'revenue')
-                                營收 NT$ {{ number_format($slot['revenue'], 0) }}
-                            @else
-                                {{ $slot['orderCount'] }} 筆訂單
-                            @endif
-                        </p>
-                    </div>
-                @endforeach
+                    @endfor
+                </div>
             </div>
 
-            <div class="mt-3 p-3 bg-base-200/60 border border-base-300 rounded-lg text-xs text-base-content/70">
-                <x-icon name="o-light-bulb" class="w-4 h-4 inline" />
-                建議：在最佳時段前備妥熱銷商品、安排人力，並考慮於此時段推播或做促銷。
+            {{-- 圖例 --}}
+            <div class="flex items-center justify-center gap-2 mt-4 text-[10px] text-base-content/50">
+                <span>低</span>
+                <div class="w-4 h-4 bg-base-200/40 rounded-sm border border-base-300"></div>
+                <div class="w-4 h-4 bg-orange-100 rounded-sm"></div>
+                <div class="w-4 h-4 bg-orange-300 rounded-sm"></div>
+                <div class="w-4 h-4 bg-orange-500 rounded-sm"></div>
+                <div class="w-4 h-4 bg-red-500 rounded-sm"></div>
+                <div class="w-4 h-4 bg-red-700 rounded-sm"></div>
+                <span>高</span>
             </div>
-        @endif
+
+            {{-- 桌機 Top 3 --}}
+            @if(!empty($topSlots))
+                <div class="mt-6 grid grid-cols-3 gap-3">
+                    @foreach($topSlots as $index => $slot)
+                        <div class="border border-base-300 rounded-lg p-3 bg-base-200/40">
+                            <div class="flex items-center gap-2 mb-1">
+                                <span class="text-lg font-black text-orange-600">#{{ $index + 1 }}</span>
+                                <span class="text-xs text-base-content/50">最佳時段</span>
+                            </div>
+                            <p class="text-sm font-bold">
+                                {{ $dayNamesFull[$slot['day']] }} {{ str_pad($slot['hour'], 2, '0', STR_PAD_LEFT) }}:00
+                            </p>
+                            <p class="text-xs text-base-content/50 mt-1">
+                                @if($heatmapMode === 'revenue')
+                                    營收 NT$ {{ number_format($slot['revenue'], 0) }}
+                                @else
+                                    {{ $slot['orderCount'] }} 筆訂單
+                                @endif
+                            </p>
+                        </div>
+                    @endforeach
+                </div>
+            @endif
+        </div>
+
+        {{-- ============================================================ --}}
+        {{-- 手機版：Top 時段列表                                           --}}
+        {{-- ============================================================ --}}
+        <div class="block lg:hidden">
+            {{-- 手機 Top 3 卡片 --}}
+            @if(!empty($topSlots))
+                <div class="grid grid-cols-1 gap-3 mb-4">
+                    @foreach(collect($topSlots)->take(3) as $index => $slot)
+                        <div class="border border-base-300 rounded-lg p-3 bg-base-200/40 flex items-center justify-between">
+                            <div class="flex items-center gap-3">
+                                <span class="text-2xl font-black text-orange-600">#{{ $index + 1 }}</span>
+                                <div>
+                                    <p class="text-sm font-bold">
+                                        {{ $dayNamesFull[$slot['day']] }} {{ str_pad($slot['hour'], 2, '0', STR_PAD_LEFT) }}:00
+                                    </p>
+                                    <p class="text-xs text-base-content/50">
+                                        @if($heatmapMode === 'revenue')
+                                            營收 NT$ {{ number_format($slot['revenue'], 0) }}
+                                        @else
+                                            {{ $slot['orderCount'] }} 筆訂單
+                                        @endif
+                                    </p>
+                                </div>
+                            </div>
+                            <div class="w-16 bg-base-300 rounded-full h-2">
+                                <div
+                                    class="h-2 rounded-full bg-orange-500"
+                                    style="width: {{ $maxValue > 0 ? min(($slot['revenue'] / $maxValue) * 100, 100) : 0 }}%"
+                                ></div>
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+            @endif
+
+            {{-- 手機完整 Top 10 列表 --}}
+            <div class="border-t border-base-300 pt-4">
+                <p class="text-xs font-bold text-base-content/60 mb-3">
+                    熱門時段 Top 10
+                </p>
+                <div class="space-y-2">
+                    @foreach($mobileTopSlots as $index => $slot)
+                        <div class="flex items-center gap-3">
+                            <span class="text-xs font-mono text-base-content/40 w-6 text-right">
+                                #{{ $index + 1 }}
+                            </span>
+                            <span class="text-xs font-bold w-24">
+                                {{ $dayNamesFull[$slot['day']] }} {{ str_pad($slot['hour'], 2, '0', STR_PAD_LEFT) }}:00
+                            </span>
+                            <div class="flex-1 bg-base-200 rounded-full h-2">
+                                <div
+                                    class="h-2 rounded-full bg-orange-500"
+                                    style="width: {{ $maxValue > 0 ? min(($slot['revenue'] / $maxValue) * 100, 100) : 0 }}%"
+                                ></div>
+                            </div>
+                            <span class="text-xs font-mono text-base-content/60 w-20 text-right">
+                                @if($heatmapMode === 'revenue')
+                                    NT$ {{ number_format($slot['revenue'], 0) }}
+                                @else
+                                    {{ $slot['orderCount'] }} 筆
+                                @endif
+                            </span>
+                        </div>
+                    @endforeach
+                </div>
+            </div>
+
+            {{-- 手機圖例 --}}
+            <div class="flex items-center justify-center gap-2 mt-5 text-[10px] text-base-content/50">
+                <span>低</span>
+                <div class="w-3 h-3 bg-orange-100 rounded-sm"></div>
+                <div class="w-3 h-3 bg-orange-300 rounded-sm"></div>
+                <div class="w-3 h-3 bg-orange-500 rounded-sm"></div>
+                <div class="w-3 h-3 bg-red-500 rounded-sm"></div>
+                <div class="w-3 h-3 bg-red-700 rounded-sm"></div>
+                <span>高</span>
+            </div>
+        </div>
+
+        {{-- 共同建議區塊 --}}
+        <div class="mt-4 p-3 bg-base-200/60 border border-base-300 rounded-lg text-xs text-base-content/70">
+            <x-icon name="o-light-bulb" class="w-4 h-4 inline" />
+            建議：在最佳時段前備妥熱銷商品、安排人力，並考慮於此時段推播或做促銷。
+        </div>
     @endif
 </div>
 
