@@ -356,74 +356,81 @@ class SalesAnalyticsService
     }
 
     private function buildGmroi(Carbon $from, Carbon $to, AnalyticsScope $scope): Collection
-    {
-        if (!$scope->hasAnyShop()) {
-            return collect();
-        }
+	{
+		if (!$scope->hasAnyShop()) {
+			return collect();
+		}
 
-        // (1) 期間營收與毛利（per product）
-        // 毛利 = subtotal - total_cost（total_cost = unit_cost * quantity）
-        $salesAgg = DB::table('sale_items as si')
-            ->join('sales as s', 's.id', '=', 'si.sale_id')
-            ->whereIn('s.shop_id', $scope->shopIds)
-            ->whereIn('s.status', $this->costStatuses())
-            ->whereBetween('s.sold_at', [$from, $to])
-            ->groupBy('si.product_id')
-            ->selectRaw('
-                si.product_id,
-                SUM(si.subtotal) as revenue,
-                SUM(si.subtotal - si.total_cost) as gross_profit
-            ')
-            ->get()
-            ->keyBy('product_id');
+		// (1) 期間營收與銷量（per product）
+		// ✅ 只取 revenue 與 sold_qty，cogs 在 PHP 端用 products.cost 算
+		$salesAgg = DB::table('sale_items as si')
+			->join('sales as s', 's.id', '=', 'si.sale_id')
+			->whereIn('s.shop_id', $scope->shopIds)
+			->whereIn('s.status', $this->costStatuses())
+			->whereBetween('s.sold_at', [$from, $to])
+			->groupBy('si.product_id')
+			->selectRaw('
+				si.product_id,
+				SUM(si.subtotal) as revenue,
+				SUM(si.quantity) as sold_qty
+			')
+			->get()
+			->keyBy('product_id');
 
-        // (2) 當前庫存量（per product，scope 內店鋪）
-        $inventoryAgg = DB::table('inventories as inv')
-            ->join('warehouses as w', 'w.id', '=', 'inv.warehouse_id')
-            ->whereIn('w.shop_id', $scope->shopIds)
-            ->groupBy('inv.product_id')
-            ->selectRaw('
-                inv.product_id,
-                SUM(inv.quantity) as stock_qty
-            ')
-            ->get()
-            ->keyBy('product_id');
+		// (2) 當前庫存量（per product，scope 內店鋪）
+		$inventoryAgg = DB::table('inventories as inv')
+			->join('warehouses as w', 'w.id', '=', 'inv.warehouse_id')
+			->whereIn('w.shop_id', $scope->shopIds)
+			->groupBy('inv.product_id')
+			->selectRaw('
+				inv.product_id,
+				SUM(inv.quantity) as stock_qty
+			')
+			->get()
+			->keyBy('product_id');
 
-        $productIds = $salesAgg->keys()->unique()->values()->all();
-        if (empty($productIds)) {
-            return collect();
-        }
+		$productIds = $salesAgg->keys()->unique()->values()->all();
+		if (empty($productIds)) {
+			return collect();
+		}
 
-        $products = Product::query()
-            ->whereIn('id', $productIds)
-            ->select(['id', 'name', 'cost'])
-            ->get()
-            ->keyBy('id');
+		// (3) 商品主檔（含 cost，用於「當下成本」計算）
+		$products = Product::query()
+			->whereIn('id', $productIds)
+			->select(['id', 'name', 'cost'])
+			->get()
+			->keyBy('id');
 
-        return collect($productIds)->map(function ($pid) use ($products, $salesAgg, $inventoryAgg) {
-            $p = $products[$pid] ?? null;
-            if (!$p) return null;
+		return collect($productIds)->map(function ($pid) use ($products, $salesAgg, $inventoryAgg) {
+			$p = $products[$pid] ?? null;
+			if (!$p) return null;
 
-            $revenue     = (float) ($salesAgg[$pid]->revenue ?? 0);
-            $grossProfit = (float) ($salesAgg[$pid]->gross_profit ?? 0);
+			$revenue  = (float) ($salesAgg[$pid]->revenue ?? 0);
+			$soldQty  = (float) ($salesAgg[$pid]->sold_qty ?? 0);
+			$unitCost = (float) $p->cost;
 
-            $stockQty    = (float) ($inventoryAgg[$pid]->stock_qty ?? 0);
-            $avgInvCost  = $stockQty * (float) $p->cost;  // 方案 A
+			// ✅ 商品成本 = 銷量 × 當下單件成本
+			$cogs        = $soldQty * $unitCost;
+			$grossProfit = $revenue - $cogs;
 
-            $gmroi = $avgInvCost > 0 ? $grossProfit / $avgInvCost : 0.0;
-            $grossMarginRate = $revenue > 0 ? ($grossProfit / $revenue) * 100 : 0.0;
+			// ✅ 庫存成本 = 庫存量 × 當下單件成本
+			$stockQty   = (float) ($inventoryAgg[$pid]->stock_qty ?? 0);
+			$avgInvCost = $stockQty * $unitCost;
 
-            return new GmroiItem(
-                productId:        (int) $pid,
-                productName:      (string) $p->name,
-                revenue:          round($revenue, 2),
-                grossProfit:      round($grossProfit, 2),
-                grossMarginRate:  round($grossMarginRate, 2),
-                avgInventoryCost: round($avgInvCost, 2),
-                gmroi:            round($gmroi, 2),
-            );
-        })->filter()->sortByDesc('gmroi')->values();
-    }
+			$gmroi = $avgInvCost > 0 ? $grossProfit / $avgInvCost : 0.0;
+			$grossMarginRate = $revenue > 0 ? ($grossProfit / $revenue) * 100 : 0.0;
+
+			return new GmroiItem(
+				productId:        (int) $pid,
+				productName:      (string) $p->name,
+				revenue:          round($revenue, 2),
+				grossProfit:      round($grossProfit, 2),
+				grossMarginRate:  round($grossMarginRate, 2),
+				avgInventoryCost: round($avgInvCost, 2),
+				gmroi:            round($gmroi, 2),
+			);
+		})->filter()->sortByDesc('gmroi')->values();
+	}
 
     // =================================================================
     // 6. 時段熱度

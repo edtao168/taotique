@@ -277,191 +277,186 @@
 	</script>
 	@endscript
 
-    {{-- ============================================================ --}}
-    {{-- 時段熱度圖                                                    --}}
-    {{-- ============================================================ --}}
-    <div class="shadow p-4 bg-white rounded-lg mb-8">
-        {{-- 標題列 --}}
-        <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
-            <div class="flex items-center gap-2">
-                <h3 class="text-lg font-bold text-gray-700">時段熱度分析</h3>
-                <x-popover>
-                    <x-slot:trigger>
-                        <x-icon name="o-information-circle" class="w-4 h-4 text-gray-400 cursor-help" />
-                    </x-slot:trigger>
-                    <x-slot:content class="max-w-xs text-xs">
-                        <p class="font-bold mb-1">時段熱度說明</p>
-                        <p class="mb-2">依「銷售時間」統計每週 7 天 × 24 小時的分布。</p>
-                        <ul class="list-disc list-inside space-y-1">
-                            <li>顏色越深 → 該時段營收越高</li>
-                            <li>用來決定「備貨節奏、人力安排、促銷時機」</li>
-                            <li>只計入「已審核 / 已結案 / 已結算」的銷售單</li>
-                        </ul>
-                    </x-slot:content>
-                </x-popover>
-            </div>
-
-            <div class="flex items-center gap-2">
-                {{-- 模式切換 --}}
-                <x-select
-                    wire:model.live="heatmapMode"
-                    :options="[
-                        ['id' => 'revenue', 'name' => '依營收'],
-                        ['id' => 'order_count', 'name' => '依訂單數'],
-                    ]"
-                    option-value="id"
-                    option-label="name"
-                    class="select-sm w-28"
-                />
-
-                {{-- 期間切換 --}}
-                <x-select
-                    wire:model.live="heatmapMonths"
-                    :options="[
-                        ['id' => 1, 'name' => '近 1 個月'],
-                        ['id' => 3, 'name' => '近 3 個月'],
-                        ['id' => 6, 'name' => '近 6 個月'],
-                        ['id' => 12, 'name' => '近 12 個月'],
-                    ]"
-                    option-value="id"
-                    option-label="name"
-                    class="select-sm w-32"
-                />
-
-                <span wire:loading wire:target="heatmapMonths,heatmapMode" class="text-xs text-gray-400">
-                    <x-icon name="o-arrow-path" class="w-4 h-4 animate-spin inline" />
-                </span>
-            </div>
+{{-- ============================================================ --}}
+{{-- 時段熱度圖（單一 RWD，桌機 w-full，橙紅熱度）                    --}}
+{{-- ============================================================ --}}
+<div class="shadow p-4 bg-base-100 text-base-content rounded-lg mb-8 w-full">
+    {{-- 標題列 --}}
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <div class="flex items-center gap-2">
+            <h3 class="text-lg font-bold">時段熱度分析</h3>
+            <x-popover>
+                <x-slot:trigger>
+                    <x-icon name="o-information-circle" class="w-4 h-4 opacity-40 cursor-help" />
+                </x-slot:trigger>
+                <x-slot:content class="max-w-xs text-xs">
+                    <p class="font-bold mb-1">時段熱度說明</p>
+                    <p class="mb-2">依「銷售時間」統計每週 7 天 × 24 小時的分布。</p>
+                    <ul class="list-disc list-inside space-y-1">
+                        <li>顏色越深 → 該時段營收越高</li>
+                        <li>用來決定「備貨節奏、人力安排、促銷時機」</li>
+                        <li>只計入「已審核 / 已結案 / 已結算」的銷售單</li>
+                    </ul>
+                </x-slot:content>
+            </x-popover>
         </div>
 
-        @php
-            $heatmap = $this->heatmapMatrix;
-            $matrix = $heatmap['matrix'];
-            $maxValue = $heatmap['maxValue'];
-            $topSlots = $this->heatmapTopSlots;
+        <div class="flex flex-wrap items-center gap-2">
+            <x-select
+                wire:model.live="heatmapMode"
+                :options="[
+                    ['id' => 'revenue', 'name' => '依營收'],
+                    ['id' => 'order_count', 'name' => '依訂單數'],
+                ]"
+                option-value="id"
+                option-label="name"
+                class="select-sm w-28"
+            />
 
-            $dayNames = ['日', '一', '二', '三', '四', '五', '六'];
+            <x-select
+                wire:model.live="heatmapMonths"
+                :options="[
+                    ['id' => 1, 'name' => '近 1 個月'],
+                    ['id' => 3, 'name' => '近 3 個月'],
+                    ['id' => 6, 'name' => '近 6 個月'],
+                    ['id' => 12, 'name' => '近 12 個月'],
+                ]"
+                option-value="id"
+                option-label="name"
+                class="select-sm w-32"
+            />
 
-            // 顏色分級函式
-            $getColorClass = function ($value) use ($maxValue) {
-                if ($maxValue <= 0 || $value <= 0) {
-                    return 'bg-gray-50';
-                }
-                $ratio = $value / $maxValue;
-                if ($ratio <= 0.2) return 'bg-orange-100';
-                if ($ratio <= 0.4) return 'bg-orange-300';
-                if ($ratio <= 0.6) return 'bg-orange-500';
-                if ($ratio <= 0.8) return 'bg-red-500';
-                return 'bg-red-700';
-            };
+            <span wire:loading wire:target="heatmapMonths,heatmapMode" class="text-xs opacity-40">
+                <x-icon name="o-arrow-path" class="w-4 h-4 animate-spin inline" />
+            </span>
+        </div>
+    </div>
 
-            $getTextClass = function ($value) use ($maxValue) {
-                if ($maxValue <= 0 || $value <= 0) {
-                    return 'text-gray-300';
-                }
-                $ratio = $value / $maxValue;
-                return $ratio > 0.6 ? 'text-white' : 'text-gray-700';
-            };
-        @endphp
+    @php
+        $heatmap = $this->heatmapMatrix;
+        $matrix = $heatmap['matrix'];
+        $maxValue = $heatmap['maxValue'];
+        $topSlots = $this->heatmapTopSlots;
 
-        @if($maxValue <= 0)
-            <div class="text-center py-10 text-gray-400">
-                此期間尚無銷售資料
-            </div>
-        @else
-            {{-- 熱度圖 --}}
-            <div class="overflow-x-auto">
-                <div class="min-w-[720px]">
-                    {{-- 小時標頭 --}}
-                    <div class="grid grid-cols-[40px_repeat(24,minmax(0,1fr))] gap-[2px] mb-1">
-                        <div class="text-[10px] text-gray-400 text-center"></div>
-                        @for($h = 0; $h < 24; $h++)
-                            <div class="text-[10px] text-gray-400 text-center font-mono">
-                                {{ str_pad($h, 2, '0', STR_PAD_LEFT) }}
-                            </div>
-                        @endfor
-                    </div>
+        $dayNamesFull = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'];
 
-                    {{-- 7 天資料列 --}}
-                    @for($d = 0; $d < 7; $d++)
-                        <div class="grid grid-cols-[40px_repeat(24,minmax(0,1fr))] gap-[2px] mb-[2px]">
-                            {{-- 星期標頭 --}}
-                            <div class="text-xs text-gray-500 font-bold flex items-center justify-center">
-                                {{ $dayNames[$d] }}
-                            </div>
+        // 熱度色階：恢復橙紅體系
+        $getCellClass = function ($value) use ($maxValue) {
+            if ($maxValue <= 0 || $value <= 0) {
+                return 'bg-base-200/40';
+            }
+            $ratio = $value / $maxValue;
+            if ($ratio <= 0.2) return 'bg-orange-100';
+            if ($ratio <= 0.4) return 'bg-orange-300';
+            if ($ratio <= 0.6) return 'bg-orange-500';
+            if ($ratio <= 0.8) return 'bg-red-500';
+            return 'bg-red-700';
+        };
 
-                            {{-- 24 格 --}}
-                            @for($h = 0; $h < 24; $h++)
-                                @php
-                                    $value = $matrix[$d][$h] ?? 0;
-                                    $colorClass = $getColorClass($value);
-                                    $textClass = $getTextClass($value);
+        $getTextClass = function ($value) use ($maxValue) {
+            if ($maxValue <= 0 || $value <= 0) {
+                return 'text-base-content/20';
+            }
+            $ratio = $value / $maxValue;
+            return $ratio > 0.6 ? 'text-white' : 'text-gray-700';
+        };
 
-                                    $tooltip = $dayNames[$d] . ' ' . str_pad($h, 2, '0', STR_PAD_LEFT) . ':00';
-                                    if ($value > 0) {
-                                        $tooltip .= ' ｜ NT$ ' . number_format($value, 0);
-                                    } else {
-                                        $tooltip .= ' ｜ 無銷售';
-                                    }
-                                @endphp
-                                <div
-                                    class="{{ $colorClass }} {{ $textClass }} h-6 rounded-sm flex items-center justify-center text-[8px] font-mono cursor-pointer hover:ring-2 hover:ring-orange-500 transition"
-                                    title="{{ $tooltip }}"
-                                >
-                                    @if($value > 0 && $value == $maxValue)
-                                        ★
-                                    @endif
-                                </div>
-                            @endfor
+        $formatValue = function ($value) use ($heatmapMode) {
+            return $heatmapMode === 'revenue'
+                ? 'NT$ ' . number_format($value, 0)
+                : $value . ' 筆';
+        };
+    @endphp
+
+    @if($maxValue <= 0)
+        <div class="text-center py-10 text-base-content/40">
+            此期間尚無銷售資料
+        </div>
+    @else
+        {{-- 橫向捲動容器：桌機自動填滿，手機橫向滑動 --}}
+        <div class="overflow-x-auto">
+            <div class="w-full min-w-[880px]">
+                {{-- 小時標頭 --}}
+                <div class="grid grid-cols-[48px_repeat(24,minmax(0,1fr))] gap-[3px] mb-1">
+                    <div class="text-[10px] text-base-content/40 text-center"></div>
+                    @for($h = 0; $h < 24; $h++)
+                        <div class="text-[10px] text-base-content/40 text-center font-mono">
+                            {{ str_pad($h, 2, '0', STR_PAD_LEFT) }}
                         </div>
                     @endfor
                 </div>
-            </div>
 
-            {{-- 圖例 --}}
-            <div class="flex items-center justify-center gap-2 mt-4 text-[10px] text-gray-500">
-                <span>低</span>
-                <div class="w-4 h-4 bg-gray-50 rounded-sm border border-gray-200"></div>
-                <div class="w-4 h-4 bg-orange-100 rounded-sm"></div>
-                <div class="w-4 h-4 bg-orange-300 rounded-sm"></div>
-                <div class="w-4 h-4 bg-orange-500 rounded-sm"></div>
-                <div class="w-4 h-4 bg-red-500 rounded-sm"></div>
-                <div class="w-4 h-4 bg-red-700 rounded-sm"></div>
-                <span>高</span>
-            </div>
-
-            {{-- 最佳時段 Top 3 --}}
-            @if(!empty($topSlots))
-                <div class="mt-5 grid grid-cols-1 md:grid-cols-3 gap-3">
-                    @foreach($topSlots as $index => $slot)
-                        <div class="border rounded-lg p-3 bg-gradient-to-br from-orange-50 to-white border-orange-100">
-                            <div class="flex items-center gap-2 mb-1">
-                                <span class="text-lg font-black text-orange-700">
-                                    #{{ $index + 1 }}
-                                </span>
-                                <span class="text-xs text-gray-500">最佳時段</span>
-                            </div>
-                            <p class="text-sm font-bold text-gray-800">
-                                週{{ $dayNames[$slot['day']] }} {{ str_pad($slot['hour'], 2, '0', STR_PAD_LEFT) }}:00
-                            </p>
-                            <p class="text-xs text-gray-500 mt-1">
-                                @if($heatmapMode === 'revenue')
-                                    營收 NT$ {{ number_format($slot['revenue'], 0) }}
-                                @else
-                                    {{ $slot['orderCount'] }} 筆訂單
-                                @endif
-                            </p>
+                {{-- 7 天資料列 --}}
+                @for($d = 0; $d < 7; $d++)
+                    <div class="grid grid-cols-[48px_repeat(24,minmax(0,1fr))] gap-[3px] mb-[3px]">
+                        <div class="text-xs font-bold text-base-content/60 flex items-center justify-center">
+                            {{ $dayNamesFull[$d] }}
                         </div>
-                    @endforeach
-                </div>
 
-                <div class="mt-3 p-3 bg-orange-50 border border-orange-200 rounded-lg text-xs text-orange-700">
-                    <x-icon name="o-light-bulb" class="w-4 h-4 inline" />
-                    建議：在最佳時段前備妥熱銷商品、安排人力，並考慮於此時段推播或做促銷。
-                </div>
-            @endif
+                        @for($h = 0; $h < 24; $h++)
+                            @php
+                                $value = $matrix[$d][$h] ?? 0;
+                                $cellClass = $getCellClass($value);
+                                $textClass = $getTextClass($value);
+                                $tooltip = $dayNamesFull[$d] . ' ' . str_pad($h, 2, '0', STR_PAD_LEFT) . ':00';
+                                $tooltip .= ' ｜ ' . ($value > 0 ? $formatValue($value) : '無銷售');
+                            @endphp
+                            <div
+                                class="{{ $cellClass }} {{ $textClass }} h-8 rounded-sm flex items-center justify-center text-[9px] font-mono cursor-pointer hover:ring-2 hover:ring-orange-500 transition"
+                                title="{{ $tooltip }}"
+                            >
+                                @if($value > 0 && $value == $maxValue)
+                                    ★
+                                @endif
+                            </div>
+                        @endfor
+                    </div>
+                @endfor
+            </div>
+        </div>
+
+        {{-- 圖例 --}}
+        <div class="flex items-center justify-center gap-2 mt-4 text-[10px] text-base-content/50">
+            <span>低</span>
+            <div class="w-4 h-4 bg-base-200/40 rounded-sm border border-base-300"></div>
+            <div class="w-4 h-4 bg-orange-100 rounded-sm"></div>
+            <div class="w-4 h-4 bg-orange-300 rounded-sm"></div>
+            <div class="w-4 h-4 bg-orange-500 rounded-sm"></div>
+            <div class="w-4 h-4 bg-red-500 rounded-sm"></div>
+            <div class="w-4 h-4 bg-red-700 rounded-sm"></div>
+            <span>高</span>
+        </div>
+
+        {{-- 最佳時段 Top 3 --}}
+        @if(!empty($topSlots))
+            <div class="mt-6 grid grid-cols-1 md:grid-cols-3 gap-3">
+                @foreach($topSlots as $index => $slot)
+                    <div class="border border-base-300 rounded-lg p-3 bg-base-200/40">
+                        <div class="flex items-center gap-2 mb-1">
+                            <span class="text-lg font-black text-orange-600">#{{ $index + 1 }}</span>
+                            <span class="text-xs text-base-content/50">最佳時段</span>
+                        </div>
+                        <p class="text-sm font-bold">
+                            {{ $dayNamesFull[$slot['day']] }} {{ str_pad($slot['hour'], 2, '0', STR_PAD_LEFT) }}:00
+                        </p>
+                        <p class="text-xs text-base-content/50 mt-1">
+                            @if($heatmapMode === 'revenue')
+                                營收 NT$ {{ number_format($slot['revenue'], 0) }}
+                            @else
+                                {{ $slot['orderCount'] }} 筆訂單
+                            @endif
+                        </p>
+                    </div>
+                @endforeach
+            </div>
+
+            <div class="mt-3 p-3 bg-base-200/60 border border-base-300 rounded-lg text-xs text-base-content/70">
+                <x-icon name="o-light-bulb" class="w-4 h-4 inline" />
+                建議：在最佳時段前備妥熱銷商品、安排人力，並考慮於此時段推播或做促銷。
+            </div>
         @endif
-    </div>
+    @endif
+</div>
 
     {{-- 最近銷貨記錄 --}}
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
