@@ -35,6 +35,22 @@
                             required
                         />
                     </div>
+					
+					{{-- 🆕 雜項調整才顯示方向 --}}
+					@if($type === 'miscellaneous_adj')
+						<x-select
+							label="調整方向"
+							icon="o-arrows-up-down"
+							wire:model="direction"
+							:options="[
+								['id' => 'in',  'name' => '入庫（增加庫存）'],
+								['id' => 'out', 'name' => '出庫（減少庫存）'],
+							]"
+							option-label="name"
+							option-value="id"
+							required
+						/>
+					@endif
 
                     {{-- 選擇商品與數量：修正 Grid 欄位與 Margin，確保 Label 與控制項水平垂直對齊 --}}
                     <div class="grid grid-cols-1 sm:grid-cols-12 gap-4 items-start">
@@ -112,12 +128,26 @@
                     </div>
 					
 					<div class="flex items-start gap-2">
-                        <x-icon name="o-document-text" class="w-5 h-5 text-success shrink-0 mt-0.5" />
+                        <x-icon name="o-document-text" class="w-5 h-5 text-primary shrink-0 mt-0.5" />
                         <div>
                             <span class="font-bold block">會計與庫存連動</span>
                             系統將自動計算快照成本，異動將同步更新實體庫存並產出平衡之會計傳票，維持資產一致性。
                         </div>
                     </div>
+					<div class="flex items-start gap-2">
+                        <x-icon name="o-calculator" class="w-5 h-5 text-success shrink-0 mt-0.5" />
+                        <div>
+                            <span class="font-bold block">成本計算說明</span>
+							系統之庫存調整分錄，一律採用商品主檔當前成本（products.cost）計算，非單據明細上的歷史成本。若商品成本為 0，庫存異動仍會記錄，但該筆調整將不會產生會計分錄。
+						</div>						
+                    </div>
+					<div class="flex items-start gap-2">
+						<x-icon name="o-arrows-up-down" class="w-5 h-5 text-info shrink-0 mt-0.5" />
+						<div>
+							<span class="font-bold block">雜項調整方向</span>
+							選擇「雜項調整」時，可自行指定為入庫或出庫；其餘類型方向固定。
+						</div>
+					</div>
                 </div>
             </x-card>
         </div>

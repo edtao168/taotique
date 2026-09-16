@@ -18,6 +18,7 @@ class AdjustStock extends Component
     public $shop_id = 1;
     public $warehouse_id;
     public $type = 'initial';
+    public $direction = 'in';   // 🆕 僅 miscellaneous_adj 使用：'in' | 'out'
     public $product_id = null;
     public $product_name = '';
     public $quantity = 1;
@@ -26,7 +27,7 @@ class AdjustStock extends Component
     public function mount()
     {
         $this->warehouse_id = Warehouse::value('id');
-        $this->refreshProductOptions();   // 初始載入 15 筆
+        $this->refreshProductOptions();
     }
 
     public function updatedProductId($value)
@@ -37,7 +38,6 @@ class AdjustStock extends Component
         } else {
             $this->product_name = '';
         }
-        // 選定後清空搜尋關鍵字，避免下拉殘留
         $this->productSearch = '';
     }
 
@@ -47,6 +47,7 @@ class AdjustStock extends Component
             'warehouse_id' => 'required|exists:warehouses,id',
             'product_id'   => 'required|exists:products,id',
             'type'         => 'required|in:' . implode(',', array_keys(InventoryMovement::getManualAdjustTypes())),
+            'direction'    => 'required_if:type,miscellaneous_adj|in:in,out',
             'quantity'     => 'required|numeric|gt:0',
             'remark'       => 'nullable|string|max:255',
         ];
@@ -56,10 +57,19 @@ class AdjustStock extends Component
     {
         $this->validate();
 
-        $outboundTypes = ['gift', 'scrap', 'sample', 'miscellaneous_out'];
-        $finalQuantity = in_array($this->type, $outboundTypes) 
-            ? (string) (-abs((float) $this->quantity)) 
-            : (string) abs((float) $this->quantity);
+        $outboundTypes = ['gift', 'scrap', 'sample'];
+        $inboundTypes  = ['initial'];
+
+        if ($this->type === 'miscellaneous_adj') {
+            // 雜項調整：依使用者選的方向
+            $finalQuantity = $this->direction === 'out'
+                ? (string) (-abs((float) $this->quantity))
+                : (string) abs((float) $this->quantity);
+        } elseif (in_array($this->type, $outboundTypes)) {
+            $finalQuantity = (string) (-abs((float) $this->quantity));
+        } else {
+            $finalQuantity = (string) abs((float) $this->quantity);
+        }
 
         InventoryAdjustment::createWithAccounting([
             'shop_id'      => $this->shop_id,
@@ -74,8 +84,9 @@ class AdjustStock extends Component
             ],
         ]);
 
-        $this->reset(['product_id', 'product_name', 'quantity', 'remark']);
+        $this->reset(['product_id', 'product_name', 'quantity', 'remark', 'direction']);
         $this->type = 'initial';
+        $this->direction = 'in';
         $this->productSearch = '';
         $this->refreshProductOptions();
 
