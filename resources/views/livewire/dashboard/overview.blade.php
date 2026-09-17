@@ -194,8 +194,135 @@
         @endif
     </div>
 
-	{{-- 時段熱度分析區塊：改用純原生 DOM 與 CSP 相容結構 --}}
-	<div class="shadow p-4 bg-base-100 text-base-content rounded-lg mb-8 w-full" id="heatmap-container">
+    {{-- Chart.js 初始化（修復重複初始化問題） --}}
+	@script
+	<script>
+		let salesChartInstance = null;
+		let profitChartInstance = null;
+
+		function initDashboardCharts() {
+			// 1. 確保 Chart.js 已經載入 (避免 CDN 延遲)
+			if (typeof Chart === 'undefined') {
+				console.warn('Chart.js 尚未載入，延遲 100ms 重試...');
+				setTimeout(initDashboardCharts, 100);
+				return;
+			}
+
+			const salesEl = document.getElementById('salesChart');
+			const profitEl = document.getElementById('profitChart');
+
+			// 2. 確保 Canvas 元素已經存在於 DOM 中
+			if (!salesEl || !profitEl) {
+				console.warn('找不到 Canvas 元素，延遲 100ms 重試...');
+				setTimeout(initDashboardCharts, 100);
+				return;
+			}
+
+			// 3. 清除舊圖表 (避免重複初始化報錯)
+			if (salesChartInstance) {
+				salesChartInstance.destroy();
+				salesChartInstance = null;
+			}
+			if (profitChartInstance) {
+				profitChartInstance.destroy();
+				profitChartInstance = null;
+			}
+
+			const labels = @json($monthlyData->pluck('month')->map(fn($m) => \Carbon\Carbon::parse($m . '-01')->format('Y/m')));
+			const salesData = @json($monthlyData->pluck('sales'));
+			const profitData = @json($monthlyData->pluck('profit'));
+
+			const sharedOptions = {
+				responsive: true,
+				maintainAspectRatio: false,
+				plugins: {
+					legend: { display: false },
+					tooltip: {
+						callbacks: {
+							label: function (context) {
+								return 'NT$ ' + context.parsed.y.toLocaleString();
+							}
+						}
+					}
+				},
+				scales: {
+					y: {
+						beginAtZero: true,
+						ticks: {
+							callback: function (value) {
+								return 'NT$ ' + value.toLocaleString();
+							}
+						}
+					},
+					x: { ticks: { maxRotation: 45, minRotation: 45 } }
+				}
+			};
+
+			// 4. 初始化圖表
+			try {
+				salesChartInstance = new Chart(salesEl.getContext('2d'), {
+					type: 'bar',
+					data: {
+						labels: labels,
+						datasets: [{
+							label: '營業額',
+							data: salesData,
+							backgroundColor: '#3b82f6',
+							borderRadius: 6,
+							borderSkipped: false,
+						}]
+					},
+					options: sharedOptions
+				});
+
+				profitChartInstance = new Chart(profitEl.getContext('2d'), {
+					type: 'bar',
+					data: {
+						labels: labels,
+						datasets: [{
+							label: '淨利',
+							data: profitData,
+							backgroundColor: '#10b981',
+							borderRadius: 6,
+							borderSkipped: false,
+						}]
+					},
+					options: sharedOptions
+				});
+			} catch (error) {
+				console.error('圖表初始化失敗:', error);
+			}
+		}
+
+		// 5. 使用 requestAnimationFrame 確保瀏覽器已經完成 DOM 繪製
+		// 這比單純呼叫 initDashboardCharts() 更可靠
+		requestAnimationFrame(() => {
+			initDashboardCharts();
+		});
+
+		// 6. 監聽 Livewire 的 morph 更新 (適用於切換下拉選單時)
+		Livewire.hook('morph.updated', ({ el, component }) => {
+			if (component.name !== 'dashboard.overview') return;
+			
+			// 再次使用 requestAnimationFrame 確保 DOM 更新完成
+			requestAnimationFrame(() => {
+				initDashboardCharts();
+			});
+		});
+
+		// 7. 額外保險：監聽 Livewire 3 的 commit hook
+		$wire.$on('$commit', () => {
+			requestAnimationFrame(() => {
+				initDashboardCharts();
+			});
+		});
+	</script>
+	@endscript
+
+	{{-- ============================================================ --}}
+	{{-- 時段熱度分析：桌機熱度圖 + 手機 Top 列表 --}}
+	{{-- ============================================================ --}}
+	<div class="shadow p-4 bg-base-100 text-base-content rounded-lg mb-8 w-full">
 		{{-- 標題列 --}}
 		<div class="flex flex-wrap items-center justify-between gap-3 mb-4">
 			<div class="flex items-center gap-2">
@@ -255,6 +382,7 @@
 
 			$dayNamesFull = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'];
 
+			// 熱度色階：使用 Tailwind / Mary UI 標準主題相容顏色
 			$getCellClass = function ($value) use ($maxValue) {
 				if ($maxValue <= 0 || $value <= 0) {
 					return 'bg-base-200/50';
@@ -289,10 +417,12 @@
 				此期間尚無銷售資料
 			</div>
 		@else
-			{{-- 桌機版 7x24 熱度圖（移除任何可能被 CSP 阻擋的動態表達式） --}}
+			{{-- ============================================================ --}}
+			{{-- 桌機版：7×24 熱度圖 (RWD 優化與 overflow 包裹)              --}}
+			{{-- ============================================================ --}}
 			<div class="hidden lg:block w-full">
 				<div class="overflow-x-auto w-full pb-2">
-					<div class="min-w-[800px] flex flex-col gap-1">
+					<div class="min-w-[800px] grid grid-cols-1 gap-1">
 						{{-- 小時標頭 --}}
 						<div class="flex items-center gap-1 mb-1">
 							<div class="w-12 text-[10px] text-base-content/40 text-center font-bold">時段</div>
@@ -347,10 +477,66 @@
 					<div class="w-4 h-4 bg-red-600 dark:bg-red-500 rounded"></div>
 					<span>高</span>
 				</div>
+
+				{{-- 桌機 Top 3 --}}
+				@if(!empty($topSlots))
+					<div class="mt-6 grid grid-cols-3 gap-3">
+						@foreach($topSlots as $index => $slot)
+							<div class="border border-base-300 rounded-lg p-3 bg-base-200/40">
+								<div class="flex items-center gap-2 mb-1">
+									<span class="text-lg font-black text-warning">#{{ $index + 1 }}</span>
+									<span class="text-xs opacity-60">最佳時段</span>
+								</div>
+								<p class="text-sm font-bold">
+									{{ $dayNamesFull[$slot['day']] }} {{ str_pad($slot['hour'], 2, '0', STR_PAD_LEFT) }}:00
+								</p>
+								<p class="text-xs opacity-60 mt-1">
+									@if($heatmapMode === 'revenue')
+										營收 NT$ {{ number_format($slot['revenue'], 0) }}
+									@else
+										{{ $slot['orderCount'] }} 筆訂單
+									@endif
+								</p>
+							</div>
+						@endforeach
+					</div>
+				@endif
 			</div>
 
-			{{-- 手機版：Top 列表 --}}
+			{{-- ============================================================ --}}
+			{{-- 手機版：Top 時段列表                                           --}}
+			{{-- ============================================================ --}}
 			<div class="block lg:hidden">
+				@if(!empty($topSlots))
+					<div class="grid grid-cols-1 gap-3 mb-4">
+						@foreach(collect($topSlots)->take(3) as $index => $slot)
+							<div class="border border-base-300 rounded-lg p-3 bg-base-200/40 flex items-center justify-between">
+								<div class="flex items-center gap-3">
+									<span class="text-2xl font-black text-warning">#{{ $index + 1 }}</span>
+									<div>
+										<p class="text-sm font-bold">
+											{{ $dayNamesFull[$slot['day']] }} {{ str_pad($slot['hour'], 2, '0', STR_PAD_LEFT) }}:00
+										</p>
+										<p class="text-xs opacity-60">
+											@if($heatmapMode === 'revenue')
+												營收 NT$ {{ number_format($slot['revenue'], 0) }}
+											@else
+												{{ $slot['orderCount'] }} 筆訂單
+											@endif
+										</p>
+									</div>
+								</div>
+								<div class="w-16 bg-base-300 rounded-full h-2">
+									<div
+										class="h-2 rounded-full bg-warning"
+										style="width: {{ $maxValue > 0 ? min(($slot['revenue'] / $maxValue) * 100, 100) : 0 }}%"
+									></div>
+								</div>
+							</div>
+						@endforeach
+					</div>
+				@endif
+
 				<div class="border-t border-base-300 pt-4">
 					<p class="text-xs font-bold opacity-60 mb-3">熱門時段 Top 10</p>
 					<div class="space-y-2">
@@ -378,60 +564,14 @@
 					</div>
 				</div>
 			</div>
+
+			{{-- 建議區塊 --}}
+			<div class="mt-4 p-3 bg-base-200/60 border border-base-300 rounded-lg text-xs opacity-80">
+				<x-icon name="o-light-bulb" class="w-4 h-4 inline" />
+				建議：在最佳時段前備妥熱銷商品、安排人力，並考慮於此時段推播或做促銷。
+			</div>
 		@endif
 	</div>
-
-	{{-- 配合 CSP 規範修復 Chart.js 初始化指令（使用加解密 nonce 或不依賴動態eval） --}}
-	@script
-	<script>
-		// 遵守 CSP 規範，禁止傳遞字串至 setTimeout
-		function safeInitDashboardCharts() {
-			if (typeof Chart === 'undefined') {
-				window.requestAnimationFrame(() => safeInitDashboardCharts());
-				return;
-			}
-
-			const salesEl = document.getElementById('salesChart');
-			const profitEl = document.getElementById('profitChart');
-
-			if (!salesEl || !profitEl) return;
-
-			if (window.salesChartInstance) window.salesChartInstance.destroy();
-			if (window.profitChartInstance) window.profitChartInstance.destroy();
-
-			const labels = @json($monthlyData->pluck('month')->map(fn($m) => \Carbon\Carbon::parse($m . '-01')->format('Y/m')));
-			const salesData = @json($monthlyData->pluck('sales'));
-			const profitData = @json($monthlyData->pluck('profit'));
-
-			const options = {
-				responsive: true,
-				maintainAspectRatio: false,
-				plugins: { legend: { display: false } },
-				scales: { y: { beginAtZero: true } }
-			};
-
-			window.salesChartInstance = new Chart(salesEl.getContext('2d'), {
-				type: 'bar',
-				data: { labels: labels, datasets: [{ label: '營業額', data: salesData, backgroundColor: '#3b82f6' }] },
-				options: options
-			});
-
-			window.profitChartInstance = new Chart(profitEl.getContext('2d'), {
-				type: 'bar',
-				data: { labels: labels, datasets: [{ label: '淨利', data: profitData, backgroundColor: '#10b981' }] },
-				options: options
-			});
-		}
-
-		window.requestAnimationFrame(() => safeInitDashboardCharts());
-
-		Livewire.hook('morph.updated', ({ component }) => {
-			if (component.name === 'dashboard.overview') {
-				window.requestAnimationFrame(() => safeInitDashboardCharts());
-			}
-		});
-	</script>
-	@endscript
 
     {{-- 最近銷貨記錄 --}}
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
