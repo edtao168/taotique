@@ -442,7 +442,8 @@
 									{{ $dayNamesFull[$d] }}
 								</div>
 
-								<div class="flex-1 grid grid-cols-24 gap-1">
+								{{-- ✅ 改為 flex --}}
+								<div class="flex-1 flex gap-1">
 									@for($h = 0; $h < 24; $h++)
 										@php
 											$value = $matrix[$d][$h] ?? 0;
@@ -452,7 +453,7 @@
 											$tooltip .= ' ｜ ' . ($value > 0 ? $formatValue($value) : '無銷售');
 										@endphp
 										<div
-											class="{{ $cellClass }} {{ $textClass }} h-8 rounded flex items-center justify-center text-[9px] font-mono cursor-pointer hover:ring-2 hover:ring-primary transition"
+											class="flex-1 min-w-[24px] {{ $cellClass }} {{ $textClass }} h-8 rounded flex items-center justify-center text-[9px] font-mono cursor-pointer hover:ring-2 hover:ring-primary transition"
 											title="{{ $tooltip }}"
 										>
 											@if($value > 0 && $value == $maxValue)
