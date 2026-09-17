@@ -201,11 +201,24 @@
 		let profitChartInstance = null;
 
 		function initDashboardCharts() {
+			// 1. 確保 Chart.js 已經載入 (避免 CDN 延遲)
+			if (typeof Chart === 'undefined') {
+				console.warn('Chart.js 尚未載入，延遲 100ms 重試...');
+				setTimeout(initDashboardCharts, 100);
+				return;
+			}
+
 			const salesEl = document.getElementById('salesChart');
 			const profitEl = document.getElementById('profitChart');
 
-			if (!salesEl || !profitEl) return;
+			// 2. 確保 Canvas 元素已經存在於 DOM 中
+			if (!salesEl || !profitEl) {
+				console.warn('找不到 Canvas 元素，延遲 100ms 重試...');
+				setTimeout(initDashboardCharts, 100);
+				return;
+			}
 
+			// 3. 清除舊圖表 (避免重複初始化報錯)
 			if (salesChartInstance) {
 				salesChartInstance.destroy();
 				salesChartInstance = null;
@@ -245,47 +258,61 @@
 				}
 			};
 
-			salesChartInstance = new Chart(salesEl.getContext('2d'), {
-				type: 'bar',
-				data: {
-					labels: labels,
-					datasets: [{
-						label: '營業額',
-						data: salesData,
-						backgroundColor: '#3b82f6',
-						borderRadius: 6,
-						borderSkipped: false,
-					}]
-				},
-				options: sharedOptions
-			});
+			// 4. 初始化圖表
+			try {
+				salesChartInstance = new Chart(salesEl.getContext('2d'), {
+					type: 'bar',
+					data: {
+						labels: labels,
+						datasets: [{
+							label: '營業額',
+							data: salesData,
+							backgroundColor: '#3b82f6',
+							borderRadius: 6,
+							borderSkipped: false,
+						}]
+					},
+					options: sharedOptions
+				});
 
-			profitChartInstance = new Chart(profitEl.getContext('2d'), {
-				type: 'bar',
-				data: {
-					labels: labels,
-					datasets: [{
-						label: '淨利',
-						data: profitData,
-						backgroundColor: '#10b981',
-						borderRadius: 6,
-						borderSkipped: false,
-					}]
-				},
-				options: sharedOptions
-			});
+				profitChartInstance = new Chart(profitEl.getContext('2d'), {
+					type: 'bar',
+					data: {
+						labels: labels,
+						datasets: [{
+							label: '淨利',
+							data: profitData,
+							backgroundColor: '#10b981',
+							borderRadius: 6,
+							borderSkipped: false,
+						}]
+					},
+					options: sharedOptions
+				});
+			} catch (error) {
+				console.error('圖表初始化失敗:', error);
+			}
 		}
 
-		// 首次載入
-		initDashboardCharts();
+		// 5. 使用 requestAnimationFrame 確保瀏覽器已經完成 DOM 繪製
+		// 這比單純呼叫 initDashboardCharts() 更可靠
+		requestAnimationFrame(() => {
+			initDashboardCharts();
+		});
 
-		// ✅ 監聽「這個元件」的所有 morph 完成事件
+		// 6. 監聽 Livewire 的 morph 更新 (適用於切換下拉選單時)
 		Livewire.hook('morph.updated', ({ el, component }) => {
-			// 只處理 dashboard 元件
 			if (component.name !== 'dashboard.overview') return;
+			
+			// 再次使用 requestAnimationFrame 確保 DOM 更新完成
+			requestAnimationFrame(() => {
+				initDashboardCharts();
+			});
+		});
 
-			// 等 DOM 更新完再重建圖表
-			queueMicrotask(() => {
+		// 7. 額外保險：監聽 Livewire 3 的 commit hook
+		$wire.$on('$commit', () => {
+			requestAnimationFrame(() => {
 				initDashboardCharts();
 			});
 		});
