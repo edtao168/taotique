@@ -426,9 +426,9 @@
 						{{-- 小時標頭 --}}
 						<div class="flex items-center gap-1 mb-1">
 							<div class="w-12 text-[10px] text-base-content/40 text-center font-bold">時段</div>
-							<div class="flex-1 grid grid-cols-24 gap-1">
+							<div class="flex-1 flex gap-1">
 								@for($h = 0; $h < 24; $h++)
-									<div class="text-[10px] text-base-content/40 text-center font-mono">
+									<div class="flex-1 min-w-[24px] text-[10px] text-base-content/40 text-center font-mono">
 										{{ str_pad($h, 2, '0', STR_PAD_LEFT) }}
 									</div>
 								@endfor
